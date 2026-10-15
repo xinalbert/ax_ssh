@@ -496,6 +496,11 @@ local-only operations sent no wheel bytes; a quiet socket timeout is not treated
 as proof. Fixture output traverses the SSH connection and production terminal
 parser before updating the UI's mouse modes.
 
+After all receive and viewport assertions pass, the fixture marks explicit
+worker shutdown. Only a peer I/O `ConnectionReset` observed after that mark is
+accepted during cleanup; an earlier reset, any other error, a task panic or a
+shutdown timeout still fails the test. The production SSH lifecycle is unchanged.
+
 Run these receive-side checks on each native runner with:
 
 ```bash

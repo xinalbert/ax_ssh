@@ -7,6 +7,7 @@ use rand::{SeedableRng, rngs::StdRng};
 use russh::server::{self, Auth};
 use slint::platform::software_renderer::Rgb565Pixel;
 use slint::platform::{Key, WindowEvent};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Instant;
 use zeroize::Zeroizing;
 
@@ -15,6 +16,23 @@ const RESET_MODES: &[u8] = b"\x1b[?1049l\x1b[?1000;1002;1003;1006l\x1b[?1007h\x1
 const USER: &str = "wheel-fixture";
 const PASSWORD: &str = "wheel-fixture-password";
 const BARRIER: u8 = 0;
+
+fn peer_shutdown_result(
+    result: Result<(), russh::Error>,
+    shutdown_started: bool,
+) -> Result<(), russh::Error> {
+    // Client disconnect is queued, not a peer acknowledgement. During explicit
+    // teardown the peer can observe a TCP reset instead of an SSH disconnect.
+    // Early resets and every other error must still fail the fixture.
+    match result {
+        Err(russh::Error::IO(error))
+            if shutdown_started && error.kind() == std::io::ErrorKind::ConnectionReset =>
+        {
+            Ok(())
+        }
+        result => result,
+    }
+}
 
 struct Receiver {
     input: mpsc::Sender<Vec<u8>>,
@@ -112,7 +130,8 @@ struct Fixture {
     output: mpsc::Receiver<SshSessionEvent>,
     peer: server::Handle,
     channel: russh::ChannelId,
-    task: tokio::task::JoinHandle<()>,
+    task: tokio::task::JoinHandle<Result<(), russh::Error>>,
+    shutdown_started: Arc<AtomicBool>,
     geometry: Rc<RefCell<Option<Geometry>>>,
 }
 
@@ -124,6 +143,8 @@ impl Fixture {
             .try_init()
             .expect("isolated wheel diagnostics");
         let mut harness = Harness::new();
+        let shutdown_started = Arc::new(AtomicBool::new(false));
+        let peer_shutdown_started = shutdown_started.clone();
         let (profile, output, received, ready, task) = harness._runtime.block_on(async {
             let mut random = StdRng::seed_from_u64(20261015);
             let key = russh::keys::PrivateKey::random(&mut random, russh::keys::Algorithm::Ed25519)
@@ -153,7 +174,7 @@ impl Fixture {
                     .await
                     .expect("SSH accept deadline")
                     .expect("SSH client connects");
-                server::run_stream(
+                let session = server::run_stream(
                     config,
                     stream,
                     Receiver {
@@ -162,9 +183,9 @@ impl Fixture {
                     },
                 )
                 .await
-                .expect("SSH server starts")
-                .await
-                .expect("SSH server disconnects cleanly");
+                .expect("SSH server starts");
+                let result = session.await;
+                peer_shutdown_result(result, peer_shutdown_started.load(Ordering::Acquire))
             });
             let (worker, output) = SshSessionHandle::spawn(
                 &Handle::current(),
@@ -259,6 +280,7 @@ impl Fixture {
             peer,
             channel,
             task,
+            shutdown_started,
             geometry,
         };
         fixture.modes(b"");
@@ -460,11 +482,15 @@ impl Fixture {
             .take()
             .expect("worker owner");
         self.harness._runtime.block_on(async {
+            // Set only after every receive/viewport assertion, immediately before
+            // requesting shutdown. The server samples this when it terminates.
+            self.shutdown_started.store(true, Ordering::Release);
             worker.shutdown().await.expect("explicit worker shutdown");
             timeout(DEADLINE, self.task)
                 .await
                 .expect("SSH peer shutdown deadline")
-                .expect("SSH peer joins");
+                .expect("SSH peer joins")
+                .expect("SSH peer shutdown result");
         });
         self.harness.ui.hide().expect("hide headless terminal");
     }
@@ -560,6 +586,25 @@ fn wheel_bytes(detached: bool) {
     fixture.received(b"");
     assert_eq!(fixture.offset(), before + 1, "Shift bypass stays local");
     fixture.finish();
+}
+
+#[test]
+fn peer_shutdown_only_accepts_a_reset_during_explicit_teardown() {
+    use std::io::{Error, ErrorKind};
+
+    assert!(peer_shutdown_result(Ok(()), false).is_ok());
+    assert!(peer_shutdown_result(Ok(()), true).is_ok());
+    let reset = || Err(russh::Error::IO(Error::from(ErrorKind::ConnectionReset)));
+    assert!(peer_shutdown_result(reset(), false).is_err());
+    assert!(peer_shutdown_result(reset(), true).is_ok());
+    for kind in [
+        ErrorKind::BrokenPipe,
+        ErrorKind::UnexpectedEof,
+        ErrorKind::InvalidData,
+    ] {
+        assert!(peer_shutdown_result(Err(russh::Error::IO(Error::from(kind))), true).is_err());
+    }
+    assert!(peer_shutdown_result(Err(russh::Error::Disconnect), true).is_err());
 }
 
 #[test]

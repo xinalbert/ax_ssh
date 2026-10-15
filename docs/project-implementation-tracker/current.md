@@ -12,6 +12,7 @@
 - 当前范围：`src/app/terminal_bridge/{native,input}.rs`、`src/app/behavior_tests.rs` 及其终端滚轮测试子模块、双语开发说明、环境记录及 `docs/project-implementation-tracker/`。
 - 不在本轮范围内：未经证据确认的滚轮行为修改、SSH trust/认证/凭据、传输协议、配置 schema、依赖/工具链、安装程序替换、推送和发布。
 - 所有权：现有原生 hook 记录 Winit 事件，应用 bridge 记录实际终端模式和 worker 入队结果；UI 与终端模型继续决定滚轮行为，不增加跨模块接口。
+- 收尾修复所有权：仅由接收测试夹具持有显式关闭标记，服务端结束时采样并返回结果；生产 SSH worker、断开流程及输入编码不变。
 - 安全：诊断默认关闭，只记固定阶段、滚轮参数、模式、内部 UUID 和处理结果；不记终端/剪贴板内容、主机、路径或凭据，不增加队列/缓冲。
 
 ## 当前状态
@@ -35,6 +36,8 @@
 | C1 | completed | 滚轮诊断与配套双语方法提交 | 显式暂存并审阅 staged diff | `c051c05`；不改变滚轮行为，排除测试与归档记录 |
 | C2 | completed | SSH 接收字节回归与覆盖说明提交 | 新测试文件、夹具调整和双语说明独立审阅 | `7267e93`；沿用已通过的 872 项测试，不重复修改源码 |
 | C3 | completed | 本轮环境和实施记录归档 | 链接/tracker/diff 和提交边界检查通过 | 本记录独立提交后核对最终工作区；W4/W5 和前轮原生验收保持 pending |
+| W8 | completed | 接收测试的主动关闭结果边界修复 | 用户 CI 日志、锁定 russh 的 disconnect 队列语义与严格错误分类 | 仅在全部断言通过且显式关闭后接受 ConnectionReset；不改生产 transport |
+| W9 | completed | 关闭边界回归、重复运行与完整门禁 | 提前 reset/其它错误仍失败，3 项定向和 20 轮重复通过；873 项完整测试及标准门禁通过 | 双语开发说明和地图已同步，保留 Windows 现场根因待确认 |
 
 ## 已完成
 
@@ -53,10 +56,13 @@
 - 用户授权创建本地提交；索引为空，新增目录仅含真实测试源码，构建产物和缓存已忽略；按诊断、接收回归和项目记录三笔提交，不推送或改写历史。
 - 已分别审阅并提交滚轮诊断 `c051c05` 与 SSH 接收回归 `7267e93`，两笔各含配套双语说明；提交后仅剩六份环境/实施记录，源码没有后续修改。
 - 归档记录已整理，10 个相对链接和 current/map/本轮新增记录通过；完整 tracker 仍为 84 项历史问题，无新增；本记录独立提交后核对最终工作区。
+- 用户追加 CI 失败日志：独立窗口矩阵所有接收/偏移断言已走完，在 `Fixture::finish` 的主动关闭后服务端返回 IO ConnectionReset，任务内 expect panic 再由 join 传播；前轮本机通过未覆盖该收尾时序。W8/W9 仅修复测试夹具的结束判据，不把日志当作 Windows 现场滚轮根因。
+- 服务端采样显式关闭标记，仅接受该阶段的 IO ConnectionReset；正常返回、提前 reset、BrokenPipe/UnexpectedEof/InvalidData 和协议错误的边界回归通过，任务 panic 与 timeout 仍由 join/deadline 失败。
+- 修复前旧二进制 10 轮未复现该偶发收尾；修复后 3 项定向和 20 轮重复（60 项测试、40 次 SSH/UI 矩阵）通过。标准 fmt/check/严格 all-target Clippy、392 library + 481 binary（873）测试、10 个相对链接及 current/map/本轮新增记录通过，完整 tracker 84 项历史问题无新增。
 
 ## 验证
 
-- 已完成：W1–W3 的 870 项门禁及 debug build；W6 两项实际接收回归及 W7 标准参数 fmt、locked/offline check、严格 all-target Clippy、392 library + 480 binary（872）测试通过，无 warning；10 个相对链接、current/map/本轮记录和 diff 通过，完整 tracker 84 项历史问题无新增。
+- 已完成：W1–W3 的 870 项门禁及 debug build；W6/W7 的 872 项接收覆盖门禁；W8/W9 收尾边界回归、20 轮重复和标准 fmt、locked/offline check、严格 all-target Clippy、392 library + 481 binary（873）测试通过，无 warning；10 个相对链接、current/map/本轮记录和 diff 通过，完整 tracker 84 项历史问题无新增。
 - 未完成：W4 故障主机原生复现；W5 最终根因确认和按证据修复；新代码在 Windows 的原生门禁、前轮待验收事项保留。
 
 ## 风险与阻塞
@@ -67,8 +73,8 @@
 
 ## 下一步
 
-- 本记录独立提交后核对最终工作区和三笔提交清单；新测试在下一次原生 CI 中执行，故障 Windows 与 macOS 使用同版源码、相同远端条件复现，并以默认关闭的滚轮诊断定位首次分歧。
+- 在后续原生 CI 中验证收尾修复；故障 Windows 与 macOS 使用同版源码、相同远端条件复现，并以默认关闭的滚轮诊断定位首次分歧。当前仅完成测试夹具修复，不据此宣称 Windows 实际滚动根因已解决。
 
 ## 最后更新时间
 
-- 2026-10-15 17:38 +0800
+- 2026-10-15 18:04 +0800
