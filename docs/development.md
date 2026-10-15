@@ -485,10 +485,27 @@ gate. These records contain no terminal text, encoded bytes, clipboard data,
 host, path or credentials and are disabled by the default INFO filter.
 
 The Windows CI job runs the platform's check, Clippy, build and tests, but the
-current terminal wheel component tests use `MinimalSoftwareWindow` and inject
-`PointerScrolled`. They do not reproduce native Windows mouse messages or a
-real Codex/tmux session. Keep native compilation/test results and actual GUI
-reproduction as separate evidence, even when both are successful.
+terminal wheel tests start with `PointerScrolled` on `MinimalSoftwareWindow`.
+The `app::behavior_tests::terminal_wheel` tests continue through the generated
+main/detached UI, production callbacks, encoder and real SSH worker, then assert
+the bytes received by a loopback SSH server with a pinned fixture host key.
+They cover SGR and legacy reports, wheel direction and repetition, the 256-step
+limit, fractional delta accumulation, alternate-screen cursor keys, the optional
+Home suffix, local history and Shift bypass. A FIFO input barrier confirms that
+local-only operations sent no wheel bytes; a quiet socket timeout is not treated
+as proof. Fixture output traverses the SSH connection and production terminal
+parser before updating the UI's mouse modes.
+
+Run these receive-side checks on each native runner with:
+
+```bash
+cargo test --locked --offline wheel_bytes_reach_the_ssh_terminal
+```
+
+They run in the existing CI matrix without real credentials or a remote service.
+They do not reproduce native operating-system mouse messages, ConPTY input
+translation, or a real Codex/tmux session. Keep native compilation/test results,
+SSH receive-side coverage and actual GUI reproduction as separate evidence.
 
 `sftp_drag` traces the internal local/remote pane drag lifecycle, its
 local-to-remote upload route, and the native Finder route. Native stages report

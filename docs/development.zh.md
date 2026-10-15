@@ -367,9 +367,22 @@ RUST_LOG='ax_ssh=info,ax_ssh::terminal_scroll=debug,russh=warn' ./ax_ssh
 CLI 处理。只有原生事件而没有终端回调时，也可能是像素量尚小、鼠标命中其他控件或输入闸门。
 记录不含终端文字、编码字节、剪贴板数据、主机、路径或凭据，默认 INFO 过滤时关闭。
 
-Windows CI 原生运行 check、Clippy、build 和 tests，但当前终端滚轮组件回归使用
-`MinimalSoftwareWindow` 注入 `PointerScrolled`，不复现 Windows 原生鼠标消息或真实
-Codex/tmux 会话。原生编译/测试结果与实际 GUI 复现必须分别记录，不能互相替代。
+Windows CI 原生运行 check、Clippy、build 和 tests；终端滚轮回归从
+`MinimalSoftwareWindow` 的 `PointerScrolled` 开始。`app::behavior_tests::terminal_wheel`
+继续经过生成的主/独立窗口 UI、生产 callback、编码器和真实 SSH worker，最后断言固定
+测试 host key 的 loopback SSH 服务端实际收到的字节。覆盖 SGR/传统鼠标报告、方向与重复次数、
+256 步上限、小增量累计、备用屏方向键、可选 Home 后缀、本地历史和 Shift 绕过。FIFO 输入
+屏障证明本地操作没有发送滚轮字节，不以安静 socket 超时作为成功依据。夹具的模式输出也经过
+真实 SSH 连接和生产终端 parser，再更新 UI 的鼠标模式。
+
+各原生 runner 可单独运行接收端回归：
+
+```bash
+cargo test --locked --offline wheel_bytes_reach_the_ssh_terminal
+```
+
+新测试进入既有 CI 矩阵，不需要真实凭据或远端服务。它仍不复现操作系统原生鼠标消息、ConPTY
+输入转换或真实 Codex/tmux 会话；原生编译/测试、SSH 接收端覆盖和实际 GUI 复现应分别记录。
 
 `sftp_drag` 记录本地/远程文件面板的内部拖动生命周期、本地到远程上传路由，以及 Finder
 原生路径。原生阶段只记录固定事件阶段、外部 hover 数和固定目标结果（`remote`、

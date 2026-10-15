@@ -4,6 +4,8 @@ use super::*;
 use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
 use slint::platform::{EventLoopProxy, Platform, WindowAdapter};
 
+mod terminal_wheel;
+
 type UiEvent = Box<dyn FnOnce() + Send>;
 
 fn isolated(test_name: &str, operation: impl FnOnce() + Send + 'static) {
@@ -61,6 +63,7 @@ impl Platform for HeadlessPlatform {
 
 struct Harness {
     ui: AppWindow,
+    window: Rc<MinimalSoftwareWindow>,
     state: Arc<Mutex<AppState>>,
     router: WindowRouter,
     _runtime: Runtime,
@@ -73,7 +76,7 @@ impl Harness {
     fn new() -> Self {
         let window = MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
         let (sender, events) = std::sync::mpsc::sync_channel(256);
-        slint::platform::set_platform(Box::new(HeadlessPlatform(window, sender)))
+        slint::platform::set_platform(Box::new(HeadlessPlatform(window.clone(), sender)))
             .expect("isolated headless platform");
         let ui = AppWindow::new().expect("generated component");
         let directory = std::env::temp_dir().join(format!("axssh-callbacks-{}", Uuid::new_v4()));
@@ -107,6 +110,7 @@ impl Harness {
         );
         Self {
             ui,
+            window,
             state,
             router,
             _runtime: runtime,
