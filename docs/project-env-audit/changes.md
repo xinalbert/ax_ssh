@@ -1233,3 +1233,27 @@
 - 受影响文件：`ui/`、`src/app.rs`、`src/app/view/`、双语说明和配套记录。
 - 更新后的命令或环境：标准 locked/offline Cargo 门禁和 ARM64/Intel CI 同款目标检查/Clippy/build；临时匹配 Skia file URL 和 7897 代理，无全局修改。
 - 验证结果：59 专项/841 Rust、8 Python、665 × 11 翻译、119 相对链接、六个 SVG 和 skill/tracker/diff 全通过；两架构 Mach-O 正确，实际 GUI/键盘与 Windows/Linux 原生验证待用户/CI。
+
+## 2026-10-15 16:39 +0800 Windows 滚轮原生复现环境核对
+
+- 日期：2026-10-15
+- 变化摘要：当前排查边界为 Windows/macOS 原生滚轮差异；刷新已过时的默认工具链/targets，并区分原生 CI 和真实 GUI 复现。
+- 受影响文件：`src/app/terminal_bridge/{native,input}.rs`、双语开发说明、环境及实施记录。
+- 更新后的命令或环境：本机默认 rustc/Cargo 1.99.0，targets 为 macOS ARM64 和 Windows MSVC；没有本轮工具链/依赖安装。VirtualBox 启动目标不存在，未发现 Windows VM/远程桌面执行工具；用户在另一台 Windows 主机运行编译产物，当前无法访问。
+- 验证结果：读取 GitHub run `38677130493`/Windows job `116233176549` 的实际日志，`25335e0` 的原生 check/严格 Clippy/build 和 814 项测试通过；现有滚轮组件回归为无窗口注入，不能作为实际故障已经复现或排除的证据。允许补充默认关闭的脱敏诊断，本轮代码门禁及现场对照待完成。
+
+## 2026-10-15 16:44 +0800 滚轮诊断本机验证完成
+
+- 日期：2026-10-15
+- 变化摘要：原生滚轮/实际模式/入队结果的元数据诊断与双语复现方法就绪，未更改滚轮策略。
+- 受影响文件：`src/app/terminal_bridge/{native,input}.rs`、双语开发说明和环境/实施记录。
+- 更新后的命令或环境：既有 Rust 1.99.0/macOS ARM64、locked/offline Cargo 门禁；产物 `target/debug/ax_ssh`，无依赖/工具链/CI 变化。
+- 验证结果：相关定向回归、fmt/check/严格 all-target Clippy/870 项测试/build 通过，无 warning；10 个相对链接和本轮 tracker 记录有效，84 项历史问题无新增。故障 Windows 主机、实际 GUI/Codex 和新代码 Windows 原生门禁仍未验证，不以历史 CI 或无窗口回归替代。
+
+## 2026-10-15 17:23 +0800 滚轮到 SSH 接收端测试环境验证
+
+- 日期：2026-10-15
+- 变化摘要：新增主/独立窗口 UI 到真实 loopback SSH 服务端字节的回归，增强既有 CI 的可验证边界。
+- 受影响文件：`src/app/behavior_tests.rs`、`src/app/behavior_tests/terminal_wheel.rs`、双语开发说明和环境/实施记录。
+- 更新后的命令或环境：复用锁定 russh/Tokio/Slint、固定测试 host key/凭据、bounded loopback listener/队列及标准 Cargo 门禁；没有新增软件、运行时依赖或 CI targets。
+- 验证结果：两项接收测试及标准 fmt/check/严格 all-target Clippy/872 项测试通过，无 warning；10 个相对链接和本轮 tracker 记录有效，84 项历史问题无新增。新测试在原生 Windows/Linux CI 的执行与实际 OS 鼠标/Codex 复现分别保留，不以本机结果替代。

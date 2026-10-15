@@ -3,17 +3,22 @@
 ## 项目类型
 
 - 独立 Rust 2024/Slint 桌面应用，SSH、Telnet、Serial 和本地 PTY 由 Tokio worker 与 transport 模块承载。
-- 当前环境范围：SFTP 直接路径显示、中间省略与齿轮路径菜单；保持工具链、依赖、配置 schema 与 CI target 矩阵。
+- 当前环境范围：Windows/macOS 滚轮差异的原生证据与诊断；保持依赖、配置 schema 与 CI target 矩阵。
 
 ## 运行环境
 
-- 仓库声明 MSRV：Rust 1.92.0；本机默认 rustc/Cargo 为 1.97.1，另已安装 1.99.0 和 1.92.0。
+- 仓库声明 MSRV：Rust 1.92.0；本机当前默认 rustc/Cargo 为 1.99.0，本轮未切换或安装工具链。
+- 当前宿主为 macOS ARM64，已安装 `aarch64-apple-darwin` 与 `x86_64-pc-windows-msvc` Rust targets；Windows target 不能代替 Windows SDK 或可执行的 Windows 系统。VirtualBox 只有失效启动脚本，未发现可用 Windows 虚拟机或远程桌面执行工具。
 - UI 构建入口：`build.rs` 编译 `ui/app.slint`；Cargo edition 为 Rust 2024。
 - CI target 矩阵：`x86_64-pc-windows-msvc`、`x86_64-unknown-linux-gnu`、`aarch64-unknown-linux-gnu`、`aarch64-apple-darwin`、`x86_64-apple-darwin`。
 
 ## 测试环境
 
-- 本轮 SFTP 直接路径：59 专项、841 完整 Rust（391 library + 450 binary）、fmt、locked/offline check/严格 all-target Clippy 与两种 macOS target 的 CI 参数 check/Clippy/build 全部通过；Mach-O arm64/x86_64 核对。8 Python、665 × 11 翻译、119 相对链接、六个 SVG、skill/tracker/diff 通过；GUI/键盘验收待用户确认。
+- 本轮原生证据：[CI run 38677130493 / Windows job 116233176549](https://github.com/xinalbert/ax_ssh/actions/runs/38677130493/job/116233176549) 在 `25335e0` 上通过 Windows 原生 check、严格 Clippy、build 和 365 library + 449 binary（814）测试。现有 TerminalPane 滚轮测试使用 MinimalSoftwareWindow 注入，不覆盖原生鼠标消息和实际 Codex/tmux 会话；新的诊断代码验证结果另行记录。
+- 用户在另一台 Windows 主机运行编译产物；当前会话没有该主机访问方式，无法声称已原生复现故障。允许实现元数据诊断并执行本机门禁，现场行为需同版本 Windows/macOS 对照。
+- 本轮新诊断在 macOS ARM64 通过定向回归、fmt、locked/offline check、严格 all-target Clippy、392 library + 478 binary（870）测试和 debug build；没有执行新代码 Windows 原生门禁或实际 GUI/Codex 复现。
+- 追加滚轮接收覆盖：主/独立窗口实际 UI 到固定密钥 loopback SSH 服务端字节的两项回归及标准 fmt/check/严格 Clippy/392 library + 480 binary（872）测试通过。夹具不需要真实远端/凭据，不改变运行时或 CI 矩阵；新测试的 Windows 原生运行和真实 OS/Codex 行为仍待验证。
+- 前轮 SFTP 直接路径：59 专项、841 完整 Rust（391 library + 450 binary）、fmt、locked/offline check/严格 all-target Clippy 与当时两种 macOS target 的 CI 参数 check/Clippy/build 全部通过；Mach-O arm64/x86_64 核对。8 Python、665 × 11 翻译、119 相对链接、六个 SVG、skill/tracker/diff 通过；GUI/键盘验收待用户确认。
 
 - 前轮 SFTP 界面源码：60 专项与 842 完整 Rust 测试（391 library + 451 binary）、fmt、locked/offline check 和严格 all-target Clippy 已通过；ARM64/Intel macOS 的 CI 同款 check/严格 all-target Clippy/build 和 Mach-O 架构核对全部通过；不运行 Intel 非原生测试。665 × 11 翻译、8 Python、119 文档相对链接、九个 SVG 与 skill/tracker/staged diff 已通过；实际 GUI/焦点仍待用户验收。
 
@@ -66,6 +71,9 @@ git diff --check
 
 ## 最后确认时间
 
+- 2026-10-15 17:23 +0800：真实 SSH 接收端覆盖和标准 872 项本机门禁完成；前轮诊断运行时源码保持一致，没有新增环境依赖。
+- 2026-10-15 16:44 +0800：滚轮脱敏诊断的本机完整门禁及构建完成；Windows 故障主机仍不可访问，原生 CI 历史结果与新代码/实际 GUI 复现分开记录。
+- 2026-10-15 16:39 +0800：刷新实际默认工具链、已安装 targets、不可用 Windows 执行环境及 Windows CI 证据；本轮允许补充滚轮诊断，真实 GUI/Codex 复现与新代码 Windows 原生门禁尚未完成。
 - 2026-10-12 23:52 +0800：行为覆盖率施工完成；最终普通/插桩 799 默认并发、locked/offline Cargo 门禁和 ARM64 CI 参数通过，canonical src 57.96% -> 65.78%；报告、地图、双语说明与实施记录已同步，Linux Codecov 及真实平台/设备验收保留。
 - 2026-10-12 22:15 +0800：核对 manifest/lock/build.rs/CI/工具链和两个 macOS target；允许按 plan-first 开工。未知/不匹配主机密钥默认拒绝，测试不访问真实设备/keyring，不保存明文凭据；本机 coverage 与 Linux Codecov 分开报告。
 - 2026-10-12：终端媒体按需显示施工预检通过；已核对 Cargo/lock/build.rs/CI、Rust/Cargo 1.97.1、两个 macOS target、Rust 2024/MSRV 1.92.0 与 Slint 1.18.1。最终数值回归与 Cargo 门禁待实现后执行。

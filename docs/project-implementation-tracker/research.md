@@ -666,3 +666,13 @@
 - 关键结论：上游记录过程序清空输入后撤销访问旧位置的问题；本地锁定版本的独立无原生窗口程序仍能复现空字符串索引越界。终端代理编辑后清空，但未处理 Command+Z 会进入 TextInput 标准撤销；macOS Slint control 对应 Command，物理 Control 经终端编码器生成控制字节。
 - 对实施计划的影响：既有应用快捷键和可编码终端输入优先；仅在终端代理的未处理编辑组合键 fallback 消费撤销/重做，保持 IME 提交、普通字段撤销和传输契约。
 - 未解决问题：安装版原始第一层 panic 未保留，系统报告只保留最终 abort 链；真实 AppKit、IME、主/独立窗口手感由用户在修复构建中验收。
+
+## 2026-10-15 16:39 +0800 Windows 滚轮原生证据与模式分发
+
+- 时间：2026-10-15 16:39 +0800
+- 检索问题：为什么 macOS 可滚动 Codex 输出而 Windows 切换输入历史，现有跨平台测试覆盖了哪一段？
+- 检索原因：用户要求各平台原生复现，并确认在另一台 Windows 主机运行编译产物；源码共同分支不能直接解释平台差异。
+- 来源列表：[Windows 原生 CI job](https://github.com/xinalbert/ax_ssh/actions/runs/38677130493/job/116233176549)；[xterm Wheel mice](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-Wheel-mice)；锁定 Winit 0.30.13 Windows WM_MOUSEWHEEL、仓库 Slint 后端及 TerminalPane/TerminalModel 源码。
+- 关键结论：Windows 原生 CI 在 `25335e0` 通过 check/严格 Clippy/build 和 814 项测试，但实际组件滚轮测试绕过操作系统鼠标输入。备用屏无鼠标上报时滚轮产生方向键符合 xterm Alternate Scroll；该分支跨平台共用，只能作为现象候选，不能据此确认故障主机根因。Windows LineDelta 与 macOS 可用的 PixelDelta 进入共享 cell 累计链路。
+- 对实施计划的影响：补齐 native-wheel、local-history、wheel-route 和 wheel-enqueue 的脱敏元数据；保持滚轮策略不变，按同一构建与远端运行条件比较首次分歧。环境与可执行能力另记于环境审计，不用 CI 通过代替 GUI/Codex 复现。
+- 未解决问题：当前无故障 Windows 主机访问方式，实际启动模式、鼠标模式及 tmux 路由尚待两端日志确认；最终修复必须以现场证据决定。
