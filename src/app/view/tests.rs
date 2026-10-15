@@ -2,6 +2,7 @@ use super::*;
 use slint::Model;
 
 mod sftp_navigation;
+mod shortcut_menus;
 mod terminal_connection;
 mod text_editing;
 mod text_overflow;
@@ -254,11 +255,16 @@ fn alternate_screen_wheel_reaches_terminal_pointer_callback(detached: bool) {
     .expect("terminal pane test thread should finish");
 }
 
+type AdditionalLayoutWindows = std::rc::Rc<
+    std::cell::RefCell<Vec<std::rc::Rc<slint::platform::software_renderer::MinimalSoftwareWindow>>>,
+>;
+
 struct LayoutTestHarness {
     ui: AppWindow,
     window: std::rc::Rc<slint::platform::software_renderer::MinimalSoftwareWindow>,
     time: std::rc::Rc<std::cell::Cell<std::time::Duration>>,
     clipboard: std::rc::Rc<std::cell::RefCell<[Option<String>; 2]>>,
+    additional_windows: AdditionalLayoutWindows,
 }
 
 #[test]
@@ -318,11 +324,18 @@ impl LayoutTestHarness {
             window: Rc<MinimalSoftwareWindow>,
             time: Rc<Cell<Duration>>,
             clipboard: Rc<RefCell<[Option<String>; 2]>>,
+            first_window_used: Cell<bool>,
+            additional_windows: Rc<RefCell<Vec<Rc<MinimalSoftwareWindow>>>>,
         }
 
         impl Platform for LayoutPlatform {
             fn create_window_adapter(&self) -> Result<Rc<dyn WindowAdapter>, slint::PlatformError> {
-                Ok(self.window.clone())
+                if !self.first_window_used.replace(true) {
+                    return Ok(self.window.clone());
+                }
+                let window = MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
+                self.additional_windows.borrow_mut().push(window.clone());
+                Ok(window)
             }
 
             fn duration_since_start(&self) -> Duration {
@@ -351,10 +364,13 @@ impl LayoutTestHarness {
         let window = MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
         let time = Rc::new(Cell::new(Duration::ZERO));
         let clipboard = Rc::new(RefCell::new([None, None]));
+        let additional_windows = Rc::new(RefCell::new(Vec::new()));
         slint::platform::set_platform(Box::new(LayoutPlatform {
             window: window.clone(),
             time: time.clone(),
             clipboard: clipboard.clone(),
+            first_window_used: Cell::new(false),
+            additional_windows: additional_windows.clone(),
         }))
         .expect("isolated layout platform should initialize");
         let mut fonts = font_bridge::FontRegistry::new();
@@ -375,6 +391,7 @@ impl LayoutTestHarness {
             window,
             time,
             clipboard,
+            additional_windows,
         }
     }
 
@@ -387,15 +404,19 @@ impl LayoutTestHarness {
         for _ in 0..16 {
             self.time.set(self.time.get() + Duration::from_millis(20));
             slint::platform::update_timers_and_animations();
-            let size = self.window.window().size();
-            pixels.resize(
-                size.width as usize * size.height as usize,
-                Rgb565Pixel::default(),
-            );
-            // Rendering resolves numerical layout; no image is saved or inspected.
-            self.window.draw_if_needed(|renderer| {
-                renderer.render(&mut pixels, size.width as usize);
-            });
+            let windows = std::iter::once(self.window.clone())
+                .chain(self.additional_windows.borrow().clone());
+            for window in windows {
+                let size = window.window().size();
+                pixels.resize(
+                    size.width as usize * size.height as usize,
+                    Rgb565Pixel::default(),
+                );
+                // Resolve numerical layout without saving or inspecting images.
+                window.draw_if_needed(|renderer| {
+                    renderer.render(&mut pixels, size.width as usize);
+                });
+            }
         }
     }
 

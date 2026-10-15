@@ -426,9 +426,12 @@ SGR、UTF-8 或传统格式发送。默认使用 **标准 xterm 鼠标路由**�
 **Select All** 只作用于 focused terminal pane。Copy/Paste 默认快捷键在 macOS 上为
 `Cmd+C` / `Cmd+V`，在 Windows 和 Linux 上为 `Ctrl+Shift+C` / `Ctrl+Shift+V`，并可在
 Settings 中修改；Select All 固定为 macOS `Cmd+A`、其它平台 `Ctrl+Shift+A`。
-Windows/Linux 中普通 `Ctrl+A`、`Ctrl+C`、`Ctrl+V` 继续作为终端输入。detached Terminal
-虽然没有客户区菜单，仍可使用相同键盘快捷键。普通非秘密文本字段继续使用原生编辑快捷键和
-右键菜单；秘密字段可粘贴但仍不可复制。
+Windows/Linux 中普通 `Ctrl+A`、`Ctrl+C`、`Ctrl+V` 继续作为终端输入。独立 Terminal
+窗口使用相同快捷键；macOS 屏幕菜单跟随当前活动窗口，Copy/Paste/Select All 只操作该窗口的
+聚焦 pane。主/子窗口来回激活、新分离与 Workspace 恢复均保留各自的命令归属。
+仅适用于主页面的管理动作在独立窗口中禁用，macOS 应用菜单的 Settings/About 由主窗口承接。
+阻塞弹窗期间终端菜单动作禁用。普通非秘密文本字段继续使用原生编辑快捷键和右键菜单；
+秘密字段可粘贴但仍不可复制。
 在 macOS 按住 `Cmd`，或在 Windows/Linux 按住 `Ctrl`，再点击可见终端目标即可打开。
 按住时，完整识别出的 URL 或路径会显示下划线；松开修饰键或开始文本选择时提示消失。AxSSH 识别
 `http://` 和 `https://` URL，并交给本机默认程序；不会自行请求这些 URL。

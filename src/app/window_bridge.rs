@@ -573,7 +573,7 @@ pub(super) fn wire_window_actions(
                 &detached_ui,
                 WindowCallbackContext {
                     state: state_for_show.clone(),
-                    runtime: runtime_for_show,
+                    runtime: runtime_for_show.clone(),
                     font_registry: font_registry_for_show,
                     log_directory: log_directory_for_show,
                     window_router: router_for_show.clone(),
@@ -599,6 +599,13 @@ pub(super) fn wire_window_actions(
                 router_for_show.finish_detach(detach_token);
                 return;
             }
+            install_native_window_input_hook(
+                &detached_ui,
+                state_for_show.clone(),
+                runtime_for_show,
+                router_for_show.clone(),
+                detached_id,
+            );
             router_for_show.finish_detach(detach_token);
             #[cfg(target_os = "macos")]
             schedule_macos_detached_titlebar_buttons(&detached_ui, show_terminal_titlebar_actions);

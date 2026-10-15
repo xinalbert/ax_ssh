@@ -650,8 +650,10 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     现有连接 callback。File > New Server、可配置的 `Cmd+N`/`Ctrl+N` 快捷键与侧栏列表
     空白区域的右键菜单仍是独立的新建会话编辑器动作。File 还统一持有剪贴板导入和所选对象
     导出，默认快捷键分别为可配置的 `Cmd/Ctrl+Shift+I` 与 `Cmd/Ctrl+Shift+E`。
-11. 声明式 Slint `MenuBar` 保留菜单快捷键。它在 macOS 屏幕菜单栏可见，在 Windows/Linux
-    隐藏；这两个平台由 `DesktopMenuTitlebar` 在无边框客户区顶部绘制 File/Edit/View/Pane/Window/Help。
+11. 每个 `AppWindow`（包括独立窗口）无条件声明一份 Slint `MenuBar`。
+    后端随窗口激活切换 macOS 屏幕菜单，并把原生菜单事件派发给所属窗口；生成菜单快捷键
+    同时提供焦点控件派发前的 Slint 标准兜底，不另设全局键盘监听。菜单回调和终端局部
+    按键处理只消费一次动作。菜单在 macOS 屏幕菜单栏可见，在 Windows/Linux 隐藏；这两个平台由 `DesktopMenuTitlebar` 在无边框客户区顶部绘制 File/Edit/View/Pane/Window/Help。
     每个菜单按钮用主题化 `FlatActionMenu` 弹层展开，两个菜单表面共同调用
     `execute-menu-command`，使动态启用状态和动作保持同一应用路由。六像素 winit 缩放边缘、
     菜单顶栏空白区的 `TouchArea` 和最小化/最大化/关闭按钮替代原生窗口边框交互。
@@ -687,7 +689,14 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     当前 Settings/About；重绑会扫描当前 native menu
     tree 的应用 submenu 和 About 标题，兼容平台使用的省略号写法，并在 AppKit 尚未发布重建菜单时
     短暂重试。有界重试预算内的瞬时查找失败保持静默；只有预算耗尽后才输出一条带总尝试次数的
-    warning。Windows/Linux 仍保留动态关闭 Tab，并在 Edit/Help
+    warning。后台窗口不会重绑当前 AppKit 菜单；窗口重新激活后，在后端完成菜单切换后
+    调度 Settings/About 接线。这两个应用页面统一由主窗口承接（包括来自独立窗口的命令），
+    源窗口与主窗口的模态禁用条件都必须允许；必要时取消主窗口最小化并聚焦主窗口。
+    独立窗口禁用仅主页面可用的 File/View/Help 和 New Local Shell；终端 Edit、SSH/SFTP
+    companion 切换、窗口内前后 Tab、Return 和 Close 保留当前窗口路由。固定 Tab 快捷键
+    在共用的窗口设置映射中初始化。主窗口启动、独立窗口恢复和手动分离均在 show 后注册
+    同一原生输入 hook，保留修饰键快照、失焦清理、原生文件拖放与终端 Control 键处理。
+    Windows/Linux 仍保留动态关闭 Tab，并在 Edit/Help
     提供 Settings/About；其他菜单复用已有的
     新建会话、侧栏、本地 shell、关闭 Tab、剪贴板传输和快捷键意图。Import 固定进入自动
     识别的有界传输路径；Export 从 `SessionNavigation` 读取当前选中的持久化 Group/服务器

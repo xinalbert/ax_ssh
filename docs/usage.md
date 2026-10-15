@@ -770,9 +770,15 @@ terminal pane. Default Copy/Paste shortcuts are `Cmd+C` / `Cmd+V` on macOS and
 `Ctrl+Shift+C` / `Ctrl+Shift+V` on Windows and Linux; these can be changed in
 Settings. Select All is fixed to `Cmd+A` on macOS and `Ctrl+Shift+A` elsewhere.
 Plain `Ctrl+A`, `Ctrl+C`, and `Ctrl+V` remain terminal input on Windows/Linux.
-The same keyboard shortcuts work in a detached Terminal window even though it
-has no client-area menu. Non-secret text fields retain their native editing
-shortcuts and themed context menus; secret fields allow paste but remain non-copyable.
+The same keyboard shortcuts work in a detached Terminal window. On macOS, the
+screen menu follows the active window, so Copy/Paste/Select All act on that
+window's focused pane. Switching between main and detached windows keeps each
+command with its window, for both newly detached and restored workspaces.
+Main-window management actions are disabled in a detached window; the macOS
+application menu's Settings/About commands open their pages in the main window.
+Blocking dialogs disable terminal menu actions. Non-secret text fields retain
+their native editing shortcuts and themed context menus; secret fields allow
+paste but remain non-copyable.
 Hold `Cmd` on macOS, or `Ctrl` on Windows/Linux, and click a visible terminal
 target to open it. While that modifier is held, the complete recognized URL or
 path is underlined; the indicator clears when the modifier is released or text

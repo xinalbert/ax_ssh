@@ -185,6 +185,13 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
     ui.set_paste_shortcut(settings.shortcuts.paste.clone().into());
     let select_all_shortcut = terminal_select_all_shortcut_for_platform(cfg!(target_os = "macos"));
     ui.set_select_all_shortcut(select_all_shortcut.into());
+    let (previous, next) = if cfg!(target_os = "macos") {
+        ("Cmd+Shift+[", "Cmd+Shift+]")
+    } else {
+        ("Ctrl+Shift+[", "Ctrl+Shift+]")
+    };
+    ui.set_previous_tab_menu_shortcut(menu_shortcut_keys("previous-tab", previous));
+    ui.set_next_tab_menu_shortcut(menu_shortcut_keys("next-tab", next));
     ui.set_open_sftp_shortcut(settings.shortcuts.open_sftp.clone().into());
     ui.set_open_settings_menu_shortcut(menu_shortcut_keys(
         "open-settings",

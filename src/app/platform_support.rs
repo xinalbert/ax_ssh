@@ -4,6 +4,8 @@ use std::path::Path;
 use anyhow::{Context, Result};
 #[cfg(target_os = "macos")]
 use slint::ComponentHandle;
+#[cfg(target_os = "macos")]
+use slint::winit_030::WinitWindowAccessor;
 use std::cell::RefCell;
 #[cfg(target_os = "macos")]
 use tracing::warn;
@@ -109,6 +111,9 @@ const MACOS_APPLICATION_MENU_MAX_RETRIES: u8 = 8;
 
 #[cfg(target_os = "macos")]
 pub(super) fn configure_macos_application_menu(ui: &AppWindow) -> Result<()> {
+    if !ui.get_window_active() {
+        return Ok(());
+    }
     let shortcut = menu_shortcut_from_setting(ui.get_open_settings_shortcut().as_str())
         .context("cannot configure the macOS Settings shortcut")?;
     let ui_for_menu = ui.as_weak();
@@ -119,20 +124,56 @@ pub(super) fn configure_macos_application_menu(ui: &AppWindow) -> Result<()> {
             let Some(ui) = ui_for_menu.upgrade() else {
                 return;
             };
-            let section = match section {
-                macos_window::NativeMenuSection::Settings => {
-                    log_menu_action("open-settings");
-                    "General"
+            let main_ui = GLOBAL_WINDOW_ROUTER
+                .get()
+                .and_then(WindowRouter::main_ui)
+                .and_then(|ui| ui.upgrade());
+            if let Some(target) = activate_application_menu_section(&ui, main_ui, section)
+                && ui.get_detached_window()
+            {
+                target.window().set_minimized(false);
+                if target
+                    .window()
+                    .with_winit_window(|window| window.focus_window())
+                    .is_none()
+                {
+                    tracing::debug!("main window has no native adapter for application-menu focus");
                 }
-                macos_window::NativeMenuSection::About => {
-                    log_menu_action("open-about");
-                    "About"
-                }
-            };
-            ui.invoke_request_settings_section(section.into());
-            ui.invoke_open_settings();
+            }
         },
     )
+}
+
+#[cfg(target_os = "macos")]
+fn activate_application_menu_section(
+    source: &AppWindow,
+    main_ui: Option<AppWindow>,
+    section: macos_window::NativeMenuSection,
+) -> Option<AppWindow> {
+    if !source.get_menu_shortcuts_enabled() {
+        return None;
+    }
+    let target = if source.get_detached_window() {
+        main_ui?
+    } else {
+        source.clone_strong()
+    };
+    if !target.get_menu_shortcuts_enabled() {
+        return None;
+    }
+    let section = match section {
+        macos_window::NativeMenuSection::Settings => {
+            log_menu_action("open-settings");
+            "General"
+        }
+        macos_window::NativeMenuSection::About => {
+            log_menu_action("open-about");
+            "About"
+        }
+    };
+    target.invoke_request_settings_section(section.into());
+    target.invoke_open_settings();
+    Some(target)
 }
 
 #[cfg(target_os = "macos")]
@@ -174,6 +215,79 @@ fn should_retry_macos_application_menu_configuration(attempt: u8) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn application_menu_sections_from_child_use_main_window_and_both_modal_guards() {
+        std::thread::spawn(|| {
+            use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
+            use slint::platform::{Platform, WindowAdapter};
+            use std::cell::Cell;
+            use std::rc::Rc;
+
+            struct TestPlatform;
+            impl Platform for TestPlatform {
+                fn create_window_adapter(
+                    &self,
+                ) -> Result<Rc<dyn WindowAdapter>, slint::PlatformError> {
+                    Ok(MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer))
+                }
+            }
+            slint::platform::set_platform(Box::new(TestPlatform)).expect("headless menu platform");
+            let main = AppWindow::new().expect("main component");
+            let child = AppWindow::new().expect("child component");
+            child.set_detached_window(true);
+            let main_actions = Rc::new(Cell::new(0));
+            let received = main_actions.clone();
+            main.on_open_settings(move || received.set(received.get() + 1));
+            let child_actions = Rc::new(Cell::new(0));
+            let received = child_actions.clone();
+            child.on_open_settings(move || received.set(received.get() + 1));
+            for section in [
+                macos_window::NativeMenuSection::Settings,
+                macos_window::NativeMenuSection::About,
+            ] {
+                assert!(
+                    activate_application_menu_section(&child, Some(main.clone_strong()), section)
+                        .is_some()
+                );
+            }
+            assert_eq!(main_actions.get(), 2);
+            assert_eq!(child_actions.get(), 0);
+            main.set_password_dialog_open(true);
+            assert!(
+                activate_application_menu_section(
+                    &child,
+                    Some(main.clone_strong()),
+                    macos_window::NativeMenuSection::Settings
+                )
+                .is_none()
+            );
+            main.set_password_dialog_open(false);
+            child.set_password_dialog_open(true);
+            assert!(
+                activate_application_menu_section(
+                    &child,
+                    Some(main.clone_strong()),
+                    macos_window::NativeMenuSection::Settings
+                )
+                .is_none()
+            );
+            child.set_password_dialog_open(false);
+            assert!(
+                activate_application_menu_section(
+                    &child,
+                    None,
+                    macos_window::NativeMenuSection::Settings
+                )
+                .is_none()
+            );
+            assert_eq!(main_actions.get(), 2);
+            assert_eq!(child_actions.get(), 0);
+        })
+        .join()
+        .expect("application menu owner and security gates");
+    }
 
     #[test]
     fn copied_diagnostics_are_build_metadata_only() {

@@ -1079,8 +1079,13 @@ tab-local terminal connection notice deliberately remains non-blocking.
    blank-area context menu remain distinct session-editor actions. File also
    owns clipboard import and selected-object export, with configurable
    `Cmd/Ctrl+Shift+I` and `Cmd/Ctrl+Shift+E` defaults respectively.
-11. The declarative Slint `MenuBar` retains the menu accelerators. It is visible
-    in the macOS screen menu and hidden on Windows/Linux, where
+11. Every `AppWindow` declares one unconditional Slint `MenuBar`, including
+    detached windows. The backend switches the macOS screen menu on window
+    activation and delivers each native menu event to its owning window. Generated
+    menu shortcuts also provide Slint's normal fallback before focused-widget
+    dispatch; no parallel global keyboard listener is installed. Menu callbacks
+    and the terminal's local key handler consume an action once. The menu is
+    visible in the macOS screen menu and hidden on Windows/Linux, where
     `DesktopMenuTitlebar` renders File/Edit/View/Pane/Window/Help across the
     top of the frameless client window. Each top-level button opens a themed
     `FlatActionMenu` popup; both menu surfaces call the same `execute-menu-command`
@@ -1139,6 +1144,18 @@ tab-local terminal connection notice deliberately remains non-blocking.
     published the rebuilt menu yet. Transient lookup failures remain silent
     within the bounded retry budget; only exhaustion emits one warning with
     the total attempt count.
+    Background windows do not rebind the active AppKit menu. Reactivating a
+    window schedules Settings/About binding after the backend's menu switch.
+    These application pages always open in the main window, including commands
+    from a detached window; both source and main-window modal guards must allow
+    the action. The main window is restored from minimization and focused after
+    a detached-window application command. Detached windows disable main-only
+    File/View/Help actions and New Local Shell; terminal Edit, companion switching,
+    local previous/next Tab, Return and Close retain their window route. Fixed Tab
+    accelerators are initialized with the shared per-window settings mapping.
+    Main startup, detached restore and manual detach all register the same native
+    input hook after showing the window, preserving modifier snapshots, focus
+    cleanup, native file-drop routing and terminal Control-key handling.
     Windows/Linux retain dynamic close-tab state, keep Settings in Edit, and
     keep About in Help. File, View, Pane, Window, and Help reuse existing
     new-session, sidebar, local-shell, close-tab, clipboard-transfer, and
