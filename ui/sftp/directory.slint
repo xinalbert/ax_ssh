@@ -7,6 +7,7 @@ import { Theme } from "../theme.slint";
 
 import { SftpEntryRow } from "types.slint";
 import { SftpPathBar } from "path-bar.slint";
+import { PathPresentation } from "../components/middle-elided-path.slint";
 
 component SftpDirectoryHeader inherits Rectangle {
     in property <bool> selection-checked: false;
@@ -570,7 +571,10 @@ export component SftpDirectoryPane inherits Rectangle {
                 if root.width >= Theme.sftp-toolbar-secondary-width : SftpPathCopyButton {
                     height: root.control-height;
                     enabled: root.interactive && !root.path.is-empty;
-                    clicked => { root.copy-path(root.path); }
+                    clicked => {
+                        root.copy-path(root.local-actions
+                            ? PathPresentation.local-path(root.path) : root.path);
+                    }
                 }
                 if root.allow-refresh : SftpIconButton {
                     height: root.control-height;
@@ -613,6 +617,7 @@ export component SftpDirectoryPane inherits Rectangle {
                 padding-bottom: Theme.sftp-path-row-padding-y;
                 SftpPathBar {
                     path: root.path;
+                    local-path: root.local-actions;
                     control-height: root.control-height;
                     can-go-back: root.can-go-back;
                     can-go-forward: root.can-go-forward;

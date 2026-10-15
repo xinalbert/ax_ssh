@@ -1,6 +1,49 @@
 use super::*;
 
 #[test]
+fn local_windows_paths_present_drive_and_unc_addresses_without_internal_prefixes() {
+    for (path, expected) in [
+        (r"\\?\D:\software\Xming", r"D:\software\Xming"),
+        (r"\\?\c:\", r"c:\"),
+        (r"\\?\C:\研究\📁目录", r"C:\研究\📁目录"),
+        (r"\\?\UNC\server\share\研究", r"\\server\share\研究"),
+        (r"\\?\unc\server\share\", r"\\server\share\"),
+    ] {
+        assert_eq!(local_path(path), expected);
+    }
+    let long_path = format!(r"\\?\D:\{}结果", "研究\\".repeat(100));
+    assert_eq!(local_path(&long_path), long_path[4..]);
+}
+
+#[test]
+fn local_path_presentation_preserves_other_paths_and_verbatim_semantics() {
+    for path in [
+        "",
+        "/home/alice/data",
+        r"D:\software\Xming",
+        r"\\server\share\data",
+        r"\\?\Volume{1234}\data",
+        r"\\.\PhysicalDrive0",
+        r"\\?\D:relative",
+        r"\\?\UNC\server",
+        r"\\?\UNC\\share",
+        r"\\?\UNC\server\\file",
+        r"\\?\D:\trailing.\data",
+        r"\\?\D:\trailing \data",
+        r"\\?\D:\..\data",
+        r"\\?\D:\con.txt",
+        r"\\?\D:\AUX\data",
+        r"\\?\D:\com¹.log",
+        r"\\?\D:\LPT9",
+        r"\\?\D:\data:stream",
+        r"\\?\D:\a/b",
+        r"\\?\D:\a\\b",
+    ] {
+        assert_eq!(local_path(path), path, "must preserve {path:?}");
+    }
+}
+
+#[test]
 fn full_paths_and_small_budgets_keep_the_correct_ends() {
     assert_eq!(elide("/short/path", 32), "/short/path");
     assert_eq!(elide("/a/long/path", 0), "");

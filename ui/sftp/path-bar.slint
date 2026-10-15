@@ -1,11 +1,12 @@
 import { Theme } from "../theme.slint";
-import { MiddleElidedPath } from "../components/middle-elided-path.slint";
+import { MiddleElidedPath, PathPresentation } from "../components/middle-elided-path.slint";
 import { FlatTextInput } from "../components/flat-text-input.slint";
 import { FlatActionMenu, MenuActions } from "../components/flat-action-menu.slint";
 import { SftpIconButton } from "../components/sftp-controls.slint";
 
 export component SftpPathBar inherits FocusScope {
     in property <string> path;
+    in property <bool> local-path: false;
     in property <bool> can-go-back;
     in property <bool> can-go-forward;
     in property <bool> can-go-up;
@@ -17,8 +18,10 @@ export component SftpPathBar inherits FocusScope {
     callback up();
     private property <bool> editing: false;
     private property <bool> return-focus: false;
-    private property <string> draft: root.path;
-    changed path => { root.draft = root.path; root.editing = false; }
+    private property <string> presented-path: root.local-path
+        ? PathPresentation.local-path(root.path) : root.path;
+    private property <string> draft: root.presented-path;
+    changed path => { root.draft = root.presented-path; root.editing = false; }
     changed enabled => {
         if root.enabled && root.return-focus {
             root.return-focus = false;
@@ -51,7 +54,7 @@ export component SftpPathBar inherits FocusScope {
             return EventResult.accept;
         }
         if root.editing && event.text == Key.Escape {
-            root.draft = root.path;
+            root.draft = root.presented-path;
             root.editing = false;
             settings-button.focus();
             return EventResult.accept;
@@ -113,7 +116,7 @@ export component SftpPathBar inherits FocusScope {
                 focus-on-click: true;
                 focus-on-tab-navigation: !root.editing;
                 accessible-role: button;
-                accessible-label: @tr("Edit path") + ": " + root.path;
+                accessible-label: @tr("Edit path") + ": " + root.presented-path;
                 accessible-enabled: root.enabled;
                 accessible-action-default => { if root.enabled { root.edit-path(); } }
                 key-pressed(event) => {
@@ -126,7 +129,7 @@ export component SftpPathBar inherits FocusScope {
                 MiddleElidedPath {
                     width: parent.width;
                     height: parent.height;
-                    text: root.path;
+                    text: root.presented-path;
                 }
                 TouchArea {
                     enabled: root.enabled;
@@ -169,7 +172,7 @@ export component SftpPathBar inherits FocusScope {
             if action == "edit" {
                 if root.editing { root.submit-path(); } else { root.edit-path(); }
             } else if action == "copy" {
-                root.copy-path(root.path);
+                root.copy-path(root.presented-path);
                 settings-button.focus();
             } else {
                 root.return-focus = true;

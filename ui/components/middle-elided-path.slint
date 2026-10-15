@@ -4,6 +4,7 @@ import { ElidedTooltipContent } from "elided-controls.slint";
 // Stateless text formatting; UI Text probes own font measurement.
 export global PathPresentation {
     pure callback elide(string, int) -> string;
+    pure callback local-path(string) -> string;
 }
 
 export component MiddleElidedPath inherits Rectangle {

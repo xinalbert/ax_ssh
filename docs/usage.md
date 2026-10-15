@@ -196,14 +196,20 @@ fills the remaining width. A fitting path is shown in full;
 otherwise only the middle is replaced by `…`. Both ends are retained whenever
 space allows, with roughly three quarters of the retained characters reserved
 for the tail. The display uses the actual font width and updates on resizing
-or font changes. Hover an abbreviated path to see the complete original.
+or font changes. Hover an abbreviated path to see the complete path.
 
-Click the path, or choose **Edit path** in the gear menu, to edit the original
+Click the path, or choose **Edit path** in the gear menu, to edit the complete
 path. Press Enter or choose **Open** in that menu to navigate; Escape returns
 to the current path. `Cmd+L` on macOS or `Ctrl+L` on Windows/Linux also starts
 editing while a path control has focus. The gear menu includes **Copy current path**, **Back**, **Forward**,
-and **Parent directory**. Copying and navigation always use the original path;
+and **Parent directory**. Copying and navigation use the complete path;
 the displayed ellipsis never becomes part of a filesystem target.
+
+Windows local paths use the familiar drive or network-share format, such as
+`D:\software\Xming` or `\\server\share`, in display, editing and copying.
+The internal `\\?\` prefix remains only when needed to preserve a special path's
+meaning. Directory refresh, history and transfers retain the canonical path;
+remote addresses are displayed as returned by the server.
 
 Back and Forward follow that browser's visited directories; Parent directory
 opens the parent of its currently displayed path, even if the previous visit

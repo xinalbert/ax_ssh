@@ -3,6 +3,7 @@ use super::*;
 mod path_display;
 
 pub(in crate::app) use path_display::elide as elide_path;
+pub(in crate::app) use path_display::local_path as local_display_path;
 
 const SLINT_ICON_CACHE_CAPACITY: usize = 128;
 type SlintIconCache =

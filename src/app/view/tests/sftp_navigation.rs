@@ -1,6 +1,120 @@
 use super::*;
 
 #[test]
+fn windows_local_path_presentation_keeps_original_state_and_remote_path_routes() {
+    for detached in [false, true] {
+        std::thread::spawn(move || {
+            use i_slint_core::accessibility::AccessibleStringProperty;
+            use i_slint_core::item_tree::ItemRc;
+            use i_slint_core::window::WindowInner;
+            use std::cell::RefCell;
+            use std::ops::ControlFlow;
+            use std::rc::Rc;
+
+            let harness = LayoutTestHarness::new();
+            let ui = &harness.ui;
+            wire_menu_helpers(ui);
+            ui.set_detached_window(detached);
+            ui.set_active_tab_kind("sftp".into());
+            ui.set_sftp_available(true);
+            ui.set_sftp_open(true);
+            ui.set_local_sftp_loaded(true);
+            let navigated = Rc::new(RefCell::new(Vec::new()));
+            let received = navigated.clone();
+            ui.on_list_local_sftp_directory(move |path| received.borrow_mut().push(path));
+            let copied = Rc::new(RefCell::new(Vec::new()));
+            let received = copied.clone();
+            ui.on_write_clipboard(move |path| received.borrow_mut().push(path));
+            ui.show().expect("headless Windows path window");
+            harness.window.set_size(slint::PhysicalSize::new(1800, 740));
+
+            for (raw, readable) in [
+                (r"\\?\D:\software\Xming", r"D:\software\Xming"),
+                (r"\\?\UNC\server\share\研究", r"\\server\share\研究"),
+            ] {
+                ui.set_local_sftp_path(raw.into());
+                ui.set_sftp_path(raw.into());
+                harness.settle();
+                let local = ui.invoke_native_sftp_local_drop_region();
+                let action = |label: &str, local_action: bool| {
+                    ItemRc::new_root(WindowInner::from_pub(ui.window()).component())
+                        .visit_descendants(|item| {
+                            if item.is_visible()
+                                && item
+                                    .accessible_string_property(AccessibleStringProperty::Label)
+                                    .as_deref()
+                                    == Some(label)
+                                && (item.map_to_window(item.geometry().origin).x >= local.x)
+                                    == local_action
+                            {
+                                return ControlFlow::Break(item.clone());
+                            }
+                            ControlFlow::Continue(())
+                        })
+                        .expect("visible path action")
+                };
+                let click = |item: ItemRc| {
+                    let point = item.map_to_window(item.geometry().center());
+                    harness.click(slint::LogicalPosition::new(point.x, point.y));
+                };
+                for expected in [raw, readable] {
+                    let found = ItemRc::new_root(WindowInner::from_pub(ui.window()).component())
+                        .visit_descendants(|item| {
+                            if item.is_visible()
+                                && let Some(text) =
+                                    item.downcast::<i_slint_core::items::ComplexText>()
+                                && i_slint_core::items::ComplexText::FIELD_OFFSETS
+                                    .text()
+                                    .apply_pin(text.as_pin_ref())
+                                    .get()
+                                    == expected
+                            {
+                                return ControlFlow::Break(());
+                            }
+                            ControlFlow::Continue(())
+                        });
+                    assert!(found.is_some(), "visible path must contain {expected:?}");
+                }
+                // Copy buttons and editor use the same complete readable path.
+                click(action("Copy current path", true));
+                assert_eq!(
+                    copied.borrow().last().map(SharedString::as_str),
+                    Some(readable)
+                );
+                click(action(&format!("Edit path: {readable}"), true));
+                harness.press_key(slint::platform::Key::Return);
+                assert_eq!(
+                    navigated.borrow().last().map(SharedString::as_str),
+                    Some(readable)
+                );
+
+                click(action("Path: Settings", true));
+                harness.press_key(slint::platform::Key::DownArrow);
+                harness.press_key(slint::platform::Key::Return);
+                assert_eq!(
+                    copied.borrow().last().map(SharedString::as_str),
+                    Some(readable)
+                );
+
+                // Existing operational callbacks retain their canonical identity.
+                click(action("Refresh", true));
+                assert_eq!(
+                    navigated.borrow().last().map(SharedString::as_str),
+                    Some(raw)
+                );
+                assert_eq!(ui.get_local_sftp_path(), raw);
+                click(action("Copy current path", false));
+                assert_eq!(copied.borrow().last().map(SharedString::as_str), Some(raw));
+                assert_eq!(ui.get_sftp_path(), raw);
+            }
+            ui.hide().expect("headless Windows path window");
+        })
+        .join()
+        .expect("Windows path display and intent assertions");
+    }
+}
+
+#[test]
 fn sftp_primary_actions_and_full_path_editor_keep_their_pointer_routes() {
     std::thread::spawn(|| {
         use std::cell::{Cell, RefCell};

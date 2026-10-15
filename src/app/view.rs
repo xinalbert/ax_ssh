@@ -42,7 +42,8 @@ pub(super) use self::settings::{
     select_ui_language, set_font_registry_generation, terminal_render_line, to_slint_color,
 };
 pub(super) use self::sftp::{
-    clear_file_icon_cache, elide_path, local_icon_keys, prewarm_file_icons, sftp_icon_keys,
+    clear_file_icon_cache, elide_path, local_display_path, local_icon_keys, prewarm_file_icons,
+    sftp_icon_keys,
 };
 pub(super) use self::sidebar::{
     connection_option_rows, font_option_rows, group_option_rows, refresh_session_models,

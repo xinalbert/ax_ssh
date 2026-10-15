@@ -132,7 +132,23 @@ The SFTP application facade composes private `sftp_bridge/{navigation,files,drag
 
 `CredentialStore::with_entry_factory` and `PasswordEntry` form the intentional library boundary for protected providers and isolated application tests. The adapter returns owned values and generic errors; platform errors stay inside credentials. This avoids real keyring access or process-global backend replacement in tests. Private persistence restricts temporary-file permissions before replacement and reports directory-sync failures with context. A sync failure after replacement means the new file may already be published; it does not report durable success. Upload publication requires successful writes, source validation and remote CLOSE, and cancellation observed before publication cannot report `Published`.
 
-SFTP path display keeps the original path as the sole navigation value. Slint measures bounded display candidates with the same font as the visible text and performs a bounded binary search outside layout bindings. The stateless application formatter elides only the middle, preserves UTF-8 character boundaries, prioritizes the suffix, and caps a candidate at 4096 characters. Resizing and font changes restart fitting; no breadcrumb model or platform-dependent path parser is retained. Both local and remote path bars place Back, Forward, and Parent directory icon buttons before the path; existing history capabilities and loading state control their availability. The path and gear menu preserve transient editing/focus state and invoke existing directory/history/clipboard callbacks with the original value. Header Upload/Download actions keep their selection/readiness contract; persistence, transport and credentials remain with their existing owners.
+SFTP filesystem state retains the original canonical path for directory history,
+refresh, file identity and transfers. Only the local address bar uses the stateless
+`PathPresentation.local-path` formatter: ordinary Windows extended drive paths
+become `D:\...`, and extended UNC paths become `\\server\share\...`. This complete
+readable value also seeds editing, accessibility and both copy actions. Device or
+volume namespaces and components with verbatim-only semantics retain their prefix;
+remote paths are unchanged. Editing submits the complete value through the existing
+validated directory request. No filesystem access occurs in the formatter.
+
+Slint measures bounded display candidates with the same font as the visible text
+and performs a bounded binary search outside layout bindings. Middle elision
+preserves UTF-8 character boundaries, prioritizes the suffix, and caps a candidate
+at 4096 characters. Resizing and font changes restart fitting. Both path bars place
+Back, Forward, and Parent directory buttons before the path; existing history and
+loading state control availability. Elided text never becomes a navigation target.
+Header Upload/Download actions retain their selection/readiness contract;
+persistence, transport and credentials remain with their existing owners.
 
 ## Application icon ownership
 

@@ -541,6 +541,8 @@ struct WindowCallbackContext {
 fn wire_path_presentation(ui: &AppWindow) {
     ui.global::<PathPresentation>()
         .on_elide(|path, budget| view::elide_path(path.as_str(), budget).into());
+    ui.global::<PathPresentation>()
+        .on_local_path(|path| view::local_display_path(path.as_str()).into());
 }
 
 fn wire_text_editing(ui: &AppWindow) {
