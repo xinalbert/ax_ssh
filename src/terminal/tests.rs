@@ -129,6 +129,17 @@ fn synchronized_output_defers_rendering_until_standard_end_or_timeout() {
 }
 
 #[test]
+fn synchronized_output_capability_reply_survives_every_query_split() {
+    let query = b"\x1b[?2026$p";
+    for split in 0..=query.len() {
+        let mut terminal = TerminalModel::new(20, 3, 10);
+        let mut replies = terminal.process_with_responses(&query[..split]);
+        replies.extend(terminal.process_with_responses(&query[split..]));
+        assert_eq!(replies, vec![b"\x1b[?2026;2$y".to_vec()], "split {split}");
+    }
+}
+
+#[test]
 fn reports_text_area_pixels_after_measured_layout() {
     let mut terminal = TerminalModel::new(80, 24, 10);
 

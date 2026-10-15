@@ -341,6 +341,7 @@ impl AppState {
                             worker: None,
                             terminal,
                             pending_terminal_snapshot: None,
+                            output_frame_pending: false,
                             published_terminal_snapshot: None,
                             published_terminal_state: None,
                             status: if snapshot.status.is_empty() {
@@ -382,6 +383,7 @@ impl AppState {
                             worker: None,
                             terminal: Some(terminal),
                             pending_terminal_snapshot: None,
+                            output_frame_pending: false,
                             published_terminal_snapshot: None,
                             published_terminal_state: None,
                             status: snapshot.status.clone(),

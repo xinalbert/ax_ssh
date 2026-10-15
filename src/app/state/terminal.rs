@@ -114,14 +114,18 @@ impl TerminalTabState {
         });
     }
 
-    /// Build at most one pending snapshot for a coalesced output burst. Later
-    /// output is merged into this bounded slot when the UI consumes it, so the
-    /// UI sees the newest frame without losing rows that changed earlier in the
-    /// burst. Control-only terminal writes still do not enter the Slint queue.
+    pub(in crate::app) fn defer_output_presentation(&mut self) {
+        self.output_frame_pending = true;
+    }
+
+    /// Admit one bounded snapshot at the output frame deadline. Later output
+    /// remains private until its own deadline, including during unrelated UI
+    /// refreshes. Control-only writes still do not enter the Slint queue.
     pub(in crate::app) fn prepare_terminal_output_snapshot(&mut self) -> bool {
         if self.synchronized_output_pending() {
             return false;
         }
+        self.output_frame_pending = false;
         if self.pending_terminal_snapshot.is_some() {
             return true;
         }
@@ -148,12 +152,16 @@ impl TerminalTabState {
                 .clone()
                 .or_else(|| self.pending_terminal_snapshot.clone());
         }
-        let current_snapshot = self.terminal.as_mut().map(TerminalModel::snapshot);
+        let current_snapshot = if self.output_frame_pending {
+            None
+        } else {
+            self.terminal.as_mut().map(TerminalModel::snapshot)
+        };
         let snapshot = match (self.pending_terminal_snapshot.take(), current_snapshot) {
             (Some(pending), Some(current)) => merge_terminal_snapshots(pending, current),
             (Some(pending), None) => pending,
             (None, Some(current)) => current,
-            (None, None) => return None,
+            (None, None) => return self.published_terminal_snapshot.clone(),
         };
         self.published_terminal_state = Some(TerminalVisibleState::from(&snapshot));
         self.published_terminal_snapshot = Some(snapshot.clone());
@@ -169,6 +177,7 @@ impl TerminalTabState {
 
     pub(in crate::app) fn discard_pending_terminal_snapshot(&mut self) {
         self.pending_terminal_snapshot = None;
+        self.output_frame_pending = false;
     }
 
     pub(in crate::app) fn invalidate_selection(&mut self) {

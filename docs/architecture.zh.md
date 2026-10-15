@@ -248,18 +248,19 @@ UUID；一次 UI 事件只为当前可见 pane tree 中匹配的 pane 生成 sna
 输出因此留在 Rust 状态，直到后续完整路由刷新，而不会进入 Slint event queue。
 `src/app/terminal_presentation.rs` 为每个 Local、Serial、SSH 或 Telnet monitor 拥有独立、只由 dirty
 输出驱动的呈现判定。当前 `WindowRouter` 路由把活动 `PaneTree` 中的终端动态分类为 focused 或
-可见未聚焦；不属于任何活动 tree 的终端为 hidden。GPU 和其它 non-software renderer 的 focused 终端首个脏更新
-立即呈现，连续输出的前 500 ms 使用 16 ms，随后到 2 秒使用 33 ms，超过 2 秒使用 50 ms；安静 250 ms 后恢复
-立即首帧和 16 ms。`AppearanceSettings` 还以 FPS 持久化独立的聚焦和可见未聚焦刷新上限，范围为 1-120 FPS，默认分别为
-60 FPS 和 4 FPS；设置值可以进一步降低 non-software 的节拍。可见未聚焦的 split pane 按设置后的周期
+可见未聚焦；不属于任何活动 tree 的终端为 hidden。聚焦终端每个输出 burst 的首帧使用固定合并窗口：
+最多约一帧 60 Hz 的时间（16.7 ms，配置更高帧率时更短），后续片段不推迟期限；安静 250 ms 后启动新 burst。
+GPU 和其它 non-software renderer 的后续连续输出在 500 ms 和 2 秒后按 16/33/50 ms 自适应；软件 renderer
+按配置的聚焦帧率呈现，不采用该降档。`AppearanceSettings` 以 FPS 持久化独立的聚焦和可见未聚焦刷新上限，范围为 1-120 FPS，默认分别为
+60 FPS 和 4 FPS；设置值限制所有 renderer 的后续呈现节奏。可见未聚焦的 split pane 按设置后的周期
 最多呈现一次，隐藏 Tab 不设置呈现 deadline。
 
-只有实际选择 `winit-software` 时，每个聚焦终端的脏更新都立即 ready：不使用固定 FPS timer，也不再按物理像素面积或
-分屏数分档。`AppState` 只允许一个已排入或执行中的 UI refresh batch；UI 取走 batch 前的输出合并到该 batch，
-snapshot 构造后的输出最多只补排一个 follow-up。终端保留一个有界 pending snapshot；UI 消费时把较新的 terminal
-damage 合并进最新 snapshot，避免遗漏 burst 前段已经变化的脏行。初始 snapshot 若 `dirty_rows` 为空，且 cursor、
+`AppState` 只允许一个已排入或执行中的 UI refresh batch；UI 取走 batch 前的输出合并到该 batch，
+snapshot 构造后的输出最多只补排一个 follow-up。终端保留一个有界 pending snapshot；解析输出后标记下一帧待提交，
+其它 UI 刷新在呈现期限前继续使用已准入的快照，避免中间光标泄漏。已有准入快照仍可消费，但在其之后到达的片段
+需要等待自己的期限；合并 damage 时不丢失先前脏行。初始 snapshot 若 `dirty_rows` 为空，且 cursor、
 viewport 与 mouse-reporting 状态均与最近一次已发布 snapshot 一致，就不进入 Slint queue，因此只有控制序列的输出
-不会触发重绘。Settings 预览和保存会通过 `WindowRouter` 发布新的 non-software 策略，并立即唤醒仍有 pending 输出的
+不会触发重绘。Settings 预览和保存会通过 `WindowRouter` 发布新策略，并立即唤醒仍有 pending 输出的
 monitor。路由 revision 只唤醒仍有 pending 输出的 monitor，使 pane 焦点或 Tab 变化立即采用新策略且无需轮询。
 任一路由/策略 watch sender 消失时，receiver 会在这一次唤醒后移除，不会重试已关闭的等待分支。
 原生窗口激活状态只在运行时维护：Slint
@@ -273,13 +274,13 @@ deadline。没有脏输出时没有 timer 唤醒。parser、协议应答、worke
 光标可见性遵循 [DECTCEM](https://www.invisible-island.net/xterm/ctlseqs/ctlseqs.html)：
 `CSI ?25l` 隐藏模型光标，`CSI ?25h` 在当前协议位置显示光标，两者直接进入下一次普通呈现，
 没有独立光标 timer 或旧帧保留窗口。显隐独立于本地闪烁偏好，也不表示重绘事务。
-仅[同步输出](https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md)
+普通帧合并之外，[同步输出](https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md)
 （`CSI ?2026h` / `CSI ?2026l`）保留最近的完整发布帧，直到结束序列或锁定上游的 150ms 超时。
 
 四协议 monitor 在安排终端重绘前，按顺序处理最多 64 个已经到达的 worker 事件，随后让出 Tokio，
 并让已经到期的重绘优先于接收更多事件。此策略在 AxSSH 的 worker channel 边界内采用 Alacritty
 的有界读取后唤醒方式：已到达的重绘片段有机会在发布前复位光标，持续输出也不会使呈现或其它任务
-一直得不到执行。空队列不增加等待，不创建额外输出队列，已有聚焦/未聚焦/隐藏呈现策略继续生效。
+一直得不到执行。队列读取不在既定帧期限之外增加等待，不创建额外输出队列，已有聚焦/未聚焦/隐藏呈现策略继续生效。
 应用若在未同步的绘制中保持光标可见、跨独立到达批次先显示再复位，或超过同步超时，仍可能暴露中间
 位置；AxSSH 不根据屏幕内容推断最终输入位置。
 
@@ -1318,8 +1319,8 @@ scrollback、默认 PTY 尺寸、本地 shell 选择和有上限的发现缓存�
     `terminal_compact_rendering` 和默认关闭的 `terminal_row_render_cache`。前者移除多余的逐 run
     Slint item 和默认背景矩形；后者启用 renderer 持有的静态行图层，并可能增加图形内存。旧文件缺失时采用这两个默认值。schema 版本 26 增加独立的聚焦和可见未聚焦终端刷新上限
     `focused_terminal_refresh_fps` 与 `unfocused_terminal_refresh_fps`，保存范围为 1-120 FPS，默认分别为 60 和 4；
-    缺失或无效值会限制到该范围。它们限制当前 non-software renderer 的 timer 策略；运行 `winit-software` 的进程
-    改用有界的最新帧合并，不设置固定 FPS timer。Appearance 中的 `terminal_cursor_blink` 默认开启，旧文件缺失时保持该默认值；关闭后仅让聚焦终端光标常显，不改变终端/IME 的光标状态。Appearance 的
+    缺失或无效值会限制到该范围。它们限制所有 renderer 的呈现节奏；软件 renderer 保留有界最新帧合并，
+    仅不采用 non-software 的持续输出降档。Appearance 中的 `terminal_cursor_blink` 默认开启，旧文件缺失时保持该默认值；关闭后仅让聚焦终端光标常显，不改变终端/IME 的光标状态。Appearance 的
     已撤回的 `terminal_partition_strategy` JSON 字段在读取旧设置时会作为未知字段忽略，不再属于设置 schema 或运行时状态。schema 版本 29 增加逐 SSH profile 的可选 `credential_vault_key_saved` 标记，用于表示应用自动生成的加密保险库密钥；读取旧 profile 时仍接受 `credential_vault_key_in_keyring` 名称，旧 profile 默认是 false。新的应用设置默认使用 `encrypted-vault`，选择 `system-keyring` 仍是显式选项。schema 版本 30 增加私有 session store 的有界 `recent_workspaces` 路径列表；旧文件默认为空，列表不包含工作区内容或秘密。schema 版本 31 将 SSH profile 的 X11 布尔值改为 `off`、`untrusted` 或 `trusted`；legacy `false` 和 `true` 分别迁移为 `off` 和 `trusted`，profile 不含任何 X11 cookie。schema 版本 27 增加
     `software_presentation`，稳定值为 `layer-images` 和 `damage-backing-store`；缺失或无效值采用默认的脏区
     backing store，显式保存的 `layer-images` 仍作为兼容性回退。schema 版本 24 增加

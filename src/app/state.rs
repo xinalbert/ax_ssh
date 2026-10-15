@@ -153,6 +153,7 @@ pub(super) struct TerminalTabState {
     pub(super) backend: TerminalBackend,
     pub(super) worker: Option<TerminalWorker>,
     pub(super) terminal: Option<TerminalModel>,
+    output_frame_pending: bool,
     pending_terminal_snapshot: Option<TerminalSnapshot>,
     published_terminal_snapshot: Option<TerminalSnapshot>,
     published_terminal_state: Option<TerminalVisibleState>,

@@ -368,27 +368,30 @@ entering the Slint event queue.
 `src/app/terminal_presentation.rs` owns a separate dirty-driven presentation
 decision for each Local, Serial, SSH, or Telnet monitor. The current
 `WindowRouter` route classifies a terminal in an active `PaneTree` as focused or
-visible-unfocused; a terminal outside every active tree is hidden. On GPU and
-other non-software renderers, focused output presents its first dirty update
-immediately, then uses 16 ms for the first 500 ms of a continuous burst, 33 ms
-until two seconds, and 50 ms afterward. A 250 ms quiet period resets the burst to
-the immediate/16 ms path. `AppearanceSettings` persists independent focused and
+visible-unfocused; a terminal outside every active tree is hidden. Focused output
+starts each burst with a fixed coalescing window of at most one nominal 60 Hz
+frame (about 16.7 ms, shorter with a higher configured rate). Later fragments do
+not extend this deadline. A 250 ms quiet period starts a new burst. GPU and other
+non-software renderers then use 16/33/50 ms as a burst passes 500 ms and two
+seconds; software uses the configured focused interval without that reduction.
+`AppearanceSettings` persists independent focused and
 visible-unfocused refresh caps as FPS, clamped to 1-120 FPS and defaulting to 60
-FPS and 4 FPS; the configured value can lower the non-software cadence further.
+FPS and 4 FPS; the configured value caps subsequent output on every renderer.
 A visible-unfocused split pane presents at most once per configured
 interval, while a hidden Tab has no presentation deadline.
 
-When the process actually selected `winit-software`, every focused dirty update
-is ready immediately—there is no fixed FPS timer and no pixel-area or split-count
-policy. `AppState` admits only one queued or in-progress UI refresh batch: output
+`AppState` admits only one queued or in-progress UI refresh batch: output
 before the UI takes that batch is coalesced into it, and output after snapshot
 construction schedules at most one follow-up. The terminal keeps one bounded
-pending snapshot; when the UI consumes it, newer terminal damage is merged into
-the latest snapshot so earlier dirty rows cannot be lost. If an initial snapshot
+pending snapshot. Output parsing marks the next frame pending, so unrelated UI
+refreshes keep the last admitted snapshot until the presentation deadline. A
+snapshot already admitted before later output remains consumable; those later
+fragments wait for their own deadline. Damage is merged without losing earlier
+rows. If an initial snapshot
 has no dirty rows and its cursor, viewport, and mouse-reporting state match the
 last published snapshot, it never enters the Slint queue; control-only terminal
 sequences therefore do not cause a redraw. Settings preview and save publish the
-new non-software policy through `WindowRouter`, waking monitors with pending
+new policy through `WindowRouter`, waking monitors with pending
 output immediately. Route revisions wake only monitors with pending output, so a
 pane focus or Tab change applies the new policy without polling. If either
 route/policy watch sender is gone, its receiver is removed after that one wakeup
@@ -410,7 +413,7 @@ Cursor visibility follows [DECTCEM](https://www.invisible-island.net/xterm/ctlse
 position. Both changes reach the next ordinary presentation without a separate
 cursor timer or a retained-frame grace period. Visibility is independent of
 the local blink preference and does not declare a redraw transaction.
-Only [synchronized output](https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md)
+Beyond ordinary frame coalescing, [synchronized output](https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md)
 (`CSI ?2026h` / `CSI ?2026l`) retains the last complete published frame until
 the end sequence or the locked upstream 150 ms timeout.
 
@@ -419,8 +422,8 @@ Before scheduling a terminal redraw, all four protocol monitors process up to
 eligible redraw priority before receiving more events. This follows Alacritty's
 bounded read-before-wakeup approach within AxSSH's worker-channel ownership:
 available redraw fragments can restore the cursor before publication, while
-continuous output cannot starve presentation or other tasks. An empty queue
-adds no wait, no additional output queue is created, and existing focused,
+continuous output cannot starve presentation or other tasks. The queue read
+adds no further wait beyond the frame deadline, no additional output queue is created, and existing focused,
 unfocused, and hidden presentation policies remain in force. An application
 that leaves its cursor visible during unsynchronized drawing, shows it before
 restoring its position across separate arrivals, or exceeds the synchronization
@@ -2287,8 +2290,8 @@ text brightness, bold-color, optional semantic highlighting and its status color
     graphics memory. Schema version 26 adds independent focused and visible-unfocused terminal refresh caps as
     `focused_terminal_refresh_fps` and `unfocused_terminal_refresh_fps`, stored as 1-120 FPS with defaults of 60 and 4;
     missing or invalid values are clamped to that range. They cap the current
-    non-software renderer's timer policy; a process running `winit-software`
-    instead uses bounded latest-frame coalescing without a fixed FPS timer. The appearance field
+    presentation cadence on every renderer; software omits only the non-software
+    sustained-output reduction and retains bounded latest-frame coalescing. The appearance field
     `terminal_cursor_blink` is default-enabled and remains backward-compatible
     when absent; disabling it keeps the focused cursor visible while leaving
     terminal/IME cursor state unchanged. The retired

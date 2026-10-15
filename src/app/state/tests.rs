@@ -2661,6 +2661,7 @@ fn cursor_visibility_publishes_hidden_redraw_without_a_grace_period() {
     let terminal = state.terminal_mut(tab_id).expect("terminal");
     terminal.connected = true;
     process_terminal_output(terminal, b"before\x1b[2 q").expect("steady cursor");
+    assert!(terminal.prepare_terminal_output_snapshot());
     let before = terminal.terminal_snapshot_for_ui().expect("initial frame");
     assert!(before.cursor_visible);
     assert!(!before.cursor_blinking);
@@ -2685,6 +2686,133 @@ fn cursor_visibility_publishes_hidden_redraw_without_a_grace_period() {
     assert_eq!((after.cursor_row, after.cursor_column), (2, 4));
     assert_eq!(after.lines[0], hidden.lines[0]);
     assert_eq!(after.lines[1], hidden.lines[1]);
+}
+
+#[tokio::test(start_paused = true)]
+async fn output_frame_merges_later_cursor_restore_and_blocks_unrelated_refreshes() {
+    for first in [
+        b"\x1b[22;13H2".as_slice(),
+        b"\x1b[?25l\x1b[22;13H2\x1b[?25h".as_slice(),
+        b"\x1b[?25l\x1b[22;13H2".as_slice(),
+    ] {
+        let mut state = test_state();
+        let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+        let tab_id = state.open_terminal_tab(&profile);
+        let terminal = state.terminal_mut(tab_id).expect("terminal");
+        terminal.connected = true;
+        terminal
+            .terminal
+            .as_mut()
+            .expect("model")
+            .process(b"\x1b[24;3H");
+        let before = terminal.terminal_snapshot_for_ui().expect("input frame");
+        let mut presentation = TerminalPresentation::new();
+        let started_at = tokio::time::Instant::now();
+        let effects = process_terminal_output(terminal, first).expect("status fragment");
+        presentation.record_output(None, effects.presentation_hold);
+        assert!(
+            tokio::time::timeout(
+                Duration::from_millis(8),
+                presentation.wait_until_ready(tab_id)
+            )
+            .await
+            .is_err(),
+            "a transport chunk is not a complete redraw"
+        );
+        let held = terminal
+            .terminal_snapshot_for_ui()
+            .expect("unrelated refresh");
+        assert_eq!((held.cursor_row, held.cursor_column), (23, 2));
+        assert_eq!(held.lines, before.lines);
+
+        let effects = process_terminal_output(terminal, b"\x1b[24;3H\x1b[?25h")
+            .expect("later cursor restoration");
+        presentation.record_output(None, effects.presentation_hold);
+        tokio::time::timeout(
+            Duration::from_millis(12),
+            presentation.wait_until_ready(tab_id),
+        )
+        .await
+        .expect("fixed frame deadline");
+        assert!(tokio::time::Instant::now() - started_at <= Duration::from_millis(18));
+        assert!(terminal.prepare_terminal_output_snapshot());
+        let after = terminal.terminal_snapshot_for_ui().expect("complete frame");
+        assert_eq!(
+            (after.cursor_row, after.cursor_column, after.cursor_visible),
+            (23, 2, true)
+        );
+        assert_ne!(after.lines, before.lines);
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn output_frame_releases_real_cursor_moves_and_persistent_hidden_output() {
+    for (bytes, visible) in [
+        (b"\x1b[10;12H".as_slice(), true),
+        (b"\x1b[?25l\x1b[10;12H".as_slice(), false),
+    ] {
+        let mut state = test_state();
+        let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+        let tab_id = state.open_terminal_tab(&profile);
+        let terminal = state.terminal_mut(tab_id).expect("terminal");
+        terminal.terminal_snapshot_for_ui().expect("initial frame");
+        let mut presentation = TerminalPresentation::new();
+        let effects = process_terminal_output(terminal, bytes).expect("cursor update");
+        assert!(
+            effects.presentation_hold.is_none(),
+            "visibility is not a sync transaction"
+        );
+        presentation.record_output(None, effects.presentation_hold);
+        tokio::time::timeout(
+            Duration::from_millis(20),
+            presentation.wait_until_ready(tab_id),
+        )
+        .await
+        .expect("output is released without another chunk or a show-cursor command");
+        assert!(terminal.prepare_terminal_output_snapshot());
+        let after = terminal
+            .terminal_snapshot_for_ui()
+            .expect("new cursor frame");
+        assert_eq!(
+            (after.cursor_row, after.cursor_column, after.cursor_visible),
+            (9, 11, visible)
+        );
+        assert!(!presentation.has_pending_output());
+    }
+}
+
+#[test]
+fn output_frame_keeps_later_unadmitted_fragments_out_of_a_ready_ui_snapshot() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal");
+    let before = terminal.terminal_snapshot_for_ui().expect("initial frame");
+    process_terminal_output(terminal, b"\x1b[1;1Hfirst").expect("first frame");
+    assert!(terminal.prepare_terminal_output_snapshot());
+    process_terminal_output(terminal, b"\x1b[2;1Hlater").expect("next frame fragment");
+    let ready = terminal
+        .terminal_snapshot_for_ui()
+        .expect("already admitted frame");
+    assert_eq!((ready.cursor_row, ready.cursor_column), (0, 5));
+    assert_eq!(ready.lines[1], before.lines[1]);
+    assert_eq!(
+        terminal
+            .terminal_snapshot_for_ui()
+            .expect("unrelated refresh")
+            .lines,
+        ready.lines
+    );
+    assert!(terminal.prepare_terminal_output_snapshot());
+    let next = terminal
+        .terminal_snapshot_for_ui()
+        .expect("next admitted frame");
+    assert_eq!(next.lines[0], ready.lines[0]);
+    assert_ne!(next.lines[1], before.lines[1]);
+    assert!(
+        next.dirty_rows.contains(&1),
+        "later damage must not be lost"
+    );
 }
 
 #[test]
@@ -2726,6 +2854,7 @@ fn cursor_visibility_in_initial_frames_and_scrollback_follows_the_model() {
     let terminal = state.terminal_mut(tab_id).expect("terminal");
     terminal.connected = true;
     process_terminal_output(terminal, b"\x1b[?25lhidden").expect("initial hidden output");
+    assert!(terminal.prepare_terminal_output_snapshot());
     assert!(
         !terminal
             .terminal_snapshot_for_ui()
@@ -2733,6 +2862,7 @@ fn cursor_visibility_in_initial_frames_and_scrollback_follows_the_model() {
             .cursor_visible
     );
     process_terminal_output(terminal, b"\x1b[?25h").expect("show");
+    terminal.prepare_terminal_output_snapshot();
     let model = terminal.terminal.as_mut().expect("model");
     model.resize(20, 3);
     model.process(b"\r\n1\r\n2\r\n3\r\n4\r\n5");
@@ -2744,6 +2874,7 @@ fn cursor_visibility_in_initial_frames_and_scrollback_follows_the_model() {
             .cursor_visible
     );
     process_terminal_output(terminal, b"\x1b[?25lmore\x1b[?25h").expect("scrollback output");
+    terminal.prepare_terminal_output_snapshot();
     assert!(
         !terminal
             .terminal_snapshot_for_ui()
@@ -2760,6 +2891,7 @@ fn synchronized_output_holds_cursor_visibility_and_position_until_end() {
     let terminal = state.terminal_mut(tab_id).expect("terminal");
     terminal.connected = true;
     process_terminal_output(terminal, b"\x1b[3;5H").expect("initial cursor");
+    assert!(terminal.prepare_terminal_output_snapshot());
     let before = terminal.terminal_snapshot_for_ui().expect("initial frame");
 
     let effects = process_terminal_output(terminal, b"\x1b[?2026h\x1b[?25l\x1b[Hpartial")
@@ -2798,9 +2930,11 @@ fn synchronized_redraw_keeps_cursor_state_at_every_byte_split() {
         let tab_id = state.open_terminal_tab(&profile);
         let terminal = state.terminal_mut(tab_id).expect("terminal");
         process_terminal_output(terminal, b"\x1b[24;3H").expect("initial cursor");
+        assert!(terminal.prepare_terminal_output_snapshot());
         terminal.terminal_snapshot_for_ui().expect("initial frame");
         for bytes in [&frame[..split], &frame[split..]] {
             process_terminal_output(terminal, bytes).expect("frame fragment");
+            terminal.prepare_terminal_output_snapshot();
             let snapshot = terminal.terminal_snapshot_for_ui().expect("frame");
             assert_eq!(
                 (
@@ -2827,6 +2961,7 @@ async fn queued_redraw_restores_cursor_before_publishing_without_a_time_delay() 
             let tab_id = state.open_terminal_tab(&profile);
             let terminal = state.terminal_mut(tab_id).expect("terminal");
             process_terminal_output(terminal, b"\x1b[24;3H").expect("initial cursor");
+            assert!(terminal.prepare_terminal_output_snapshot());
             terminal.terminal_snapshot_for_ui().expect("initial frame");
             let mut presentation = TerminalPresentation::new();
             let (sender, mut receiver) = tokio::sync::mpsc::channel(2);

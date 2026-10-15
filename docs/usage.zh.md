@@ -527,11 +527,12 @@ Light/Dark 两套语义色。即时预览和持久化时，
 **Cache unchanged terminal rows** 默认关闭；在 GPU/Skia 下可复用静态行图层，但会增加图形内存，Software
 模式没有等价缓存。两个选项都会立即预览，并在关闭 Settings Tab 时持久化。
 
-同一 RENDERING 分组中的 **Focused refresh rate** 和 **Unfocused refresh rate** 用帧率设置 non-software 终端呈现
+同一 RENDERING 分组中的 **Focused refresh rate** 和 **Unfocused refresh rate** 用帧率设置所有 renderer 的终端呈现
 上限，范围为 1-120 FPS；聚焦窗格默认 60 FPS，可见但未聚焦窗格默认 4 FPS。non-software 聚焦终端的持续输出仍按
-16/33/50 ms 自适应，更低的设置值会进一步限制这些阶段。实际运行的 Software renderer 不使用固定终端 FPS 上限：
-它只保留一个最新 UI refresh batch，并在 Slint 可消费前合并后续输出。AxSSH 原生窗口失去激活时，该窗口内所有可见
-non-software pane（包括最后保持焦点的 pane）都会使用 Unfocused 刷新上限。隐藏 Tab 不发布终端帧，parser 应答、错误、
+16/33/50 ms 自适应，更低的设置值会进一步限制这些阶段。Software 按配置的聚焦帧率呈现，不采用持续输出降档。
+空闲后首批聚焦输出使用最多约 16.7 ms 的短帧窗口合并相邻重绘片段和光标复位；其它 UI 刷新在下一输出帧就绪前
+保留已准入的终端画面。更长的分段间隔仍可能暴露中间位置，完整原子更新需要应用使用同步输出。
+AxSSH 原生窗口失去激活时，该窗口内所有可见 pane（包括最后保持焦点的 pane）都会使用 Unfocused 刷新上限。隐藏 Tab 不发布终端帧，parser 应答、错误、
 断开和 shutdown 仍立即处理。修改会即时预览，并在关闭 Settings Tab 时持久化。
 
 **Settings > Terminal** 中的 **Software block rows** 控制 macOS CPU 路径中终端 pane 的 presentation block 高度，

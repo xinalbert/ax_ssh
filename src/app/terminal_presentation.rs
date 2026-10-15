@@ -24,9 +24,9 @@ pub(super) enum TerminalPresentationMode {
 
 /// Timer ceilings for dirty terminal UI publication.
 /// The route decides whether a pane is focused, visible-unfocused, or hidden.
-/// A focused `winit-software` pane submits immediately into the bounded
-/// latest-frame UI gate; every visible-unfocused pane honors the configured
-/// refresh ceiling without delaying terminal parsing or transport work.
+/// Output enters the bounded latest-frame UI gate at its frame deadline.
+/// Software uses the configured focused rate without the sustained-output
+/// reduction; parsing, protocol replies and input never wait for presentation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) struct TerminalPresentationPolicy {
     focused_fps: u16,
@@ -251,7 +251,8 @@ async fn wait_for_watch_change<T>(changes: &mut Option<watch::Receiver<T>>) {
 #[derive(Debug, Default)]
 struct TerminalPresentationState {
     dirty: bool,
-    immediate_after_quiet: bool,
+    first_frame: bool,
+    pending_since: Option<Instant>,
     burst_started_at: Option<Instant>,
     last_output_at: Option<Instant>,
     last_presented_at: Option<Instant>,
@@ -264,8 +265,9 @@ impl TerminalPresentationState {
         });
         if starts_new_burst {
             self.burst_started_at = Some(now);
-            self.immediate_after_quiet = true;
+            self.first_frame = true;
         }
+        self.pending_since.get_or_insert(now);
         self.last_output_at = Some(now);
         self.dirty = true;
     }
@@ -285,18 +287,23 @@ impl TerminalPresentationState {
         }
         match mode {
             TerminalPresentationMode::Hidden => None,
-            TerminalPresentationMode::Focused if policy.software_renderer => {
-                // Software frames enter the AppState single-slot refresh gate
-                // immediately. If the UI is busy, newer output is merged when
-                // the pending snapshot is consumed instead of accumulating
-                // timer-delayed work.
-                Some(now)
+            TerminalPresentationMode::Focused if self.first_frame => {
+                // A chunk can end between a status update and cursor restoration.
+                // Later arrivals share this fixed first-frame window, including
+                // after idle; they never extend its deadline.
+                self.pending_since
+                    .map(|since| since + FOCUSED_FAST_INTERVAL.min(policy.focused_interval()))
             }
-            TerminalPresentationMode::Focused if self.immediate_after_quiet => Some(now),
             TerminalPresentationMode::Focused => {
-                Some(self.last_presented_at.map_or(now, |presented_at| {
-                    presented_at + self.focused_interval(policy)
-                }))
+                let interval = if policy.software_renderer {
+                    policy.focused_interval()
+                } else {
+                    self.focused_interval(policy)
+                };
+                Some(
+                    self.last_presented_at
+                        .map_or(now, |presented_at| presented_at + interval),
+                )
             }
             TerminalPresentationMode::Unfocused => {
                 Some(self.last_presented_at.map_or(now, |presented_at| {
@@ -308,13 +315,15 @@ impl TerminalPresentationState {
 
     fn mark_presented(&mut self, now: Instant) {
         self.dirty = false;
-        self.immediate_after_quiet = false;
+        self.first_frame = false;
+        self.pending_since = None;
         self.last_presented_at = Some(now);
     }
 
     fn clear_pending(&mut self) {
         self.dirty = false;
-        self.immediate_after_quiet = false;
+        self.first_frame = false;
+        self.pending_since = None;
     }
 
     fn focused_interval(&self, policy: TerminalPresentationPolicy) -> Duration {
@@ -360,6 +369,7 @@ mod tests {
                 .await
                 .is_none()
         );
+        tokio::time::advance(FOCUSED_FAST_INTERVAL).await;
         assert!(presentation.is_ready(
             TerminalPresentationMode::Focused,
             DEFAULT_POLICY.with_software_renderer(true),
@@ -429,7 +439,7 @@ mod tests {
     }
 
     #[test]
-    fn focused_first_output_is_immediate_then_frame_bounded() {
+    fn focused_first_output_waits_one_frame_then_uses_frame_cadence() {
         let mut state = TerminalPresentationState::default();
         let started_at = Instant::now();
         state.record_output(started_at);
@@ -440,7 +450,7 @@ mod tests {
                 DEFAULT_POLICY,
                 started_at
             ),
-            Some(started_at)
+            Some(started_at + FOCUSED_FAST_INTERVAL)
         );
         state.mark_presented(started_at);
         state.record_output(started_at + Duration::from_millis(1));
@@ -480,7 +490,7 @@ mod tests {
     }
 
     #[test]
-    fn focused_output_returns_to_immediate_after_quiet_period() {
+    fn focused_output_collects_a_new_frame_after_quiet_period() {
         let mut state = TerminalPresentationState::default();
         let started_at = Instant::now();
         state.record_output(started_at);
@@ -494,7 +504,7 @@ mod tests {
                 DEFAULT_POLICY,
                 resumed_at
             ),
-            Some(resumed_at)
+            Some(resumed_at + FOCUSED_FAST_INTERVAL)
         );
         assert_eq!(
             state.focused_interval(DEFAULT_POLICY),
@@ -582,7 +592,7 @@ mod tests {
     }
 
     #[test]
-    fn software_only_bypasses_the_focused_refresh_cap() {
+    fn software_uses_configured_frame_cadence_and_keeps_the_unfocused_cap() {
         let software_policy = DEFAULT_POLICY.with_software_renderer(true);
         let mut state = TerminalPresentationState::default();
         let started_at = Instant::now();
@@ -596,7 +606,7 @@ mod tests {
                 software_policy,
                 next_output_at
             ),
-            Some(next_output_at)
+            Some(started_at + software_policy.focused_interval())
         );
         assert_eq!(
             state.deadline(
@@ -605,6 +615,51 @@ mod tests {
                 next_output_at
             ),
             Some(started_at + software_policy.unfocused_interval())
+        );
+    }
+
+    #[test]
+    fn first_frame_deadline_is_fixed_while_more_fragments_arrive() {
+        for software in [false, true] {
+            let policy = DEFAULT_POLICY.with_software_renderer(software);
+            let mut state = TerminalPresentationState::default();
+            let started_at = Instant::now();
+            state.record_output(started_at);
+            for elapsed_ms in [1, 4, 8, 12, 16, 20] {
+                let now = started_at + Duration::from_millis(elapsed_ms);
+                state.record_output(now);
+                assert_eq!(
+                    state.deadline(TerminalPresentationMode::Focused, policy, now),
+                    Some(started_at + FOCUSED_FAST_INTERVAL),
+                    "continuous output cannot postpone the frame"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn software_does_not_apply_the_sustained_output_reduction() {
+        let mut state = TerminalPresentationState::default();
+        let started_at = Instant::now();
+        state.record_output(started_at);
+        state.mark_presented(started_at);
+        for elapsed_ms in (100..=2_000).step_by(100) {
+            state.record_output(started_at + Duration::from_millis(elapsed_ms));
+        }
+        let now = started_at + Duration::from_secs(2);
+        state.mark_presented(now);
+        state.record_output(now + Duration::from_millis(1));
+        assert_eq!(
+            state.deadline(
+                TerminalPresentationMode::Focused,
+                DEFAULT_POLICY.with_software_renderer(true),
+                now + Duration::from_millis(1)
+            ),
+            Some(now + DEFAULT_POLICY.focused_interval())
+        );
+        assert_eq!(
+            state.focused_interval(DEFAULT_POLICY),
+            FOCUSED_SUSTAINED_INTERVAL
         );
     }
 

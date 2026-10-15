@@ -932,14 +932,17 @@ provide an equivalent cache in Software mode. Both choices preview immediately
 and are persisted when the Settings tab closes.
 
 **Focused refresh rate** and **Unfocused refresh rate** in the same Rendering
-section set non-software terminal presentation caps in frames per second. They
+section set terminal presentation caps on every renderer in frames per second. They
 accept 1-120 FPS and default to 60 FPS for the focused pane and 4 FPS for a
 visible pane that is not focused. The non-software focused strategy still adapts
 sustained output through its 16/33/50 ms stages; a lower configured cap limits
-those stages. A running Software renderer instead has no fixed terminal FPS cap:
-it keeps one latest UI refresh batch and coalesces later output until Slint can
-consume it. When an AxSSH window loses native activation, all visible
-non-software panes in that window use the Unfocused refresh cap, including the
+those stages. Software follows the configured focused rate without the adaptive
+reduction. The first focused output after an idle period uses a short frame
+window, at most about 16.7 ms, to merge nearby redraw fragments and cursor
+restoration. Unrelated UI refreshes retain the admitted terminal frame until the
+next output frame is ready. Longer gaps can still expose intermediate positions
+unless the application uses synchronized output. When an AxSSH window loses
+native activation, all visible panes use the Unfocused refresh cap, including the
 pane that was last focused. Hidden tabs do not publish terminal frames, and
 parser responses, errors, disconnects, and shutdown remain immediate. Changes
 preview immediately and are persisted when the Settings tab closes.

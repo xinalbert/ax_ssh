@@ -25,6 +25,9 @@ pub(in crate::app) fn process_terminal_output(
         .map(TerminalModel::osc52_permission_generation)
         .unwrap_or_default();
     let clipboard_generation = terminal.reconnect_generation;
+    if !data.is_empty() {
+        terminal.defer_output_presentation();
+    }
     let presentation_hold = terminal
         .terminal
         .as_ref()
