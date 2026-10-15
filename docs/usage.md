@@ -414,9 +414,9 @@ Ungrouped server even before any profile exists. Use the search field to find a
 group or server by name or connection details; matching groups expand to show
 results. Groups show a folder icon, name, count, and disclosure chevron. Click a
 group row, or focus it and press Enter or Space, to expand or collapse it.
-Both sidebar modes use the same small chevron to the folder's right: down for
-expanded groups and right for collapsed groups. The expanded sidebar keeps a
-compact server inset and aligns server names with group names. Every
+Both sidebar modes use the same small chevron to the folder's right, separated
+by an 8px gap: down for expanded groups and right for collapsed groups. The expanded
+sidebar keeps a compact server inset and aligns server names with group names. Every
 visible server has a system icon, name, and masked endpoint on a single indented
 row. After a successful SSH or SFTP connection, AxSSH tries to read a short
 remote release label for the tab and its sidebar icon. An unavailable release

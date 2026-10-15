@@ -1184,9 +1184,10 @@ tab-local terminal connection notice deliberately remains non-blocking.
     collapsible groups with single-line server children. Search matches group
     names, server names, and connection details. Groups show a folder icon, name,
     count, and disclosure chevron. Both sidebar modes use `SidebarGroupGlyph`:
-    the same 20px folder and 7px trailing chevron, pointing down when expanded
-    and right when collapsed. The expanded view has no leading chevron slot;
-    its 20px server inset aligns child names with the group name.
+    the same 20px folder, 8px gap and 7px trailing chevron, pointing down when
+    expanded and right when collapsed. The compact rail centers the complete
+    folder/chevron pair within its card. The expanded view has no leading
+    chevron slot; its derived 25px server inset aligns child names with the group name.
     Servers show a platform icon, name, and masked
     inline endpoint; full non-secret details remain available in tooltips.
     The collapsed sidebar always uses the 52px icon rail: groups show a folder

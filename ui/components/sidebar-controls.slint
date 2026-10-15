@@ -78,8 +78,7 @@ export component SidebarPlatformGlyph inherits Rectangle {
     }
 }
 
-// The folder stays centered in the compact rail; both sidebar modes use this
-// same trailing disclosure glyph and its dimensions.
+// Both sidebar modes use the same folder, disclosure glyph, and spacing.
 export component SidebarGroupGlyph inherits Rectangle {
     in property <bool> expanded;
     in property <color> glyph-color: Theme.text;
@@ -303,7 +302,7 @@ export component SidebarRailItem inherits FocusScope {
         }
 
         if root.expandable : SidebarGroupGlyph {
-            x: (parent.width - Theme.sidebar-group-icon-size) / 2;
+            x: (parent.width - self.width) / 2;
             y: (parent.height - self.height) / 2;
             expanded: root.expanded;
             glyph-color: root.selected || item-touch.has-hover ? Theme.accent : Theme.text;
