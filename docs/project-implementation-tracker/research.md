@@ -624,3 +624,35 @@
 - 关键结论：Slint 键盘事件沿聚焦元素链分发；WAI 将 Enter 定义为聚焦节点的默认激活，选择与焦点不同。RFC 定义远端 PTY 尺寸和 window-change，但不要求本地历史展示等待连接。将新终端作为等待焦点目的地是本应用的交互选择，不是 RFC 强制规则。
 - 对实施计划的影响：移除本地实测尺寸上报的 connected 前提，保留有界 resize 路径；新终端以非文本 FocusScope 承接焦点，IME/网络输入仍要求 connected，安全覆盖层优先；不禁止主动创建多连接。
 - 未解决问题：真实 SSH 连接期间的 GUI、键盘/IME 手感仍需用户验收；其他平台原生行为交 CI 和人工验证。
+
+
+## 2026-10-15 09:15 +0800 Windows 扩展路径的地址栏展示边界
+
+- 时间：2026-10-15 09:15 +0800
+- 检索问题：为何本地路径出现内部前缀，何时可以提供常见盘符/UNC 格式？
+- 检索原因：用户 Windows SFTP 截图中本地地址显示 canonicalize 返回的扩展路径，需避免格式化改变路径语义。
+- 来源列表：[Rust canonicalize](https://doc.rust-lang.org/stable/std/fs/fn.canonicalize.html)；[Microsoft 文件命名与命名空间](https://learn.microsoft.com/en-us/windows/win32/fileio/naming-a-file)。
+- 关键结论：Rust Windows canonicalize 使用扩展长度格式；Microsoft 说明扩展前缀会关闭部分 Win32 解析，特殊命名空间、末尾点/空格与设备保留名不能简单裁去前缀。普通盘符与 UNC 地址提供可读格式是本应用的展示选择。
+- 对实施计划的影响：只在本地地址栏的纯格式化中转换普通盘符/UNC；编辑和复制使用同一完整可读值，特殊路径保留前缀；不修改原始状态、刷新/历史/文件身份/传输或远端路径。
+- 未解决问题：macOS 上的无窗口回归可覆盖文案和意图路由，Windows 原生文件系统/GUI 仍需 CI 和用户验证。
+
+
+## 2026-10-15 09:41 +0800 macOS 与 Slint 标准快捷键和窗口归属
+
+- 时间：2026-10-15 09:41 +0800
+- 检索问题：独立窗口的 Command 编辑快捷键应由何处注册、派发和消费？
+- 检索原因：子窗口排除 MenuBar，现有终端局部 key-pressed 不能替代完整的原生菜单链路。
+- 来源列表：[Apple Event Architecture](https://developer.apple.com/library/archive/documentation/Cocoa/Conceptual/EventOverview/EventArchitecture/EventArchitecture.html)；[Slint Window/MenuBar](https://docs.slint.dev/latest/docs/slint/reference/window/window/#menubar)；[Slint FocusScope](https://docs.slint.dev/latest/docs/slint/reference/keyboard-input/focusscope/)；锁定源码 `vendor/i-slint-backend-winit/{muda,event_loop,winitwindowadapter}.rs`。
+- 关键结论：AppKit 区分 key equivalent、文本绑定和普通输入，菜单 action 依 target/响应链派发；Slint 每窗口声明一份 MenuBar，隐藏可保留快捷键，FocusScope 的 capture/焦点/父链决定普通按键消费。锁定后端原生菜单项携带所属窗口 ID，窗口激活时切换菜单。
+- 对实施计划的影响：保持每窗口菜单和生成回调作为应用快捷键入口；终端局部处理继续兜底并保持单次消费；主页面动作在子窗口禁用，Settings/About 由主窗口承接，新分离/恢复注册同一原生输入 hook。
+- 未解决问题：无窗口测试可验证生成菜单和当前窗口意图，不能替代用户在 macOS 原生菜单、IME、窗口激活及拖出/恢复过程中的验收。
+
+## 2026-10-15 10:41 +0800 分段重绘的帧合并与协议边界
+
+- 时间：2026-10-15 10:41 +0800
+- 检索问题：同版终端解析器为何会显示不同的重绘中间光标，如何兼顾稳定性与输入响应？
+- 检索原因：用户确认刷新期间临时跳位，并指出参考软件中没有相同现象，需要区分解析语义与应用呈现策略。
+- 来源列表：[xterm 控制序列](https://www.invisible-island.net/xterm/ctlseqs/ctlseqs.html)；[同步输出规范](https://github.com/contour-terminal/vt-extensions/blob/master/synchronized-output.md)；[xterm.js RenderDebouncer](https://github.com/xtermjs/xterm.js/blob/master/src/browser/RenderDebouncer.ts)；[Tmux 同步能力探测](https://github.com/tmux/tmux/blob/master/tty-keys.c)；[Alacritty 读取后唤醒](https://github.com/alacritty/alacritty/blob/master/alacritty_terminal/src/event_loop.rs)；锁定 Alacritty 0.26.0/VTE 0.15.0 源码和当前应用呈现逻辑。
+- 关键结论：DECTCEM 只定义显隐，不定义重绘事务；2026 才声明同步更新，能力可用 DECRQM 探测。xterm.js 合并到下一动画帧；立即发布一个输出 chunk 并不代表完整逻辑画面。只读行为比较表明参考软件额外保留已提交快照并以显隐启发式延迟提交，当前项目没有这种兼容等待；这足以解释差异，但不证明实际会话是哪组控制序列触发。
+- 对实施计划的影响：保留标准解析与同步输出，采用短且不滑动延期的帧调度合并跨批输出；软件路径也按显示节奏提交，输入/协议应答不等待。新增真实时间分片和长期隐藏/真实位置更新回归，不引入参考源码、框架或猜测输入行。
+- 未解决问题：缺少用户实际控制流，有限时间窗口不能承诺合并任意长分段；真实 SSH/tmux 与视觉手感需用户在修复构建中验收。
