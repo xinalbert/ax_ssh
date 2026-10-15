@@ -145,6 +145,22 @@ pub(in crate::app) fn install_native_window_input_hook(
             _window.with_winit_window(|window| window_router.capture_placement(window_id, window));
         }
         match event {
+            WindowEvent::MouseWheel { delta, phase, .. } => {
+                let modifiers = modifiers_for_event.get();
+                tracing::debug!(
+                    target: "ax_ssh::terminal_scroll",
+                    stage = "native-wheel",
+                    %window_id,
+                    delta = ?delta,
+                    phase = ?phase,
+                    scale_factor = _window.scale_factor(),
+                    shift = modifiers.shift_key(),
+                    alt = modifiers.alt_key(),
+                    control = modifiers.control_key(),
+                    meta = modifiers.super_key(),
+                    "native wheel event received"
+                );
+            }
             #[cfg(target_os = "macos")]
             WindowEvent::MouseInput {
                 state,

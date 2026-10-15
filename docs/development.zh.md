@@ -337,6 +337,40 @@ RUST_LOG='ax_ssh=info,ax_ssh::diagnostics=debug,ax_ssh::latency=debug,ax_ssh::sf
 `ui_apply_us` 及可选的 output-to-UI 时间。这些字段均不包含按键文字、终端内容、主机、路径、
 profile 标签或凭据。
 
+若滚轮问题只发生在 Windows、macOS 正常，应在两端重新构建同一 revision，短时间开启
+滚轮诊断。Windows 在 PowerShell 中启动编译后的程序：
+
+```powershell
+$env:RUST_LOG = 'ax_ssh=info,ax_ssh::terminal_scroll=debug,russh=warn'
+.\ax_ssh.exe
+```
+
+macOS 在 shell 中启动编译后的程序：
+
+```bash
+RUST_LOG='ax_ssh=info,ax_ssh::terminal_scroll=debug,russh=warn' ./ax_ssh
+```
+
+通过 **About > Copy diagnostics** 记录两端构建 revision，通过 **About > Open log folder**
+找到每日日志。保持远端主机、Codex 版本/启动命令及 tmux session/选项相同，分别在输出区与
+输入区滚动几格，关闭 AxSSH 刷新日志。按窗口/终端 UUID 与时间比较 `ax_ssh::terminal_scroll`：
+
+- `native-wheel`：Slint 分发前 Winit 的 `LineDelta`/`PixelDelta`、阶段、缩放与修饰键。
+  像素余量累计意味着原生事件与终端回调不一定一一对应。
+- `local-history`：本地滚动请求、窗口归属、视口/鼠标模式和滚动前后历史偏移。
+- `wheel-route`：实时终端模式、有界步数，以及实际选择的 `mouse-report`、`alternate-scroll`
+  或 `ignored-by-mode`。
+- `wheel-enqueue`：编码后的滚轮输入是否进入 worker 队列；不代表远端程序已收到或处理。
+
+若 Windows 为 `alternate-scroll`、macOS 为 `mouse-report`，先定位鼠标模式为何不同，
+再决定是否修改滚轮转换；若两端均为 `mouse-report` 且入队成功，继续排查 transport、tmux 与
+CLI 处理。只有原生事件而没有终端回调时，也可能是像素量尚小、鼠标命中其他控件或输入闸门。
+记录不含终端文字、编码字节、剪贴板数据、主机、路径或凭据，默认 INFO 过滤时关闭。
+
+Windows CI 原生运行 check、Clippy、build 和 tests，但当前终端滚轮组件回归使用
+`MinimalSoftwareWindow` 注入 `PointerScrolled`，不复现 Windows 原生鼠标消息或真实
+Codex/tmux 会话。原生编译/测试结果与实际 GUI 复现必须分别记录，不能互相替代。
+
 `sftp_drag` 记录本地/远程文件面板的内部拖动生命周期、本地到远程上传路由，以及 Finder
 原生路径。原生阶段只记录固定事件阶段、外部 hover 数和固定目标结果（`remote`、
 `inactive-tab`、`remote-unavailable` 或 `other-region`）；共享上传路由还会记录实时 SFTP

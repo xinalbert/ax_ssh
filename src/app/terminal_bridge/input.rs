@@ -320,6 +320,8 @@ pub(super) fn wire_input(
         };
         let mut before_offset = None;
         let mut after_offset = None;
+        let mut viewport = None;
+        let mut reporting = None;
         let mut owned = false;
         let changed = state_for_scroll
             .lock()
@@ -329,10 +331,14 @@ pub(super) fn wire_input(
                 if !owned {
                     return None;
                 }
-                before_offset = app
+                if let Some(model) = app
                     .terminal(tab_id)
                     .and_then(|terminal| terminal.terminal.as_ref())
-                    .map(TerminalModel::display_offset);
+                {
+                    before_offset = Some(model.display_offset());
+                    viewport = Some(model.viewport_mode());
+                    reporting = Some(model.mouse_reporting());
+                }
                 let changed = app.scroll_terminal(tab_id, lines);
                 after_offset = app
                     .terminal(tab_id)
@@ -343,10 +349,14 @@ pub(super) fn wire_input(
             .unwrap_or(false);
         tracing::debug!(
             target: "ax_ssh::terminal_scroll",
+            stage = "local-history",
+            %window_id,
             tab_id = %tab_id,
             lines,
             owned,
             changed,
+            viewport = ?viewport,
+            reporting = ?reporting,
             before_offset = ?before_offset,
             after_offset = ?after_offset,
             "terminal scroll callback processed"
@@ -385,6 +395,13 @@ pub(super) fn wire_input(
             2 => TerminalMouseEventKind::Motion,
             _ => return,
         };
+        let wheel = matches!(
+            button,
+            TerminalMouseButton::WheelUp
+                | TerminalMouseButton::WheelDown
+                | TerminalMouseButton::WheelLeft
+                | TerminalMouseButton::WheelRight
+        );
         let scale_factor = ui_for_mouse
             .upgrade()
             .map(|ui| f64::from(ui.window().scale_factor()).max(0.01))
@@ -414,7 +431,7 @@ pub(super) fn wire_input(
                     .terminal
                     .as_ref()
                     .context("active tab has no terminal model")?;
-                let Some(data) = encode_terminal_mouse_input(
+                let data = encode_terminal_mouse_input(
                     model,
                     TerminalMouseEvent {
                         kind,
@@ -431,7 +448,35 @@ pub(super) fn wire_input(
                     pixel_y,
                     input.repeat_count,
                     alternate_scroll_to_home,
-                ) else {
+                );
+                if wheel {
+                    let reporting = model.mouse_reporting();
+                    let route = if data.is_none() {
+                        "ignored-by-mode"
+                    } else if reporting.enabled() {
+                        "mouse-report"
+                    } else {
+                        "alternate-scroll"
+                    };
+                    tracing::debug!(
+                        target: "ax_ssh::terminal_scroll",
+                        stage = "wheel-route",
+                        %window_id,
+                        %tab_id,
+                        ?button,
+                        repeat_count = input.repeat_count.clamp(1, MAX_MOUSE_WHEEL_REPORTS),
+                        shift = input.shift,
+                        alt = input.alt,
+                        control = input.control,
+                        viewport = ?model.viewport_mode(),
+                        ?reporting,
+                        application_cursor = model.application_cursor(),
+                        alternate_scroll_to_home,
+                        route,
+                        "terminal wheel event encoded"
+                    );
+                }
+                let Some(data) = data else {
                     return Ok(true);
                 };
                 let worker = terminal
@@ -444,12 +489,21 @@ pub(super) fn wire_input(
                         crate::app::state::terminal::TerminalInputKind::Pointer,
                     )
                 } else {
-                    worker
-                        .request_send_kind(
-                            data,
-                            crate::app::state::terminal::TerminalInputKind::Pointer,
-                        )
-                        .map(|()| true)
+                    let result = worker.request_send_kind(
+                        data,
+                        crate::app::state::terminal::TerminalInputKind::Pointer,
+                    );
+                    if wheel {
+                        tracing::debug!(
+                            target: "ax_ssh::terminal_scroll",
+                            stage = "wheel-enqueue",
+                            %window_id,
+                            %tab_id,
+                            queued = result.is_ok(),
+                            "terminal wheel worker request completed"
+                        );
+                    }
+                    result.map(|()| true)
                 }
             });
         match result {

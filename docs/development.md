@@ -445,6 +445,51 @@ RUST_LOG='ax_ssh=info,ax_ssh::diagnostics=debug,ax_ssh::latency=debug,ax_ssh::sf
 optional output-to-UI time. These fields contain no key text, terminal content,
 host, path, profile label, or credential.
 
+For a wheel issue that differs between Windows and macOS, rebuild the same
+revision on both hosts and enable only the wheel target for a short reproduction.
+Launch the compiled Windows executable from PowerShell:
+
+```powershell
+$env:RUST_LOG = 'ax_ssh=info,ax_ssh::terminal_scroll=debug,russh=warn'
+.\ax_ssh.exe
+```
+
+On macOS, launch the compiled executable from a shell:
+
+```bash
+RUST_LOG='ax_ssh=info,ax_ssh::terminal_scroll=debug,russh=warn' ./ax_ssh
+```
+
+Use **About > Copy diagnostics** to record each build revision and
+**About > Open log folder** to locate the daily log. Keep the remote host,
+Codex version/start command and any tmux session/options the same. Scroll a few
+steps over the output, then over the composer, and close AxSSH to flush the log.
+Compare `ax_ssh::terminal_scroll` records by window/terminal UUID and timestamp:
+
+- `native-wheel` records the Winit `LineDelta` or `PixelDelta`, phase, scale
+  factor and modifiers before Slint dispatch. Residual pixel accumulation means
+  native events and terminal callbacks need not correspond one for one.
+- `local-history` records local scroll requests, ownership, viewport mode,
+  mouse modes and before/after history offsets.
+- `wheel-route` records the actual model modes, bounded step count and chosen
+  `mouse-report`, `alternate-scroll` or `ignored-by-mode` route.
+- `wheel-enqueue` records whether the encoded wheel input entered the worker
+  queue; it does not confirm delivery to or handling by the remote program.
+
+If Windows selects `alternate-scroll` while macOS selects `mouse-report`, find
+why the active mouse modes differ before changing wheel conversion. If both
+select `mouse-report` and enqueue succeeds, continue through the transport,
+tmux and CLI handling. A native event without a terminal callback can also
+mean a small accumulated delta, another control under the pointer, or an input
+gate. These records contain no terminal text, encoded bytes, clipboard data,
+host, path or credentials and are disabled by the default INFO filter.
+
+The Windows CI job runs the platform's check, Clippy, build and tests, but the
+current terminal wheel component tests use `MinimalSoftwareWindow` and inject
+`PointerScrolled`. They do not reproduce native Windows mouse messages or a
+real Codex/tmux session. Keep native compilation/test results and actual GUI
+reproduction as separate evidence, even when both are successful.
+
 `sftp_drag` traces the internal local/remote pane drag lifecycle, its
 local-to-remote upload route, and the native Finder route. Native stages report
 only a fixed event stage, the external hover count, and a fixed target outcome
