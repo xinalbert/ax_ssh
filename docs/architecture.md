@@ -576,6 +576,13 @@ prevented from reaching the transparent text proxy, while configured
 application shortcuts continue to the native menu path. This preserves
 event-scoped modifiers for synthetic System Events input without bypassing
 ordinary text or IME composition.
+The transparent terminal input proxy sends and clears committed text; it does
+not own an editable document. After configured terminal edit actions and the
+normal terminal key route have had priority, unhandled primary-modifier Z/Y
+chords (including Shift+Z) are consumed in both fallback paths. They must not
+reach `TextInput` undo/redo with stale positions from cleared text. Physical
+Control+Z/Y still use the terminal encoder, and ordinary text fields retain
+Slint's standard editing history. Main and detached terminals share this rule.
 `AppWindow.log-keyboard-event` reports a handled transient-control key after
 shortcut recording and security prompts have been excluded. Native menu
 commands report through the separate fixed-ID menu-action route because Slint

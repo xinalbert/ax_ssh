@@ -142,6 +142,14 @@ fn address_input_shortcuts(detached: bool) {
                 path,
                 "delete must retain native undo"
             );
+            send_chord(&harness, Key::Control, "z", true);
+            assert_eq!(
+                input.text().as_str(),
+                "/目录//e\u{301}/results",
+                "ordinary input keeps native redo"
+            );
+            send_chord(&harness, Key::Control, "z", false);
+            assert_eq!(input.text().as_str(), path);
             input.set_selection_offsets(&adapter, &item, end, end);
             send_chord(&harness, physical_control(), "b", false);
             assert_eq!(input.cursor_position_byte_offset(), start);

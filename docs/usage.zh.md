@@ -473,6 +473,10 @@ Escape 前缀的终端 Meta 输入时，才在 **Settings > Terminal** 开启 **
 Windows/Linux 继续保持 Alt 作为终端 Meta 输入；本地键盘布局的 AltGr 字符则通过文本输入
 路径提交。
 
+终端不提供本地撤销历史。macOS 的 `Cmd+Z` 和 `Cmd+Shift+Z` 未分配给应用动作时，不会撤销或重新发送
+终端输入；各平台的物理 `Ctrl+Z`、`Ctrl+Y` 仍作为控制输入发送给终端。普通文本字段保留平台标准撤销、
+重做快捷键。
+
 macOS 的 Settings 与 About 位于标准 AxSSH 应用菜单，Settings 项会跟随其配置快捷键；
 Windows 和 Linux 分别在 Edit
 和 Help 菜单中提供 Settings 与 About。Settings 包含 General、Appearance、Terminal、X11、SFTP、

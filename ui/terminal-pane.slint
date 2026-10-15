@@ -1010,6 +1010,12 @@ export component TerminalPane inherits Rectangle {
                 root.select-all-visible();
                 return EventResult.accept;
             }
+            // This input sends and clears committed text. Unhandled edit
+            // history shortcuts must not undo that now-empty proxy buffer.
+            // Configured actions above and encodable terminal keys stay first.
+            let proxy-edit-history = event.modifiers.control
+                && (event.text == "z" || event.text == "Z"
+                    || event.text == "y" || event.text == "Y");
             let direct-terminal-key = root.terminal-key-direct({
                 event: {
                     text: event.text,
@@ -1030,7 +1036,7 @@ export component TerminalPane inherits Rectangle {
                 preedit_active: self.preedit-text != "",
             });
             if !direct-terminal-key {
-                return EventResult.reject;
+                return proxy-edit-history ? EventResult.accept : EventResult.reject;
             }
             root.clear-selection();
             if root.terminal-key({
@@ -1050,7 +1056,7 @@ export component TerminalPane inherits Rectangle {
             }) {
                 return EventResult.accept;
             }
-            return EventResult.reject;
+            return proxy-edit-history ? EventResult.accept : EventResult.reject;
         }
         key-released(event) => {
             if !event.modifiers.control {

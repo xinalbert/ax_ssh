@@ -370,6 +370,10 @@ IME 文本继续通过原生 `TextInput.edited` 路径。已显示的 Winit 窗�
 原生修饰键快照。macOS 的物理 Control 终端组合键从这个原生边界直接分发并阻止再次进入透明文本代理，
 而已配置的应用快捷键继续走原生菜单路径。这样能保留合成 System Events 输入的事件级修饰键，同时不绕过
 普通文本或 IME 组合。
+透明终端输入代理会发送并清空已提交文字，不拥有可编辑文档。在已配置的终端编辑动作和正常终端按键路径
+优先处理后，两个 fallback 都会消费未处理的主修饰键 Z/Y（包括 Shift+Z），防止 TextInput 的撤销/重做
+访问已清空文字的旧位置。物理 Control+Z/Y 继续由终端编码器处理，普通文本字段保留 Slint 原生编辑历史；
+主窗口与独立终端共用这条规则。
 `AppWindow.log-keyboard-event` 在排除快捷键录制和安全提示后，只上报已处理的临时控件按键。
 原生菜单命令改走独立的固定 ID menu-action 路由，因为 Slint 不提供鼠标或 accelerator 来源。
 diagnostics 边界把所有文字键或粘贴统一转换为固定 `Text` 标签，只接受白名单 route/action；

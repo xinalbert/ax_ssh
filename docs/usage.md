@@ -842,6 +842,11 @@ you want Option-modified keys sent as Escape-prefixed terminal Meta input.
 Windows/Linux Alt behavior remains terminal Meta input, while local keyboard
 layouts can submit AltGr characters through the text-input path.
 
+Terminal input has no local undo history. Unless assigned to an application
+action, macOS `Cmd+Z` and `Cmd+Shift+Z` do not undo or resend terminal input.
+Physical `Ctrl+Z` and `Ctrl+Y` still reach the terminal as control input on every
+platform. Ordinary text fields retain their standard undo and redo shortcuts.
+
 On macOS, Settings and About are in the standard AxSSH application menu, and
 the Settings item follows its configured shortcut. On
 Windows and Linux, Settings is under Edit and About is under Help. Settings
