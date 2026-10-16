@@ -686,3 +686,13 @@
 - 关键结论：10053 为 WSAECONNABORTED，10054 为 WSAECONNRESET；10053 本身也可能表示超时或协议问题，不能只凭错误码宣称正常。此次错误出现在全部断言通过并显式开始关闭之后，可在该测试夹具的 Windows 收尾边界内处理。
 - 对实施计划的影响：保留显式关闭标记与严格错误分类；仅 Windows 放行收尾后的 ConnectionAborted，提前断线与其它错误仍失败，不改生产 transport。
 - 未解决问题：没有该 CI run/revision，当前会话也没有 Windows 执行环境；修改后原生 CI 与实际 OS 鼠标/Codex 复现分别记录。
+
+## 2026-10-16 指定依赖更新与 rubato 5 接口迁移
+
+- 时间：2026-10-16 11:08 +0800
+- 检索问题：六项指定新版是否保持 Rust 1.92/macOS 11，并如何保持流式重采样和 base64 行为？
+- 检索原因：用户在依赖审计后授权四项兼容更新及 rubato/base64 跨约束迁移。
+- 来源列表：[Tokio 1.53.3](https://github.com/tokio-rs/tokio/releases/tag/tokio-1.53.3)、[arboard 3.7.0](https://github.com/1Password/arboard/releases/tag/v3.7.0)、[serde_json 1.0.154](https://github.com/serde-rs/json/releases/tag/v1.0.154)、[uuid 1.28.0](https://github.com/uuid-rs/uuid/releases/tag/v1.28.0)、[rubato 5.0.1](https://github.com/HEnquist/rubato/tree/v5.0.1)、[base64 0.23.1](https://github.com/marshallpierce/rust-base64/blob/v0.23.1/RELEASE-NOTES.md)、[CPAL 平台下限](https://github.com/RustAudio/cpal/blob/v0.18.2/README.md#minimum-supported-versions)；本机下载的 rubato/audioadapter API 与 Cargo manifest。
+- 关键结论：rubato 5.0.1 MSRV 1.87，Fft + FixedSync::Both 替代 FftFixedInOut；重导出 SequentialSliceOfVecs 可借用已有平面缓冲，无需自建 adapter 或新直接依赖。process_all 自动裁剪延迟，可独立对照分块处理。base64 新增 SIMD 引擎，现有 GENERAL_PURPOSE STANDARD/STANDARD_NO_PAD 调用不改引擎或 padding。CPAL 新版 CoreAudio 下限 14.2，因此保留 0.17.3。
+- 对实施计划的影响：D2 仅更新六项及 rubato 必要传递依赖；D3 对照整段转换验证尾部、延迟、空/短输入、非整数比例和声道，另检抗混叠；D4 保留 native CI 和既有安全公告边界。
+- 未解决问题：Windows/Linux 原生 CI、真实麦克风/剪贴板验收；RSA 无上游修复版本及 bincode/ttf-parser 停止维护提示不由本次更新消除。
