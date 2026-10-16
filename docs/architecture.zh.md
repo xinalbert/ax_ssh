@@ -159,8 +159,11 @@ Rust
 选区坐标读取最新 cell。重复的同尺寸 resize、零增量/已夹位滚动和空输出不会推进 revision。该 revision
 不携带选区坐标或文字，pane 也不拥有 worker、终端缓冲区或连接状态。进行本地选区或拖选时，
 `TerminalPane` 会暂停闪烁 Timer 并把光标相位重置为可见，避免光标在选区高亮上闪动。
-在 Local selection priority 模式下，没有发生移动的单次左键点击会延迟到释放时转发给已启用
-mouse reporting 的 TUI；指针一旦移动就取消该候选并保持本地选区。
+在 Local selection priority 模式下，普通左键单击、双击、三击和拖选都由本地处理，只有
+Alt/Option button 手势交给启用 mouse reporting 的 TUI，释放时不再补发点击。
+`TerminalPane` 在按下时记录 owner，后续双/三击回调沿用该归属，即使释放前修饰键或 reporting
+发生变化也不重新分配。远端 owner 的按下事件先清除本地选区，再转发，避免旧 overlay
+继续覆盖新的远端选区。
 `TerminalModel` 在上游 `display_offset` 旁维护显式的 `Follow`、`Detached` 和
 `AlternateScreen` 视口策略。输出到达时保持 Detached 的历史位置；有效键盘输入和粘贴会回到底部的
 Follow 视口。进入或退出备用屏幕会清理本地 scrollback 跟随状态，mouse reporting 不改变本地视口。快照只携带有界的 offset

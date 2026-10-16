@@ -199,9 +199,13 @@ connection state.
 While a local selection or drag is active, `TerminalPane` pauses its blink timer
 and resets the cursor phase to visible so the cursor does not flicker through the
 selection highlight.
-In Local selection priority mode, a stationary single left click is deferred
-until release and forwarded to a reporting TUI; pointer movement cancels that
-candidate and keeps the gesture as local selection.
+In Local selection priority mode, ordinary left clicks, double/triple clicks
+and drags remain local; only Alt/Option button gestures reach a reporting TUI.
+There is no release-time click replay. `TerminalPane` records the owner at
+button press and reuses it in the later double/triple-click callbacks, even if
+modifiers or reporting change before release. A remote-owned press clears the
+local selection before forwarding, preventing an old overlay from persisting
+over a new remote selection.
 `TerminalModel` keeps the viewport policy explicit alongside the upstream
 `display_offset`: `Follow` is the live bottom, `Detached` is user scrollback,
 and `AlternateScreen` is the remote full-screen buffer. Output preserves a

@@ -405,9 +405,9 @@ export component TerminalPane inherits Rectangle {
     private property <bool> bell-active: false;
     private property <bool> selecting: false;
     private property <bool> selection-valid: false;
-    // In local-selection-priority mode, defer a reporting click until release
-    // so a drag can remain local while a stationary click reaches a TUI.
-    private property <bool> local-click-candidate: false;
+    // Keep the press-time owner through release and the following double/triple
+    // click callbacks, even if modifiers or reporting change in the meantime.
+    private property <bool> last-pointer-forwarded: false;
     private property <int> pressed-button: -1;
     private property <bool> last-pointer-shift: false;
     private property <bool> last-pointer-alt: false;
@@ -652,7 +652,7 @@ export component TerminalPane inherits Rectangle {
     function apply-semantic-selection(row: int, column: int) {
         if root.last-pointer-shift
             || root.last-primary-target-activated
-            || root.forward-mouse-to-terminal(root.last-pointer-shift, root.last-pointer-alt) {
+            || root.last-pointer-forwarded {
             return;
         }
         root.apply-selection-range(root.semantic-selection-range(row, column));
@@ -661,7 +661,7 @@ export component TerminalPane inherits Rectangle {
     function apply-line-selection(row: int, column: int) {
         if root.last-pointer-shift
             || root.last-primary-target-activated
-            || root.forward-mouse-to-terminal(root.last-pointer-shift, root.last-pointer-alt) {
+            || root.last-pointer-forwarded {
             return;
         }
         root.apply-selection-range(root.line-selection-range(row, column));
@@ -1134,7 +1134,7 @@ export component TerminalPane inherits Rectangle {
                     let right = button == 2;
                     let forward-pointer-input = root.forward-mouse-to-terminal(shift, alt);
                     root.flush-mouse-motion();
-                    root.local-click-candidate = false;
+                    root.last-pointer-forwarded = forward-pointer-input;
                     root.target-pointer-row = row;
                     root.target-pointer-column = column;
                     root.target-pointer-x = x;
@@ -1147,7 +1147,7 @@ export component TerminalPane inherits Rectangle {
                     root.focus-terminal();
                     root.pressed-button = -1;
                     if forward-pointer-input {
-                        root.selecting = false;
+                        root.clear-selection();
                         if button <= 2 || (button >= 7 && button <= 8) {
                             root.pressed-button = button;
                             root.emit-terminal-pointer-input(row, column, x, y, root.pressed-button, 0, 1,
@@ -1164,9 +1164,6 @@ export component TerminalPane inherits Rectangle {
                         root.selection-focus-index = root.selection-anchor-index;
                         root.selection-valid = false;
                         root.selecting = true;
-                        root.local-click-candidate = root.view.mouse_button_reporting
-                            && root.mouse-local-selection-priority
-                            && !shift && !alt;
                         root.clear-terminal-target-highlight();
                     } else if !forward-pointer-input && right
                         && (root.right-click-copy-or-paste || root.copy-selection-on-select) {
@@ -1198,9 +1195,6 @@ export component TerminalPane inherits Rectangle {
                             + boundary-column;
                         root.selection-valid = root.selection-anchor-index
                             != root.selection-focus-index;
-                        if root.selection-valid {
-                            root.local-click-candidate = false;
-                        }
                         root.clear-terminal-target-highlight();
                     } else if root.forward-mouse-to-terminal(shift, alt) {
                         // Button 9 is the bridge's explicit "no button" value.
@@ -1235,18 +1229,10 @@ export component TerminalPane inherits Rectangle {
                             + boundary-column;
                         root.selection-valid = root.selection-anchor-index
                             != root.selection-focus-index;
-                        if root.selection-valid {
-                            root.local-click-candidate = false;
-                        }
                     }
                     if root.selecting && root.copy-selection-on-select && root.selection-active {
                         root.copy-selection();
                     }
-                    if root.local-click-candidate {
-                        root.emit-terminal-pointer-input(row, column, x, y, 0, 0, 1, shift, alt, control);
-                        root.emit-terminal-pointer-input(row, column, x, y, 0, 1, 1, shift, alt, control);
-                    }
-                    root.local-click-candidate = false;
                     root.selecting = false;
                 }
                 pointer-cancel => {
@@ -1267,7 +1253,6 @@ export component TerminalPane inherits Rectangle {
                     }
                     root.pressed-button = -1;
                     root.mouse-motion-pending = false;
-                    root.local-click-candidate = false;
                     root.selecting = false;
                 }
                 semantic-selection-request(row, column) => {

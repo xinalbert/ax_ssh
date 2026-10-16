@@ -401,9 +401,10 @@ Shift 标点。物理数字小键盘不再单独拦截为终端 application-keyp
 启用 xterm mouse reporting 的全屏程序可以收到按下、释放、滚轮、拖动和 cell motion，编码按程序选择的
 SGR、UTF-8 或传统格式发送。默认使用 **标准 xterm 鼠标路由**：普通点击、释放、拖动和 motion 按 reporting
 转发，`Shift` 绕过 reporting 进入本地选区，`Alt`/`Option` 只作为上报的 modifier bit。在
-**Settings > Terminal** 开启 **Local selection priority** 后，普通左键拖动使用本地文字选择，按住
-`Alt`（macOS 为 `Option`）才把 button 手势交给 TUI；如果左键没有移动，单击仍会转发给已启用 mouse reporting 的 TUI，
-一旦发生移动则保持为本地选区。两种模式下滚轮在 reporting 开启时都交给 TUI，`Shift` + 滚轮
+**Settings > Terminal** 开启 **Local selection priority** 后，普通左键单击、双击、三击和拖选都留在本地；
+按住 `Alt`（macOS 为 `Option`）才把 button 手势交给已启用 mouse reporting 的 TUI。
+本地点击不会在释放时补发给远端，因此同一次双击不会同时创建本地和远端选区。
+两种模式下滚轮在 reporting 开启时都交给 TUI，`Shift` + 滚轮
 滚动本地历史。即使没有 mouse reporting，处于备用屏幕的程序也可通过 alternate-scroll 收到转换为上下方向键的滚轮输入。
 例如 tmux 保持 `mouse off`，按 `Ctrl+B`、`Page Up` 进入 copy mode 后，滚轮即可移动其光标；AxSSH 无需按 tmux 程序名做特殊设置。
 **设置 > 终端 > 鼠标 > 滚轮时保持光标在行首** 默认关闭。开启后，每个滚轮步先发送上下键，再发送一次无修饰 Home，请求回到目标行首；

@@ -714,9 +714,10 @@ UTF-8, or legacy encoding. **Standard xterm mouse routing** is the default:
 reporting receives ordinary clicks, releases, drags, and motion; `Shift`
 bypasses reporting for local selection, and `Alt`/`Option` is only a reported
 modifier. Enable **Local selection priority** in **Settings > Terminal** when
-left-dragging should select local text while `Alt` (`Option` on macOS) sends a
-button gesture to the TUI. A stationary single left click is still forwarded to
-a reporting TUI; once the pointer moves, the gesture remains a local selection.
+ordinary left clicks, double/triple clicks and drags should stay local. Hold
+`Alt` (`Option` on macOS) to send a button gesture to a reporting TUI. A local
+click is never replayed to the remote program on release, so a double-click
+cannot create both a local selection and a remote selection from the same gesture.
 Wheel events go to the TUI while reporting is active in both modes; `Shift` +
 wheel scrolls local history. Without mouse reporting, an alternate-screen
 program can still receive wheel movement as Up/Down keys through alternate
