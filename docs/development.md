@@ -497,9 +497,11 @@ as proof. Fixture output traverses the SSH connection and production terminal
 parser before updating the UI's mouse modes.
 
 After all receive and viewport assertions pass, the fixture marks explicit
-worker shutdown. Only a peer I/O `ConnectionReset` observed after that mark is
-accepted during cleanup; an earlier reset, any other error, a task panic or a
-shutdown timeout still fails the test. The production SSH lifecycle is unchanged.
+worker shutdown. A peer I/O `ConnectionReset` observed after that mark is accepted
+during cleanup; Windows also accepts `ConnectionAborted` (Winsock 10053) in that
+same phase. Other platforms still reject `ConnectionAborted`. An earlier reset
+or abort, any other error, a task panic or a shutdown timeout still fails the
+test. The production SSH lifecycle is unchanged.
 
 Run these receive-side checks on each native runner with:
 

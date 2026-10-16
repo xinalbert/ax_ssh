@@ -22,11 +22,15 @@ fn peer_shutdown_result(
     shutdown_started: bool,
 ) -> Result<(), russh::Error> {
     // Client disconnect is queued, not a peer acknowledgement. During explicit
-    // teardown the peer can observe a TCP reset instead of an SSH disconnect.
-    // Early resets and every other error must still fail the fixture.
+    // teardown the peer can observe a TCP reset instead of an SSH disconnect;
+    // Windows can also report WSAECONNABORTED (10053). Early disconnects and
+    // every other error must still fail the fixture.
     match result {
         Err(russh::Error::IO(error))
-            if shutdown_started && error.kind() == std::io::ErrorKind::ConnectionReset =>
+            if shutdown_started
+                && (error.kind() == std::io::ErrorKind::ConnectionReset
+                    || (cfg!(windows)
+                        && error.kind() == std::io::ErrorKind::ConnectionAborted)) =>
         {
             Ok(())
         }
@@ -589,7 +593,7 @@ fn wheel_bytes(detached: bool) {
 }
 
 #[test]
-fn peer_shutdown_only_accepts_a_reset_during_explicit_teardown() {
+fn peer_shutdown_only_accepts_expected_io_errors_during_explicit_teardown() {
     use std::io::{Error, ErrorKind};
 
     assert!(peer_shutdown_result(Ok(()), false).is_ok());
@@ -597,6 +601,15 @@ fn peer_shutdown_only_accepts_a_reset_during_explicit_teardown() {
     let reset = || Err(russh::Error::IO(Error::from(ErrorKind::ConnectionReset)));
     assert!(peer_shutdown_result(reset(), false).is_err());
     assert!(peer_shutdown_result(reset(), true).is_ok());
+    let aborted = || Err(russh::Error::IO(Error::from(ErrorKind::ConnectionAborted)));
+    assert!(peer_shutdown_result(aborted(), false).is_err());
+    assert_eq!(peer_shutdown_result(aborted(), true).is_ok(), cfg!(windows));
+    #[cfg(windows)]
+    {
+        let aborted = || Err(russh::Error::IO(Error::from_raw_os_error(10053)));
+        assert!(peer_shutdown_result(aborted(), false).is_err());
+        assert!(peer_shutdown_result(aborted(), true).is_ok());
+    }
     for kind in [
         ErrorKind::BrokenPipe,
         ErrorKind::UnexpectedEof,

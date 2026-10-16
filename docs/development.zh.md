@@ -376,8 +376,9 @@ Windows CI 原生运行 check、Clippy、build 和 tests；终端滚轮回归从
 真实 SSH 连接和生产终端 parser，再更新 UI 的鼠标模式。
 
 全部接收字节和视口断言通过后，夹具才标记并发起 worker 主动关闭。仅在该标记之后观察到的
-服务端 IO `ConnectionReset` 可作为收尾结果；提前 reset、其他错误、任务 panic 或关闭超时
-仍使测试失败。生产 SSH 生命周期保持不变。
+服务端 IO `ConnectionReset` 可作为收尾结果；Windows 在同一收尾阶段还接受
+`ConnectionAborted`（Winsock 10053），其它平台仍拒绝该错误。提前 reset/abort、其他错误、
+任务 panic 或关闭超时仍使测试失败。生产 SSH 生命周期保持不变。
 
 各原生 runner 可单独运行接收端回归：
 
