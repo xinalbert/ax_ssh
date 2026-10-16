@@ -39,7 +39,7 @@
 | `src/app/view/tests/terminal_input.rs` | 终端透明输入代理的编辑历史隔离回归 | `main_terminal_proxy_keeps_local_undo_out_of_cleared_input`、`detached_terminal_proxy_keeps_local_undo_out_of_cleared_input` | 真实普通/IME 文字提交后清空、撤销/重做 fallback、物理 Control 字节与配置 Paste 优先级；无原生窗口或截图 |
 | `src/app/view/tests/terminal_connection.rs` | 连接等待期几何和焦点回归 | `connecting_terminals_report_real_geometry_in_main_and_detached_windows`、`sidebar_connection_moves_focus_before_login_and_does_not_buffer_enter` | 主/独立窗口在 connected 前上报尺寸；展开/收起侧栏点击后 Enter 不重复建连；等待输入不补发，安全对话框不被抢焦点，主动多连接仍可用 |
 | `src/app/behavior_tests.rs` | 无窗口 callback 到控制器/真实 Telnet worker 回归 | `Harness`、`isolated` | 进程级 Slint proxy 隔离、UI 状态和终端字节链路；不截图 |
-| `src/app/behavior_tests/terminal_wheel.rs` | UI 滚轮到真实 SSH 服务端 data 的接收回归 | `Fixture`、`peer_shutdown_result`、`main_window_wheel_bytes_reach_the_ssh_terminal`、`detached_window_wheel_bytes_reach_the_ssh_terminal` | 主/独立窗口分发、实际编码/worker/SSH、SGR/传统报告、步数/累计、备用屏方向键/Home、本地历史与 Shift；固定测试 host key 和 FIFO 接收屏障；仅显式收尾接受 reset，提前断线和其它错误仍失败，操作系统鼠标入口另验 |
+| `src/app/behavior_tests/terminal_wheel.rs` | UI 滚轮到真实 SSH 服务端 data 的接收回归 | `Fixture`、`peer_shutdown_result`、`main_window_wheel_bytes_reach_the_ssh_terminal`、`detached_window_wheel_bytes_reach_the_ssh_terminal` | 主/独立窗口分发、实际编码/worker/SSH、SGR/传统报告、步数/累计、备用屏方向键/Home、本地历史与 Shift；固定测试 host key 和 FIFO 接收屏障；显式收尾接受 reset，Windows 另接受 abort；提前断线和其它错误仍失败，操作系统鼠标入口另验 |
 | `src/app/connection_monitor/behavior_tests.rs`、`src/app/connection/direct/behavior_tests.rs` | 实际 monitor 事件流与 completion 回归 | `Fixture`、`spawn_session_monitor`、`spawn_direct_monitor` | 安全重试、SFTP/延迟、旧 attempt 和断线/重连 |
 | `src/ssh/worker/behavior_tests.rs` | loopback SSH/SFTP 协议 peer 与 worker 回归 | `Peer`、`FilePeer`、`Fixture` | 显式信任快照、冲突/编辑/取消、真实 Handler 的默认拒绝 |
 | `src/audio/worker_tests.rs`、`src/serial/worker_tests.rs` | 注入设备边界的实际 worker | `CaptureSource`、`DeviceLease`、`BrokenPort` | 音频租约/取消/错误，串口背压/输入/EOF/关闭 |
@@ -293,6 +293,8 @@
 - 2026-08-23：连续窗口 resize 采用 resize-only terminal snapshot；AppState 先比较规范化 `TerminalModel::size()` 再请求指定 worker，SSH/Telnet watch 与 Local pending latest-value 对相同行列去重；WindowRouter 结构变化仍回退 full refresh，Serial 无 PTY resize 通道。此前 app 拆分、内存/线程生命周期逻辑和弱 `AppState` 预热边界保持不变。
 
 ## 最后更新时间
+
+- 2026-10-16 10:50 +0800：滚轮接收夹具仅在 Windows 主动收尾时补充接受 ConnectionAborted/10053；提前断线与其它平台仍拒绝，native CI 待重跑，本轮只做编译/静态检查。
 
 - 2026-10-16：TerminalPane 在本地选择优先模式下取消 stationary release 的远端点击补发；按下时缓存 owner，双/三击沿用，远端手势先清理本地选区。主/独立窗口共用，无词边界、滚轮或 SSH 改动。
 

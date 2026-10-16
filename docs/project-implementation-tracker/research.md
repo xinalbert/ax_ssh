@@ -676,3 +676,13 @@
 - 关键结论：Windows 原生 CI 在 `25335e0` 通过 check/严格 Clippy/build 和 814 项测试，但实际组件滚轮测试绕过操作系统鼠标输入。备用屏无鼠标上报时滚轮产生方向键符合 xterm Alternate Scroll；该分支跨平台共用，只能作为现象候选，不能据此确认故障主机根因。Windows LineDelta 与 macOS 可用的 PixelDelta 进入共享 cell 累计链路。
 - 对实施计划的影响：补齐 native-wheel、local-history、wheel-route 和 wheel-enqueue 的脱敏元数据；保持滚轮策略不变，按同一构建与远端运行条件比较首次分歧。环境与可执行能力另记于环境审计，不用 CI 通过代替 GUI/Codex 复现。
 - 未解决问题：当前无故障 Windows 主机访问方式，实际启动模式、鼠标模式及 tmux 路由尚待两端日志确认；最终修复必须以现场证据决定。
+
+## 2026-10-16 10:48 +0800 Windows 主动收尾的 ConnectionAborted 证据边界
+
+- 时间：2026-10-16 10:48 +0800
+- 检索问题：Windows 10053 与已放行的 ConnectionReset 是否为同一错误？
+- 检索原因：用户 CI 全部字节断言后在主动关闭阶段返回 IO ConnectionAborted，现有 helper 不放行。
+- 来源列表：[Microsoft Windows Sockets Error Codes](https://learn.microsoft.com/en-us/windows/win32/winsock/windows-sockets-error-codes-2)；用户本轮原生 Windows CI 日志；当前滚轮接收夹具。
+- 关键结论：10053 为 WSAECONNABORTED，10054 为 WSAECONNRESET；10053 本身也可能表示超时或协议问题，不能只凭错误码宣称正常。此次错误出现在全部断言通过并显式开始关闭之后，可在该测试夹具的 Windows 收尾边界内处理。
+- 对实施计划的影响：保留显式关闭标记与严格错误分类；仅 Windows 放行收尾后的 ConnectionAborted，提前断线与其它错误仍失败，不改生产 transport。
+- 未解决问题：没有该 CI run/revision，当前会话也没有 Windows 执行环境；修改后原生 CI 与实际 OS 鼠标/Codex 复现分别记录。
