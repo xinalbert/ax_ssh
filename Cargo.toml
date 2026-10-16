@@ -12,9 +12,9 @@ repository = "https://github.com/xinalbert/ax_ssh"
 [dependencies]
 argon2 = "0.6.0"
 anyhow = "1"
-arboard = { version = "3.6.1", features = ["wayland-data-control"] }
+arboard = { version = "3.7.0", features = ["wayland-data-control"] }
 alacritty_terminal = "0.26.0"
-base64 = "0.22"
+base64 = "0.23.1"
 chacha20poly1305 = { version = "0.11.0", features = ["rand_core"] }
 chrono = "0.4"
 cpal = "=0.17.3"
@@ -30,7 +30,7 @@ notify = "=8.2.0"
 portable-pty = "0.9.0"
 rand = "0.10"
 regex = "1.13.1"
-rubato = "0.16.2"
+rubato = "5.0.1"
 # RSA is enabled for compatibility with existing SSH servers. The pinned RSA
 # implementation remains covered by the explicitly accepted RustSec exception
 # in the CI audit workflow until an upstream patched release is available.
@@ -39,16 +39,16 @@ russh-sftp = "3.0.0"
 sha1 = "0.11.0"
 open = "5.3.6"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = "1.0.154"
 slint = { version = "1.18.1", default-features = false, features = ["backend-winit", "compat-1-2", "raw-window-handle-06", "renderer-skia", "renderer-software", "std", "unstable-fontique-011", "unstable-winit-030"] }
 sys-locale = "0.3.2"
-tokio = { version = "1", features = ["io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
+tokio = { version = "1.53.3", features = ["io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
 tokio-serial = "5.5.0"
 tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2.5.8"
-uuid = { version = "1", features = ["serde", "v4"] }
+uuid = { version = "1.28.0", features = ["serde", "v4"] }
 zeroize = "1"
 
 [target.'cfg(windows)'.dependencies]
@@ -76,7 +76,7 @@ raw-window-handle = "0.6.2"
 [build-dependencies]
 embed-resource = "3.0.9"
 serde = { version = "1", features = ["derive"] }
-serde_json = "1"
+serde_json = "1.0.154"
 slint-build = "1.18.1"
 
 [patch.crates-io]
@@ -90,7 +90,7 @@ i-slint-renderer-skia = { path = "vendor/i-slint-renderer-skia" }
 softbuffer = { path = "vendor/softbuffer" }
 
 [dev-dependencies]
-tokio = { version = "1", features = ["test-util"] }
+tokio = { version = "1.53.3", features = ["test-util"] }
 
 [package.metadata.deb]
 name = "axssh"

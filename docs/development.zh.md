@@ -18,6 +18,17 @@ Debian/Ubuntu 可执行
 根 Cargo 隐式 workspace 只包含 `ax_ssh` package。`third_package/axshell` 是
 参考子模块，不是 workspace member 或构建依赖。
 
+## 依赖基线
+
+锁文件使用 Tokio 1.53.3、arboard 3.7.0、serde_json 1.0.154、uuid 1.28.0、
+rubato 5.0.1 和 base64 0.23.1。CPAL 仍固定为 0.17.3，以保留 macOS 11 支持；
+Slint 及其本地补丁保持 1.18.1。
+
+音频 worker 使用 rubato 的 `Fft`、`FixedSync::Both` 和借用的平面缓冲适配器，
+保留预分配处理缓冲、起始延迟移除、尾部排空和最终包补零。测试对照上游整段转换结果检查
+分块流式输出，并验证抗混叠、采样率、声道顺序、背压和取消；真实麦克风与剪贴板行为仍需
+目标平台原生验收。
+
 ## 常用命令
 
 ```bash

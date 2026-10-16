@@ -2,7 +2,7 @@
 
 use anyhow::{Context, Result, ensure};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use rubato::Resampler;
+use rubato::{Fft, FixedSync, Resampler, audioadapter_buffers::direct::SequentialSliceOfVecs};
 use std::sync::{
     Arc, OnceLock,
     atomic::{AtomicBool, Ordering},
@@ -390,7 +390,7 @@ where
 }
 
 struct PcmConverter {
-    resampler: rubato::FftFixedInOut<f32>,
+    resampler: Fft<f32>,
     input: Vec<Vec<f32>>,
     output: Vec<Vec<f32>>,
     filled: usize,
@@ -403,14 +403,15 @@ struct PcmConverter {
 }
 impl PcmConverter {
     fn new(rate: u32, format: AudioFormat) -> Result<Self> {
-        let resampler = rubato::FftFixedInOut::new(
+        let resampler = Fft::new(
             rate as usize,
             format.sample_rate as usize,
             960,
             format.channels as usize,
+            FixedSync::Both,
         )?;
-        let input = resampler.input_buffer_allocate(true);
-        let output = resampler.output_buffer_allocate(true);
+        let input = vec![vec![0.0; resampler.input_frames_max()]; format.channels as usize];
+        let output = vec![vec![0.0; resampler.output_frames_max()]; format.channels as usize];
         let skip = resampler.output_delay();
         Ok(Self {
             resampler,
@@ -439,9 +440,20 @@ impl PcmConverter {
         Ok(())
     }
     fn process(&mut self, pcm: &mpsc::Sender<Vec<u8>>, limit: Option<usize>) -> Result<()> {
-        let (_, produced) =
-            self.resampler
-                .process_into_buffer(&self.input, &mut self.output, None)?;
+        // Borrow preallocated planar buffers; no audio data is copied by the adapters.
+        let input = SequentialSliceOfVecs::new(
+            &self.input,
+            self.format.channels as usize,
+            self.resampler.input_frames_max(),
+        )?;
+        let mut output = SequentialSliceOfVecs::new_mut(
+            &mut self.output,
+            self.format.channels as usize,
+            self.resampler.output_frames_max(),
+        )?;
+        let (_, produced) = self
+            .resampler
+            .process_into_buffer(&input, &mut output, None)?;
         self.filled = 0;
         for frame in 0..produced {
             if self.skip > 0 {
@@ -532,6 +544,108 @@ mod worker_tests;
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn convert_fragmented(rate: u32, format: AudioFormat, samples: &[f32]) -> Vec<i16> {
+        let (tx, mut rx) = mpsc::channel(128);
+        let mut converter = PcmConverter::new(rate, format).unwrap();
+        for fragment in samples.chunks(137 * format.channels as usize) {
+            converter.push(fragment, &tx).unwrap();
+        }
+        converter.finish(&tx).unwrap();
+        let mut output = Vec::new();
+        while let Ok(packet) = rx.try_recv() {
+            assert_eq!(packet.len(), format.packet_bytes());
+            output.extend(
+                packet
+                    .as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|b| i16::from_le_bytes(*b)),
+            );
+        }
+        output
+    }
+
+    #[test]
+    fn fragmented_resampling_trims_delay_preserves_tail_and_pads_only_the_final_packet() {
+        use rubato::audioadapter_buffers::direct::InterleavedSlice;
+
+        for (input_rate, output_rate) in [
+            (48_000, 16_000),
+            (44_100, 16_000),
+            (8_000, 48_000),
+            (192_000, 8_000),
+        ] {
+            for frames in [0, 1, 959, 960, 961, 1507, 4093] {
+                for channels in [2, 8] {
+                    let format = AudioFormat {
+                        sample_rate: output_rate,
+                        channels,
+                    };
+                    let channels = channels as usize;
+                    let samples: Vec<f32> = (0..frames)
+                        .flat_map(|frame| {
+                            (0..channels).map(move |channel| {
+                                ((frame as f32 * 0.03) + channel as f32).sin() * 0.4
+                            })
+                        })
+                        .collect();
+                    let actual = convert_fragmented(input_rate, format, &samples);
+                    let target_frames = frames * output_rate as usize / input_rate as usize;
+                    let packet_frames = output_rate as usize / 50;
+                    assert_eq!(
+                        actual.len(),
+                        target_frames.div_ceil(packet_frames) * packet_frames * channels
+                    );
+                    // The upstream whole-clip API independently handles startup delay and
+                    // tail flushing; compare the streaming converter before packet padding.
+                    let input = InterleavedSlice::new(&samples, channels, frames).unwrap();
+                    let reference = Fft::<f32>::new(
+                        input_rate as usize,
+                        output_rate as usize,
+                        960,
+                        channels,
+                        FixedSync::Both,
+                    )
+                    .unwrap()
+                    .process_all(&input, frames, None)
+                    .unwrap()
+                    .take_data();
+                    let valid_samples = target_frames * channels;
+                    for (sample, expected) in actual[..valid_samples]
+                        .iter()
+                        .zip(&reference[..valid_samples])
+                    {
+                        let expected = (expected.clamp(-1.0, 1.0) * 32767.0).round() as i16;
+                        assert!((i32::from(*sample) - i32::from(expected)).abs() <= 1);
+                    }
+                    assert!(actual[valid_samples..].iter().all(|sample| *sample == 0));
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn downsampling_preserves_speech_band_and_rejects_aliasing() {
+        let rms = |frequency: f32| {
+            let samples: Vec<f32> = (0..48_000)
+                .map(|frame| {
+                    (std::f32::consts::TAU * frequency * frame as f32 / 48_000.0).sin() * 0.5
+                })
+                .collect();
+            let output = convert_fragmented(48_000, AudioFormat::SPEECH, &samples);
+            let settled = &output[1000..15_000];
+            (settled
+                .iter()
+                .map(|sample| (f64::from(*sample) / 32767.0).powi(2))
+                .sum::<f64>()
+                / settled.len() as f64)
+                .sqrt()
+        };
+        assert!(rms(1000.0) > 0.3);
+        assert!(rms(12_000.0) < 0.01);
+    }
+
     #[test]
     fn resampling_is_bounded_and_pcm_is_little_endian() {
         for rate in [16_000, 44_100, 48_000] {

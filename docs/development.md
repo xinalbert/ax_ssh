@@ -19,6 +19,19 @@ The implicit root Cargo workspace contains only the `ax_ssh` package.
 `third_package/axshell` is a reference submodule and is not a workspace member
 or build dependency.
 
+## Dependency baseline
+
+The lockfile uses Tokio 1.53.3, arboard 3.7.0, serde_json 1.0.154, uuid 1.28.0,
+rubato 5.0.1, and base64 0.23.1. CPAL stays pinned to 0.17.3 to preserve macOS 11
+support. Slint and its local patches remain on 1.18.1.
+
+The audio worker uses rubato's `Fft` with `FixedSync::Both` and borrowed planar
+buffer adapters. It retains preallocated processing buffers, startup-delay
+removal, tail flushing, and final-packet zero padding. Tests compare fragmented
+streaming output with upstream whole-clip conversion and check anti-aliasing,
+sample rates, channel order, backpressure, and cancellation. Real microphone and
+clipboard behavior still require native platform verification.
+
 ## Commands
 
 ```bash
