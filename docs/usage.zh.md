@@ -60,6 +60,12 @@ Windows 提供 Auto、VcXsrv、Xming、Custom；Linux 提供 System DISPLAY、Cu
 VcXsrv/Xming 确实需要时开启；这些兼容启动只连接 loopback，Windows server 也只有在用户明确
 选择后才接收 `-ac`。
 
+Trusted 转发会先验证传入图形程序的 X11 cookie，之后才读取本机 display 配置、探测 socket、
+运行 `xauth` 或启动本机 server。错误 cookie、其它 SSH 连接的 cookie，以及不完整或超时的
+握手只会关闭对应图形 channel。持有正确 cookie 的程序（包括后台程序）仍能触发本机启动。
+这隔离的是转发授权，不能识别远端程序属于哪个用户；服务端 `X11UseLocalhost yes` 只限制
+服务器 loopback 访问，不能隔离同一服务器上的不同用户。
+
 远端 SSH server 还必须允许 X11 forwarding，通常需要 `X11Forwarding yes` 和可用的服务端
 `xauth`；AxSSH 不修改 `sshd_config`。远端 `DISPLAY` 为空表示 forwarding request 没有建立，
 常见原因是 `sshd` 拒绝。如果远端图形应用打开时本机准备失败，AxSSH 只拒绝该图形 channel；

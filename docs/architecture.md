@@ -1510,8 +1510,9 @@ permission on Unix.
 
 Trusted mode sends an X11 forwarding request with one random 128-bit fake cookie,
 but it does not read local `DISPLAY`, run `xauth`, probe a local endpoint, or
-start an X server. Only when the remote server opens an X11 channel does the
-relay resolve local display candidates, run a timed, output-limited `xauth list
+start an X server. Only after a remote X11 channel supplies a complete setup
+with this connection's expected cookie does the relay resolve local display
+candidates, run a timed, output-limited `xauth list
 <DISPLAY>`, and, if needed and enabled, launch and poll the selected provider
 behind the existing timeout. Untrusted mode prepares after host-key verification
 and SSH authentication, but before its X11 forwarding request: it uses `xauth -f
@@ -1524,9 +1525,11 @@ MacXServer is started only with explicit
 no-auth compatibility and forced to `127.0.0.1:6000`; VcXsrv and Xming receive
 `-multiwindow -clipboard -ac` only under the same explicit choice. The relay
 still accepts only local endpoints and validates the SSH fake cookie before
-stripping X authority for a compatible local server. Local preparation, channel,
-or server-request failure rejects only that X11 channel, leaves the SSH shell
-connected, and publishes a persistent unavailable status. Remote `sshd` policy
+stripping X authority for a compatible local server. Invalid setup, a foreign
+cookie, or a setup timeout closes only that relay, without touching the local
+server or reporting a local preparation failure. Local preparation and
+server-request failures leave the SSH shell connected and publish a persistent
+unavailable status. Remote `sshd` policy
 is not modified: it must independently allow X11 forwarding and accept the
 request before it assigns remote `DISPLAY`.
 
@@ -1535,12 +1538,26 @@ an untrusted terminal uses its short-lived restricted cookie. `ClientHandler`
 rejects server-opened X11 channels by default and dispatches
 them only after the request succeeds. The dispatch queue and active relay set
 are both capped at eight; disabled/closed channels are administratively rejected
-and resource exhaustion is reported explicitly. A relay connects to the
-prevalidated local endpoint, reads an X11 setup packet under a timeout and size
-limits, accepts only the expected byte order, protocol, and fake cookie, replaces
-it with the real cookie, then uses bounded-buffer bidirectional copying. Fake
+and resource exhaustion is reported explicitly. A relay first confirms the SSH
+channel so setup bytes can arrive; that confirmation is not X11 authentication.
+It reads at most 332 setup bytes within five seconds and validates byte order,
+authorization protocol, and the connection's cookie before any per-channel
+local preparation or endpoint connection. This also prevents invalid requests
+from waking a socket-activated X server through endpoint probing. Untrusted
+expiry is checked both before channel confirmation and after setup validation.
+Only then does the relay prepare/connect the local endpoint, replace the fake
+cookie with local authorization, send the setup under a separate five-second
+write timeout, and use bounded-buffer bidirectional copying. Fake
 and real cookies remain in zeroizing worker-owned memory, are never persisted or
 logged, and all relay tasks are aborted and joined before the SSH worker closes.
+
+The cookie proves possession of this forwarding connection's authorization,
+not a remote UID or PID. Another process that can reach the server-side proxy
+port may open a channel, but cannot trigger trusted local preparation without
+the correct cookie. A process with that cookie can still trigger startup.
+Server-side `X11UseLocalhost yes` restricts the proxy listener to loopback; it
+does not by itself isolate users on the same server. Remote per-user isolation
+remains an administrator-owned policy outside the client.
 
 Authentication secrets use `ui/components/secret-text-input.slint`, not the
 general-purpose text input. It retains native password masking, IME, focus, and

@@ -98,6 +98,15 @@ when needed for MacXServer or an AxSSH-started VcXsrv/Xming instance. Those
 compatibility launches are loopback-only; the Windows servers receive `-ac`
 only after this explicit choice.
 
+Trusted forwarding validates the incoming application's X11 cookie before
+reading local display settings, probing sockets, running `xauth`, or launching
+the local server. A wrong cookie, a cookie from another SSH connection, or an
+incomplete/timed-out handshake closes only that graphical channel. A program
+that holds the correct cookie, including a background program, can still start
+the local server. This isolates forwarding authorizations; it cannot identify
+the remote process's user. Server-side `X11UseLocalhost yes` restricts access to
+the server's loopback interface, rather than isolating users on that server.
+
 The remote SSH server must also allow X11 forwarding, normally through
 `X11Forwarding yes` and a usable server-side `xauth`. AxSSH does not change
 `sshd_config`. A remote empty `DISPLAY` means that the forwarding request was not

@@ -1,6 +1,8 @@
 //! Secure, bounded X11 forwarding for one SSH terminal worker.
 
 use std::fs;
+use std::future::Future;
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::Arc;
@@ -212,35 +214,47 @@ impl X11Forwarding {
     }
 
     pub(super) async fn relay(&self, request: X11ChannelRequest) -> Result<()> {
-        match &self.kind {
-            X11ForwardingKind::Trusted { settings } => {
-                let session =
-                    match X11Session::prepare_trusted(settings.clone(), self.fake_cookie.clone())
-                        .await
-                    {
-                        Ok(session) => session,
-                        Err(error) => {
-                            request.reject(ChannelOpenFailure::ConnectFailed).await;
-                            return Err(error
-                                .context("cannot prepare the local X server")
-                                .context(X11PreparationError));
-                        }
-                    };
-                session.relay(request).await
-            }
-            X11ForwardingKind::Untrusted {
-                session,
-                expires_at,
-            } => {
-                if Instant::now() >= *expires_at {
-                    request
-                        .reject(ChannelOpenFailure::AdministrativelyProhibited)
-                        .await;
-                    anyhow::bail!("untrusted X11 forwarding has expired")
-                }
-                session.relay(request).await
-            }
+        if matches!(
+            &self.kind,
+            X11ForwardingKind::Untrusted { expires_at, .. } if Instant::now() >= *expires_at
+        ) {
+            request
+                .reject(ChannelOpenFailure::AdministrativelyProhibited)
+                .await;
+            anyhow::bail!("untrusted X11 forwarding has expired");
         }
+
+        let X11ChannelRequest { channel, reply } = request;
+        let mut remote = channel.into_stream();
+        // SSH channel confirmation only permits setup bytes to arrive. It does not
+        // authenticate X11 or permit touching a launchd-activated local DISPLAY.
+        timeout(CHANNEL_ACCEPT_TIMEOUT, reply.accept())
+            .await
+            .context("timed out accepting an SSH X11 channel")?;
+        let (setup, session) =
+            authenticate_then_prepare(&mut remote, self.fake_cookie.as_ref(), || async {
+                match &self.kind {
+                    X11ForwardingKind::Trusted { settings } => {
+                        X11Session::prepare_trusted(settings.clone(), self.fake_cookie.clone())
+                            .await
+                            .map(Arc::new)
+                            .context("cannot prepare the local X server")
+                            .context(X11PreparationError)
+                    }
+                    X11ForwardingKind::Untrusted {
+                        session,
+                        expires_at,
+                    } => {
+                        // Setup can straddle the authorization deadline.
+                        if Instant::now() >= *expires_at {
+                            anyhow::bail!("untrusted X11 forwarding has expired");
+                        }
+                        Ok(Arc::clone(session))
+                    }
+                }
+            })
+            .await?;
+        session.relay(&mut remote, setup).await
     }
 }
 
@@ -329,32 +343,29 @@ impl X11Session {
         }
     }
 
-    async fn relay(&self, request: X11ChannelRequest) -> Result<()> {
-        let X11ChannelRequest { channel, reply } = request;
-        let mut local = match connect_endpoint(&self.endpoint).await {
-            Ok(stream) => stream,
-            Err(error) => {
-                reply.reject(ChannelOpenFailure::ConnectFailed).await;
-                return Err(error).context("cannot connect to the local X server");
-            }
-        };
-
-        timeout(CHANNEL_ACCEPT_TIMEOUT, reply.accept())
+    async fn relay<R>(&self, remote: &mut R, mut setup: Zeroizing<Vec<u8>>) -> Result<()>
+    where
+        R: AsyncRead + AsyncWrite + Unpin,
+    {
+        rewrite_setup_packet(
+            &mut setup,
+            self.credentials.fake_cookie.as_ref(),
+            &self.credentials.local_auth,
+        )?;
+        let mut local = connect_endpoint(&self.endpoint)
             .await
-            .context("timed out accepting an SSH X11 channel")?;
-        let mut remote = channel.into_stream();
-        timeout(
-            SETUP_TIMEOUT,
-            relay_authenticated_setup(
-                &mut remote,
-                local.as_mut(),
-                self.credentials.fake_cookie.as_ref(),
-                &self.credentials.local_auth,
-            ),
-        )
+            .context("cannot connect to the local X server")?;
+        timeout(SETUP_TIMEOUT, async {
+            local
+                .write_all(&setup)
+                .await
+                .context("failed to send authenticated setup to the local X server")?;
+            local.flush().await.context("failed to flush X11 setup")
+        })
         .await
-        .context("timed out validating X11 authentication setup")??;
-        tokio::io::copy_bidirectional(&mut remote, local.as_mut())
+        .context("timed out sending X11 authentication setup")??;
+        drop(setup);
+        tokio::io::copy_bidirectional(remote, local.as_mut())
             .await
             .context("X11 bidirectional relay failed")?;
         Ok(())
@@ -755,24 +766,27 @@ async fn connect_endpoint(endpoint: &X11Endpoint) -> Result<LocalX11Stream> {
     .context("local X server connection timed out")?
 }
 
-async fn relay_authenticated_setup<R, W>(
+async fn authenticate_then_prepare<R, T, F, P>(
     remote: &mut R,
-    local: &mut W,
     fake_cookie: &[u8],
-    local_auth: &LocalX11Auth,
-) -> Result<()>
+    prepare: F,
+) -> Result<(Zeroizing<Vec<u8>>, T)>
 where
     R: AsyncRead + Unpin + ?Sized,
-    W: AsyncWrite + Unpin + ?Sized,
+    F: FnOnce() -> P,
+    P: Future<Output = Result<T>>,
 {
-    let mut setup = read_setup_packet(remote).await?;
-    rewrite_setup_packet(&mut setup, fake_cookie, local_auth)?;
-    local
-        .write_all(&setup)
-        .await
-        .context("failed to send authenticated setup to the local X server")?;
-    local.flush().await.context("failed to flush X11 setup")?;
-    Ok(())
+    let setup = timeout(SETUP_TIMEOUT, async {
+        let setup = read_setup_packet(remote).await?;
+        validate_setup_packet(&setup, fake_cookie)?;
+        Ok::<_, anyhow::Error>(setup)
+    })
+    .await
+    .context("timed out validating X11 authentication setup")??;
+    // Even endpoint probing may start an on-demand X server. Keep all local
+    // preparation inside this callback, after the per-connection cookie gate.
+    let prepared = prepare().await?;
+    Ok((setup, prepared))
 }
 
 async fn read_setup_packet<R>(reader: &mut R) -> Result<Zeroizing<Vec<u8>>>
@@ -803,6 +817,23 @@ fn rewrite_setup_packet(
     fake_cookie: &[u8],
     local_auth: &LocalX11Auth,
 ) -> Result<()> {
+    let data_range = validate_setup_packet(packet, fake_cookie)?;
+    match local_auth {
+        LocalX11Auth::Cookie(real_cookie) if real_cookie.len() == data_range.len() => {
+            packet[data_range].copy_from_slice(real_cookie);
+        }
+        LocalX11Auth::Cookie(_) => {
+            anyhow::bail!("local X11 authorization cookie has an invalid length");
+        }
+        LocalX11Auth::None => {
+            packet[6..10].fill(0);
+            packet.truncate(X11_SETUP_HEADER_BYTES);
+        }
+    }
+    Ok(())
+}
+
+fn validate_setup_packet(packet: &[u8], fake_cookie: &[u8]) -> Result<Range<usize>> {
     if packet.len() < X11_SETUP_HEADER_BYTES {
         anyhow::bail!("X11 setup packet is truncated");
     }
@@ -825,19 +856,7 @@ fn rewrite_setup_packet(
     if fake_cookie.len() != auth_data_len || &packet[data_start..data_end] != fake_cookie {
         anyhow::bail!("X11 setup authorization was rejected");
     }
-    match local_auth {
-        LocalX11Auth::Cookie(real_cookie) if real_cookie.len() == auth_data_len => {
-            packet[data_start..data_end].copy_from_slice(real_cookie);
-        }
-        LocalX11Auth::Cookie(_) => {
-            anyhow::bail!("local X11 authorization cookie has an invalid length");
-        }
-        LocalX11Auth::None => {
-            packet[6..10].fill(0);
-            packet.truncate(X11_SETUP_HEADER_BYTES);
-        }
-    }
-    Ok(())
+    Ok(data_start..data_end)
 }
 
 fn validate_auth_lengths(protocol_len: usize, data_len: usize) -> Result<()> {
@@ -1019,11 +1038,194 @@ mod tests {
         }
     }
 
+    #[tokio::test]
+    async fn setup_gate_rejects_foreign_cookies_and_malformed_packets_before_preparation() {
+        for byte_order in *b"lB" {
+            let valid = setup_packet(byte_order, &FAKE_COOKIE);
+            let mut invalid_order = valid.clone();
+            invalid_order[0] = b'?';
+            let mut oversized = valid.clone();
+            oversized[6..8].fill(0xff);
+            let mut invalid_protocol = valid.clone();
+            invalid_protocol[X11_SETUP_HEADER_BYTES] = b'X';
+            let cases = [
+                Vec::new(),
+                valid[..X11_SETUP_HEADER_BYTES - 1].to_vec(),
+                valid[..valid.len() - 1].to_vec(),
+                invalid_order,
+                oversized,
+                invalid_protocol,
+                setup_packet(byte_order, &REAL_COOKIE),
+            ];
+            for packet in cases {
+                let calls = std::cell::Cell::new(0);
+                let result =
+                    authenticate_then_prepare(&mut packet.as_slice(), &FAKE_COOKIE, || async {
+                        calls.set(calls.get() + 1);
+                        Ok(())
+                    })
+                    .await;
+                let error = result.expect_err("invalid setup must fail before local preparation");
+                assert!(!error.is::<X11PreparationError>());
+                assert_eq!(calls.get(), 0);
+            }
+        }
+    }
+
+    #[tokio::test]
+    async fn setup_gate_waits_for_the_complete_cookie_at_every_byte_split() {
+        for byte_order in *b"lB" {
+            let packet = setup_packet(byte_order, &FAKE_COOKIE);
+            for split in 0..=packet.len() {
+                let (mut sender, mut remote) = tokio::io::duplex(128);
+                sender.write_all(&packet[..split]).await.unwrap();
+                let calls = std::cell::Cell::new(0);
+                let mut gate = Box::pin(authenticate_then_prepare(
+                    &mut remote,
+                    &FAKE_COOKIE,
+                    || async {
+                        calls.set(calls.get() + 1);
+                        Ok(())
+                    },
+                ));
+                if split < packet.len() {
+                    tokio::select! {
+                        biased;
+                        _ = &mut gate => panic!("partial setup must not finish authentication"),
+                        _ = std::future::ready(()) => {}
+                    }
+                    assert_eq!(calls.get(), 0);
+                    sender.write_all(&packet[split..]).await.unwrap();
+                }
+                let (setup, ()) = gate.await.expect("complete matching setup should pass");
+                assert_eq!(*setup, packet);
+                assert_eq!(calls.get(), 1);
+            }
+        }
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn setup_timeout_does_not_prepare_a_local_server() {
+        let (mut sender, mut remote) = tokio::io::duplex(128);
+        sender.write_all(b"l").await.unwrap();
+        let calls = std::cell::Cell::new(0);
+        let started = Instant::now();
+        let error = authenticate_then_prepare(&mut remote, &FAKE_COOKIE, || async {
+            calls.set(calls.get() + 1);
+            Ok(())
+        })
+        .await
+        .expect_err("incomplete authentication must time out");
+        assert_eq!(
+            error.to_string(),
+            "timed out validating X11 authentication setup"
+        );
+        assert_eq!(Instant::now() - started, SETUP_TIMEOUT);
+        assert_eq!(calls.get(), 0);
+    }
+
+    #[tokio::test]
+    async fn cancelling_setup_does_not_prepare_a_local_server() {
+        let (_sender, mut remote) = tokio::io::duplex(128);
+        let calls = std::cell::Cell::new(0);
+        let mut gate = Box::pin(authenticate_then_prepare(
+            &mut remote,
+            &FAKE_COOKIE,
+            || async {
+                calls.set(calls.get() + 1);
+                Ok(())
+            },
+        ));
+        tokio::select! {
+            biased;
+            _ = &mut gate => panic!("empty setup must remain pending"),
+            _ = std::future::ready(()) => {}
+        }
+        drop(gate);
+        assert_eq!(calls.get(), 0);
+    }
+
+    #[tokio::test]
+    async fn authenticated_relay_preserves_setup_and_following_bytes_in_both_directions() {
+        for byte_order in *b"lB" {
+            for no_auth in [false, true] {
+                let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+                    .await
+                    .expect("fake local X server should bind");
+                let endpoint = X11Endpoint::Tcp {
+                    host: "127.0.0.1",
+                    port: listener.local_addr().unwrap().port(),
+                };
+                let local_auth = if no_auth {
+                    LocalX11Auth::None
+                } else {
+                    LocalX11Auth::Cookie(Zeroizing::new(REAL_COOKIE.to_vec()))
+                };
+                let packet = setup_packet(byte_order, &FAKE_COOKIE);
+                let mut expected = if no_auth {
+                    let mut header = packet[..X11_SETUP_HEADER_BYTES].to_vec();
+                    header[6..10].fill(0);
+                    header
+                } else {
+                    setup_packet(byte_order, &REAL_COOKIE)
+                };
+                expected.extend_from_slice(b"following X11 request");
+                let (mut application, mut remote) = tokio::io::duplex(256);
+                let calls = std::cell::Cell::new(0);
+                let relay = async {
+                    let (setup, session) =
+                        authenticate_then_prepare(&mut remote, &FAKE_COOKIE, || async {
+                            calls.set(calls.get() + 1);
+                            Ok(X11Session {
+                                endpoint,
+                                credentials: Arc::new(X11Credentials {
+                                    fake_cookie: Zeroizing::new(FAKE_COOKIE),
+                                    local_auth,
+                                }),
+                            })
+                        })
+                        .await
+                        .expect("matching cookie should permit local preparation");
+                    session.relay(&mut remote, setup).await.unwrap();
+                };
+                let application = async {
+                    let mut bytes = packet;
+                    bytes.extend_from_slice(b"following X11 request");
+                    application.write_all(&bytes).await.unwrap();
+                    application.shutdown().await.unwrap();
+                    let mut response = Vec::new();
+                    application.read_to_end(&mut response).await.unwrap();
+                    assert_eq!(response, b"X11 server response");
+                };
+                let server = async {
+                    let (mut stream, _) = listener.accept().await.unwrap();
+                    let mut bytes = Vec::new();
+                    stream.read_to_end(&mut bytes).await.unwrap();
+                    assert_eq!(bytes, expected);
+                    stream.write_all(b"X11 server response").await.unwrap();
+                    stream.shutdown().await.unwrap();
+                };
+                timeout(Duration::from_secs(2), async {
+                    tokio::join!(relay, application, server);
+                })
+                .await
+                .expect("authenticated relay should finish without losing bytes or EOF");
+                assert_eq!(calls.get(), 1);
+            }
+        }
+    }
+
     fn setup_packet(byte_order: u8, cookie: &[u8; X11_COOKIE_BYTES]) -> Vec<u8> {
         let protocol = X11_AUTH_PROTOCOL.as_bytes();
         let total = setup_packet_len(protocol.len(), cookie.len()).unwrap();
         let mut packet = vec![0u8; total];
         packet[0] = byte_order;
+        let major_version = if byte_order == b'l' {
+            11u16.to_le_bytes()
+        } else {
+            11u16.to_be_bytes()
+        };
+        packet[2..4].copy_from_slice(&major_version);
         let protocol_len = protocol.len() as u16;
         let cookie_len = cookie.len() as u16;
         let (protocol_len, cookie_len) = if byte_order == b'l' {

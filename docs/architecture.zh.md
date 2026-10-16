@@ -942,24 +942,34 @@ macOS Auto 依次选择 XQuartz、MacXServer；Windows Auto 依次选择 VcXsrv�
 provider。Custom 不经命令 shell 启动，且必须是普通文件；Unix 上还必须具有 executable 权限。
 
 Trusted 模式只会带着随机 128-bit fake cookie 发送 X11 forwarding request，不读取本机
-`DISPLAY`、不运行 `xauth`、不探测本机端点，也不启动 X server。只有远端 server 打开 X11
-channel 时，relay 才解析本机 display 候选、在超时和输出上限内执行 `xauth list <DISPLAY>`，并在
+`DISPLAY`、不运行 `xauth`、不探测本机端点，也不启动 X server。只有远端 X11 channel 提供完整
+setup 且通过当前连接的 cookie 校验后，relay 才解析本机 display 候选、在超时和输出上限内执行 `xauth list <DISPLAY>`，并在
 需要且启用时启动选定 provider、轮询其就绪状态。Untrusted 模式在完成 host-key 验证和 SSH
 认证后、发送 X11 forwarding request 前准备：它运行 `xauth -f <private-file> generate <DISPLAY> MIT-MAGIC-COOKIE-1 untrusted timeout 1260`，只读取该临时 authority，随后删除私有目录。
 AxSSH 在 20 分钟后拒绝 untrusted channel；多出的 60 秒可避免 X server 的 fail-open timing。Untrusted 模式要求本机 X server 支持 X11 SECURITY，且绝不回退到 no-auth 或真实 cookie。MacXServer 只有在显式开启 no-auth 兼容时才会以
 `127.0.0.1:6000` 启动；VcXsrv/Xming 也只有在该选择下才接收 `-multiwindow -clipboard -ac`。
 relay 仍只连接本机端点，并先验证 SSH fake cookie，之后才为兼容 server 去除 X authority。
-本机准备、channel 或服务端请求失败时，只会拒绝对应 X11 channel，SSH shell 仍保持连接并显示
-X11 不可用。AxSSH 不修改远端 `sshd`；远端必须独立允许 X11 forwarding 并接受请求，才会设置
+无效 setup、其它连接的 cookie 或 setup 超时只关闭自己的 relay，不触碰本机 server，也不误报
+本机准备失败。本机准备或服务端请求失败时，SSH shell 仍保持连接并显示 X11 不可用。
+AxSSH 不修改远端 `sshd`；远端必须独立允许 X11 forwarding 并接受请求，才会设置
 远端 `DISPLAY`。
 
 每个 Trusted Terminal 为 SSH request 创建随机 128-bit fake cookie；Untrusted Terminal 使用短时受限 cookie。`ClientHandler` 默认拒绝
 服务端发起的 X11 channel，只有 forwarding 请求成功后才允许进入有界分发。等待队列和活动
 relay 都最多 8 个；禁用/已关闭时按 administratively prohibited 拒绝，资源超限时明确返回
-resource shortage。relay 连接预验证的本机端点，在超时和长度上限内读取 X11 setup，只接受
-预期字节序、协议和 fake cookie，将其替换为真实 cookie 后再执行使用固定内部缓冲的双向复制。
+resource shortage。relay 先确认 SSH channel 以允许 setup 字节到达，该确认并不代表 X11 认证
+成功；随后在五秒内读取最多 332 字节的 setup，验证字节序、授权协议及当前连接的 cookie，
+通过前不执行任何逐通道本机准备或端点连接。因此无效请求也不会通过探测 socket 唤醒按需启动
+的 X server。Untrusted 在确认 channel 前和 setup 校验后各检查一次到期时间。验证成功后才
+准备/连接本机端点、替换为本机授权，在独立的五秒写入上限内发送 setup，再执行使用固定内部
+缓冲的双向复制。
 fake/real cookie 只存在于 worker 拥有的可清零内存，不持久化、不记录日志；SSH worker 关闭前
 会取消并 join 全部 relay task。
+
+cookie 只能证明持有此转发连接的授权，不能证明远端 UID/PID。能访问服务端代理端口的其它
+进程可以打开 channel，但没有正确 cookie 就不能触发 Trusted 的本机准备；持有该 cookie 的
+程序仍可触发启动。服务端 `X11UseLocalhost yes` 只限制代理监听 loopback，不能单独隔离同机
+不同用户。服务器按用户隔离属于管理员策略，不由客户端修改。
 
 认证秘密使用 `ui/components/secret-text-input.slint`，而不是通用文本输入。它保留
 原生密码遮蔽、IME、焦点和密码输入可访问性语义，但不发布 `accessible-value`、不提供
