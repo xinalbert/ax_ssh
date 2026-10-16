@@ -696,3 +696,13 @@
 - 关键结论：rubato 5.0.1 MSRV 1.87，Fft + FixedSync::Both 替代 FftFixedInOut；重导出 SequentialSliceOfVecs 可借用已有平面缓冲，无需自建 adapter 或新直接依赖。process_all 自动裁剪延迟，可独立对照分块处理。base64 新增 SIMD 引擎，现有 GENERAL_PURPOSE STANDARD/STANDARD_NO_PAD 调用不改引擎或 padding。CPAL 新版 CoreAudio 下限 14.2，因此保留 0.17.3。
 - 对实施计划的影响：D2 仅更新六项及 rubato 必要传递依赖；D3 对照整段转换验证尾部、延迟、空/短输入、非整数比例和声道，另检抗混叠；D4 保留 native CI 和既有安全公告边界。
 - 未解决问题：Windows/Linux 原生 CI、真实麦克风/剪贴板验收；RSA 无上游修复版本及 bincode/ttf-parser 停止维护提示不由本次更新消除。
+
+## 2026-10-16 14:44 +0800 X11 cookie 与本机启动的隔离边界
+
+- 时间：2026-10-16 14:44 +0800
+- 检索问题：其他远端进程能否触发当前 SSH 的 X11 通道，以及如何防止错误 cookie 在被拒绝前启动本机 X server？
+- 检索原因：用户报告未使用 X11 时软件启动，提出服务器其他用户请求触发的可能性并要求隔离。
+- 来源列表：[RFC 4254 §6.3](https://datatracker.ietf.org/doc/html/rfc4254#section-6.3)、[OpenSSH clientloop.c](https://github.com/openssh/openssh-portable/blob/master/clientloop.c)、[OpenSSH channels.c](https://github.com/openssh/openssh-portable/blob/master/channels.c)、[sshd_config X11UseLocalhost](https://man.openbsd.org/sshd_config#X11UseLocalhost)、[XQuartz FAQ](https://www.xquartz.org/FAQs.html)、[Apple launchd socket activation](https://developer.apple.com/library/archive/documentation/MacOSX/Conceptual/BPSystemStartup/Chapters/CreatingLaunchdJobs.html)；本机 x11 transport、两次拒绝日志及 XQuartz launch agent 只读核对。
+- 关键结论：X11 转发不是广播；进程连接当前会话的服务器 DISPLAY 代理端口后，sshd 转为所属 SSH 的 X11 channel，再由客户端校验 cookie。来源 IP/port 不能证明 UID/PID，loopback 不等于按用户隔离。OpenSSH 也先连接本机 display 再校验 cookie，RFC 未强制这一先后；launchd socket 连接可启动 XQuartz，因此只关闭显式 launch 不足以阻止副作用。Untrusted 需要在请求前生成本机受限授权，不能照搬 trusted 的全部惰性准备。
+- 对实施计划的影响：XI2 在 SSH channel 确认后先限时/限长读取并核验当前连接 cookie，通过前不做任何本机准备；拒绝只关闭该 relay。XI3 用假本机 peer 和注入准备步骤验证顺序、流完整性及取消；保留 untrusted 预授权与到期检查。
+- 未解决问题：无法从现有日志识别触发者，也不能保证阻止持有正确 cookie 的合法后台程序；真实 XQuartz 启动行为与 Windows/Linux 原生链路需用户/CI 验收，服务器 UID 级隔离需要管理员边界。
