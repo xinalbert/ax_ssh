@@ -43,6 +43,24 @@ git diff --check
 离线命令要求本机 Cargo 缓存中已有 `Cargo.lock` 锁定的依赖；需要从 registry 填充
 缓存时移除 `--offline`。
 
+仓库整理还执行以下只读检查：
+
+```bash
+python3 scripts/check_repository.py
+python3 scripts/generate_system_icons.py --check
+python3 -m unittest scripts/test_repository.py scripts/test_translations.py scripts/test_release_version.py scripts/test_generate_release_highlights.py -v
+```
+
+`check_repository.py` 检查 Markdown 本地目标与中英配对、现代 Rust 模块文件名、唯一 Slint
+类型/构建入口。它跳过 vendor/参考文档、代码示例和外部 URL，并拒绝把参考 checkout 当作链接目标；
+不验证标题锚点，也不解析 Rust 语义。CI 在每个构建目标执行该检查及生成图标检查；
+Cargo/Clippy 和原生测试矩阵继续作为编译及平台行为依据。
+
+较大的测试集放在原 owner 的私有 `tests.rs` 子模块，由一条 `#[cfg(test)] mod tests;` 声明。
+保留平台 cfg 和测试辅助函数的私有边界，不为移动测试扩大运行时 API。环境资料采用当前快照
+和追加历史；旧实施记录缺失事件具体时分时，保留原始日期，区分有依据的 Git 入库时间与未知
+事件时刻，不补造小时/分钟。
+
 CI 的 coverage job 在 Ubuntu 上运行插桩测试，并使用 `cargo-llvm-cov` 生成
 `lcov.info`；配置了 `CODECOV_TOKEN` secret 时才上传到 Codecov。在仓库 Settings > Secrets and
 variables > Actions 中添加名为 `CODECOV_TOKEN` 的 Codecov repository token。fork 发起的 PR
@@ -181,7 +199,7 @@ Software presentation 选择器和 pane layout hint 仍只属于 macOS。
 - 所有平台都要把未分配的 Ctrl 组合留给获得焦点的 PTY，包括 `Ctrl+C` 和 tmux 前缀；
   终端剪贴板默认键在 macOS 使用 `Cmd`，其他平台使用 `Ctrl+Shift`。全局 UI 命令使用
   Slint 在终端输入前处理的原生菜单 accelerator；不要把工作流需要的终端控制组合分配给
-  UI 命令。Slint 1.17 会在
+  UI 命令。锁定的 Slint 1.18.1 会在
   Apple 平台交换 Command/Control 修饰键字段。处理 macOS 键盘事件时，快捷键匹配或
   终端编码前必须在 `src/app.rs` 读取 AppKit 当前物理修饰键状态，避免 Slint 漏掉某一侧
   `flagsChanged` 时左右 Control 语义不一致。

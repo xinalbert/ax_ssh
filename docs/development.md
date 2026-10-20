@@ -47,6 +47,29 @@ Offline commands require the dependencies in `Cargo.lock` to be present in the
 local Cargo cache. Remove `--offline` when the cache must be populated from the
 registry.
 
+Repository maintenance also runs these read-only checks:
+
+```bash
+python3 scripts/check_repository.py
+python3 scripts/generate_system_icons.py --check
+python3 -m unittest scripts/test_repository.py scripts/test_translations.py scripts/test_release_version.py scripts/test_generate_release_highlights.py -v
+```
+
+`check_repository.py` checks local Markdown targets and paired Chinese pages,
+modern Rust module filenames, and the unique Slint type/build entries.
+It skips vendor/reference documentation,
+code examples and external URLs, and rejects links into the reference checkout;
+it does not validate heading fragments or parse
+Rust semantics. CI runs it and the generated-icon check on every build target.
+Cargo/Clippy and the existing native test matrix remain authoritative.
+
+Keep larger test suites in their owner's private `tests.rs` child module with
+one `#[cfg(test)] mod tests;` declaration. Preserve platform cfgs and test helper
+privacy; do not expose runtime APIs just to move tests. Environment records use
+a current snapshot plus append-only history. For legacy tracker timestamps,
+retain the original date and distinguish a documented Git capture time from an
+unknown event time; never invent missing event hours.
+
 The CI coverage job runs an instrumented test suite on Ubuntu with
 `cargo-llvm-cov` and uploads the resulting `lcov.info` report to Codecov when the
 `CODECOV_TOKEN` secret is configured. Add the repository's Codecov token as a
@@ -247,8 +270,8 @@ development output with `cargo clean --profile dev --package ax_ssh`.
   platform, including `Ctrl+C` and tmux prefixes. Terminal clipboard defaults
   use `Cmd` on macOS and `Ctrl+Shift` elsewhere. Global UI commands use native
   menu accelerators, which Slint handles before terminal input; do not assign a
-  UI command to a terminal-control chord required by the user's workflow. Slint 1.17
-  swaps Command/Control modifier fields on Apple platforms. While handling a
+  UI command to a terminal-control chord required by the user's workflow. The
+  locked Slint 1.18.1 swaps Command/Control modifier fields on Apple platforms. While handling a
   macOS keyboard event, `src/app.rs` must use AppKit's current physical
   modifier state before shortcut matching or terminal encoding, so either
   Control key has the same meaning even when Slint misses a side-specific
