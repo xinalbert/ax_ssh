@@ -35,6 +35,9 @@
 
 | Path | Role | Key Symbols / Sections | Read For |
 | --- | --- | --- | --- |
+| `scripts/check_repository.py`、`scripts/test_repository.py` | 仓库所有文档的本地链接/中英配对与固定源入口检查 | `validate_markdown`、`validate_source_layout` | 现代 Rust 文件名、单一 Slint build/type 入口；跳过上游文档/代码示例/外部 URL，不替代 Cargo 语义、依赖图或平台验证 |
+| `src/local_shell/tests.rs`、`src/sftp/tests.rs`、`src/terminal/input/tests.rs`、`src/ssh/x11/tests.rs` | transport/domain owner 私有回归 | 父模块的 `cfg(test) mod tests` | PTY 生命周期、SFTP 协议边界、终端键盘编码及 X11 认证隔离；辅助类型不进入运行时 API |
+| `src/app/input/tests.rs`、`src/app/input/menu_navigation_tests.rs`、`src/app/font_bridge/tests.rs`、`src/app/settings_bridge/tests.rs`、`src/app/terminal_presentation/tests.rs`、`src/app/terminal_render/tests.rs` | 应用 owner 私有回归 | 输入/菜单/字体/设置/呈现/渲染测试 | 大型内联测试移出实现文件；保留 cfg/辅助代码私有边界及行为，三项图标测试归入 settings tests 命名空间 |
 | `src/app/view/tests/shortcut_menus.rs` | 主/独立窗口生成菜单快捷键回归 | `detached_menu_shortcuts_stay_with_their_window_and_respect_modal_state` | 独立适配器中的真实按键菜单入口、单次消费、窗口隔离、前后 Tab、Copy/Select All、模态与 SFTP 禁用；不截图 |
 | `src/app/view/tests/terminal_input.rs` | 终端透明输入代理的编辑历史隔离回归 | `main_terminal_proxy_keeps_local_undo_out_of_cleared_input`、`detached_terminal_proxy_keeps_local_undo_out_of_cleared_input` | 真实普通/IME 文字提交后清空、撤销/重做 fallback、物理 Control 字节与配置 Paste 优先级；无原生窗口或截图 |
 | `src/app/view/tests/terminal_connection.rs` | 连接等待期几何和焦点回归 | `connecting_terminals_report_real_geometry_in_main_and_detached_windows`、`sidebar_connection_moves_focus_before_login_and_does_not_buffer_enter` | 主/独立窗口在 connected 前上报尺寸；展开/收起侧栏点击后 Enter 不重复建连；等待输入不补发，安全对话框不被抢焦点，主动多连接仍可用 |
@@ -100,7 +103,7 @@
 | `src/app/file_icons.rs` 与 `src/app/file_icons/platform/` | 跨平台文件图标 provider/cache | `FileIconKey`、`FileIconProvider`、`clear_global_cache`、`prewarm_async`、platform `Resolver` | 根模块保留 24x24 owned RGBA、128 项 LRU、64-key 预热与 fallback；清理返回释放的扩展图标数量；平台目录隔离 macOS NSWorkspace/UTType、Windows Shell/GDI（COM/句柄恢复保护）、Linux MIME/freedesktop 解析；不得把远端名称当本机路径 |
 | `src/app/view/sftp.rs` | SFTP/Local 行映射与图标预热协调 | `prewarm_file_icons`、`run_icon_prewarm_worker`、`clear_file_icon_cache` | 预热队列有界、代次失效，目标只持有 `Weak<AppState>`；最后一个 SFTP Tab 关闭时清理扩展图标并记录释放数量 |
 | `src/app/view/sidebar.rs` | 连接导航与 `+` 已保存连接 model | `session_group_rows`、`connection_option_rows`、`profile_system_platform`、`refresh_session_models` | 侧栏和连接列表共用手动/有效缓存/运行时 release/通用图标优先级；启动与连接更新同步规范标识，尚未开 Tab 也复用 profile 缓存，不新增识别、文件读取或凭据访问 |
-| `src/app/input.rs`、`ui/components/keyboard-input.slint` | Slint/native 输入边界映射与统一键盘事件规范化 | `ApplicationKeyboardKey`、`NormalizedKeyboardInput`、`normalized_keyboard_input_from_ui`、`normalized_keyboard_input_from_winit`、`terminal_key_from_normalized_input`、``format_shortcut_event`、`menu_shortcut_from_setting` | 按通用逻辑键/文本与物理 `KeyCode`/`KeyLocation` 分离建模；Slint callback 只传 `KeyboardEvent` 或带上下文 DTO；字符键优先使用原生事件的 layout-resolved text，只有文本为空才回退 logical key；特殊键（含 F1-F24）、物理键元数据、Tab/Terminal Edit accelerator、原生菜单 `slint::Keys`、事件级 modifier snapshot、composing/repeat/synthetic 状态和 Apple 物理修饰键还原；只在终端编码边界转换为 `TerminalKey`；无稳定 xterm/terminfo 定义的 modified Escape/Tab/Return fail-closed，Kitty keyboard protocol、CSI-u 与 `modifyOtherKeys` 保持关闭 |
+| `src/app/input.rs`、`ui/components/keyboard-input.slint` | Slint/native 输入边界映射与统一键盘事件规范化 | `ApplicationKeyboardKey`、`NormalizedKeyboardInput`、`normalized_keyboard_input_from_ui`、`normalized_keyboard_input_from_winit`、`terminal_key_from_normalized_input`、`format_shortcut_event`、`menu_shortcut_from_setting` | 按通用逻辑键/文本与物理 `KeyCode`/`KeyLocation` 分离建模；Slint callback 只传 `KeyboardEvent` 或带上下文 DTO；字符键优先使用原生事件的 layout-resolved text，只有文本为空才回退 logical key；特殊键（含 F1-F24）、物理键元数据、Tab/Terminal Edit accelerator、原生菜单 `slint::Keys`、事件级 modifier snapshot、composing/repeat/synthetic 状态和 Apple 物理修饰键还原；只在终端编码边界转换为 `TerminalKey`；无稳定 xterm/terminfo 定义的 modified Escape/Tab/Return fail-closed，Kitty keyboard protocol、CSI-u 与 `modifyOtherKeys` 保持关闭 |
 | `src/app/diagnostics.rs` | 脱敏键盘、UI/menu action 和输入耗时日志边界 | `log_keyboard_event`、`log_terminal_input`、`log_terminal_input_latency`、`log_ui_action`、`log_menu_action` | 调试快捷键/功能调用/输入请求耗时；文字只记 `Text`，菜单只记白名单 action，不得增加内容长度、路径、主机、名称、Clipboard 或秘密字段 |
 | `src/app/macos_window.rs` | macOS 原生窗口/菜单 bridge | `DetachedTitlebarStyle`、`configure_detached_titlebar_buttons`、`update_detached_titlebar_style`、`update_detached_system_icon`、`current_modifier_state`、`current_cursor_position`、`configure_application_menu` | 标准标题栏和弱引用动作；共用 Slint SVG/Theme 尺寸/间距/颜色，无底座原生按钮及有界 raster；系统身份图像保留 source cache；菜单幂等绑定及主线程生命周期 |
 | `src/app/macos_file_drag.rs`、`src/app/macos_file_drag/tests.rs` | macOS SFTP 原生 file-promise 拖放 bridge 和生命周期回归 | `MouseDownEvents`、`FilePromiseOwner`、`FilePromiseAttemptGuard`、`NativeDropRegion`、`begin_file_promise_drag`、`complete_file_promise_transfer` | 主线程捕获并消费真实左键按下事件；窗口/实际按键校验，松开/失焦/关闭清理；快照和 promise 各最多 64 项。provider/delegate/source/destination 留在 AppKit 主线程，Tab/SSH attempt 绑定的 owned 路径进入 SFTP worker；断线/EOF/任务释放取消本代次，completion 在所有路径仅调用一次；保留精确 Local files 返回区域和 copy-only 普通文件边界，不读远端内容、不写文件、不持有 russh handle |
@@ -225,202 +228,10 @@
 
 ## 刷新规则
 
-- 最近依据：2026-10-14 共享按钮按覆盖标签实测宽度加内边距计算 preferred-width；遗漏的单行展示/占位统一到 ElidedLabel，新增真实会话页面的字体/语言/hover/点击和密码占位回归。
-
-- 最近依据：2026-10-14 共享 EditingTextInput 和 text_editing 适配，统一 macOS Control、平台标准直通和密码/只读/IME 策略；新增主/独立地址、Unicode/撤销、密码剪贴板与多行事件回归。
-
-- 最近依据：2026-10-13 标准光标发布：删除 24ms 隐藏等待，仅 2026 同步帧保留旧快照；四协议重绘前处理最多 64 个已到达事件，让出 Tokio 后优先已经到期的呈现。
-
-- 最近依据：2026-10-13 SFTP Finder 文件承诺修复：按原生 press 捕获 NSEvent，64 项有界存储，Tab/SSH attempt 生命周期与一次性 completion；新增 `src/app/macos_file_drag/tests.rs`。
-- 最近依据：2026-10-13 低覆盖行为补测、通知取消清理与 macOS helper fixture 诊断；2026-10-13 代码职责合规修复及现代子模块拆分；2026-10-12 行为覆盖率新增控制器/monitor/worker、音频/串口/凭据/日志测试文件簇和双语 coverage 页面；注入保持私有，无 public API 或依赖升级。
-- 最近依据：2026-10-11 SFTP 首批返回、有界后台写队列、16 请求传输窗口和缓存源快照的稳定 UI 模型；新增协议延迟/乱序/短读回归路由。
-
-- 刷新触发：新增/移动重要模块、改变 UI/worker/存储所有权、变更构建入口、CI 或参考子模块边界。
-- 最近依据：2026-09-29 Terminal 首次加载并注册自带 Maple 与 Iosevka；Fontique 回退按主字体、Maple Han、Iosevka 缺失符号选字形，不改变 Slint cell 几何或终端模型，字体仍只在 UI 线程注册并通过既有代次刷新。
-- 最近依据：2026-09-18 移除终端 renderer/Slint DTO 的非 ASCII 居中状态；所有文本 run 和一格/两格光标文字均从协议定义的 cell span 左边缘绘制。宽字符仍占两格，逻辑列、选区、pointer、preedit、IME、PTY resize、worker、SSH trust 和凭据边界不变。
-- 最近依据：2026-09-19 鼠标协议按终端程序选择的格式生成默认 X10、UTF-8 1005、URXVT 1015、SGR 1006 或像素坐标 1016；Slint 将内容区物理指针坐标与字符格坐标一并传到模型，1016 按实测文本区边界夹位。DEC 1004 焦点链路仍只传 UUID+布尔值并经可靠 worker 发送固定 `CSI I`/`CSI O`；不引入 worker handle、终端文本、SSH 状态或秘密到 UI。
-- 最近依据：2026-09-19 `TerminalPane` 的字符网格、cell 度量和物理指针坐标通过 `resize-terminal`/pointer DTO 进入 `AppState`；`resize_terminal_with_metrics` 将字符与物理 PTY 尺寸同时交给 Local/SSH，Telnet 仍只走 RFC 1073 NAWS，Serial 只调整本地模型。
-- 最近依据：2026-09-16 终端 Tab 激活不应因短暂 Pane 重建而丢失视口；`TerminalModel` 是每个运行时 Tab 的 scrollback/display offset owner，主屏 Detached resize 后恢复有界 offset，`TerminalPane` 首次 resize 延迟两个 frame。粘贴沿统一 `KeyboardEvent.is_paste` 进入终端模型，DEC 2004 wrapper 包住完整 payload，四类 worker 以 16 KiB 分块写出并共享 4 MiB 上限；不改变 SSH trust、凭据或 transport 所有权。
-- 最近依据：2026-09-15 为间歇性 terminal pane 右侧空白增加 `terminal-geometry` 诊断；`TerminalPane` 在合并布局后报告 pane/grid 坐标、cell 尺寸与列行数，`WorkspaceShell` 按主窗口或 detached offset 转发，`src/app/terminal_bridge.rs` 对照 Slint physical 与 Winit inner window size，并按 0.1 logical pixel 去重记录右/下余量和 fractional cell remainder。记录上限为 256 个 pane，且不包含终端文字、主机/路径、profile 标签或凭据。
-- 最近依据：2026-10-11 主/子窗口动作共用 `ui/icons/` SVG 与 Theme；macOS detached 使用无底座 NSButton、16px 分屏/14px 返回图标、26px 按钮和 4px 间距，主题预览/保存更新原生 tint，Windows/Linux Return 复用同一资源。窗口动作仍捕获 weak UI 并走既有 UUID 路由，不持有 worker/SSH/凭据。
-- 最近依据：2026-08-12 `TerminalPane` 取消自身 focused 边框；复用组件的 terminal identity、分屏 focused、连接、可见性和 divider release 直接聚焦既有透明 IME proxy，仅新建 pane 在首轮布局后执行一次状态重验和聚焦。`AppWindow` 不绘制额外客户区窗口框线；分屏 pane、worker、终端缓冲区、SSH trust 和凭据边界不变。
-- 最近依据：2026-08-11 新增 schema v18 的默认关闭 `copy_selection_on_select`；Settings > Terminal 经窗口/Terminal DTO 把它传入 Slint-local pane，完成鼠标选区和 Select All 才复用有界 clipboard callback，直接右击固定粘贴。选区/clipboard 文字不进入配置、日志、AppState 或 transport，且新模式优先于既有右键复制或粘贴偏好。Terminal divider、pane focus 和输出 snapshot 在 UUID、identity 和行数一致时原地更新 Slint model 行，避免替换 pressed/focused repeater 与透明 IME 实例；输出 snapshot 同时复用 render-line/run `VecModel` 和有界单行 cursor model 并直接发布行通知，避免内容或光标等待焦点变化才重绘。非根 pane 由 `PaneTree` collapse、`AppState` Tab close 和异步 worker cleanup 的统一路径负责显式关闭或正常结束自动关闭；根 pane 与失败状态继续保留。多窗口 worker refresh 复用 `AppState` pending gate 并在应用期间有更新时最多补排一次，防止 event-loop backlog。输入 latency 额外记录 state lock/worker request，workspace refresh 记录 build/queue/apply/coalesced 阶段。比例仍只属于 `PaneTree`，不进入配置、worker 或 transport。
-- 最近依据：2026-08-10 为 `PaneTree` 内部 split 增加 0.1-0.9 volatile ratio 和稳定 divider 快照，主/独立窗口共用可见 hairline、拖拽、方向键、Home/End、双击复位与 slider 无障碍操作；比例随 Tab 切换及 detached/Return 保留，不进入配置或 worker；同日将 macOS detached 标题栏 Return 文字按钮改为紧凑系统返回图标，并将 Terminal 分屏收紧为“一棵 PaneTree 属于一个可见 Terminal Tab”。
-- 最近依据：2026-08-11 主窗口 Tab 管理栏保留可访问的纵向/横向分屏图标；macOS detached Terminal 在原生标题栏、Return 左侧放置 image-only 分屏图标，客户区保持全高。两者均通过既有 `pane-command` 发出 `split-right` 或 `split-down`，定向当前 active pane UUID；SFTP detached view、worker、SSH trust 和会话所有权不变。
-- 最近依据：2026-10-11 原 Slint 自绘窗口轮廓已收敛到 `ui/icons/` 的 split 与 Move/Return SVG；Theme 图像供主窗口、macOS 原生按钮和 Windows/Linux Return 共用，Tooltip、无障碍名称、callback 与窗口路由保持。
-- 最近依据：2026-08-11 Terminal target parser 仅检查有界可见行；Slint 只携带 pointer cell、control/meta 与 Tab UUID，`TerminalModel` 保留宽字符 cell 映射。URL 在本机 blocking opener 打开且不请求网络；Unix 路径以对应 runtime SFTP Tab 路由，新的 SFTP Tab 重新走独立 host-key/认证，连接中的既有 companion 只保存一项临时路径。
-- 最近依据：2026-08-17 的 GitHub 发布只保留 direct tag Release：发布者先用 `scripts/release_version.py sync` 同步并提交 Cargo/lockfile/macOS plist，再推送 annotated `YYYY-MM-DD[-N]` tag。Release 直接校验该 tag、构建 Windows x86_64、Linux x86_64/aarch64 和 macOS arm64/x86_64/Universal 资产；CI 只在成功默认分支 run 后写入 Rust target 与 lockfile 隔离的共享 Cargo cache，Release 只恢复 cache 且重新构建 release 二进制。发行物包含 AxSSH 自有字体、平台图标和独立许可证，完全不包含参考子模块。
-- 最近依据：2026-08-21 主窗口与 detached Terminal surface 在 Tab/窗口边缘保留 1px/2px 外间距；`TerminalPane` 将普通高度的可见行数向下取整，以 `height - rows * cell-height` 作为共享正顶部原点，使首行完整且最后一行贴住底边。低于三行保底时才允许负原点裁切旧顶部行；UUID 定向 resize、网格、cursor、IME/preedit、pointer、worker、SSH trust 与凭据边界不变。
-- 最近依据：2026-08-25 高吞吐终端刷新使用 generation gate + 脏 terminal UUID 路由；只有匹配当前可见 PaneTree 的 pane 构造 snapshot，terminal-only 批次跳过 SFTP 和无关 workspace 属性。`TerminalModel` 使用 `TermDamage`、稳定 `Arc` 行 identity 和 64-bit revision，renderer 以 64-bit 设置 key 复用未变化行；四类 monitor 立即解析和回送协议应答。GPU/其它 renderer 的 focused UI publication 仍采用 16/33/50 ms；实际 `winit-software` 的可见输出无固定 FPS timer，先进入一个有界 UI refresh batch，UI 消费时合并该 batch 中较新的 damage 并只在 snapshot 构造后再有输出时补排一次。可见未聚焦 non-software 按 Appearance FPS 限制（默认 4 FPS，范围 1-120 FPS），hidden 无 deadline；无 dirty row 且 cursor/viewport/mouse-reporting 不变的初始 snapshot 不排入 Slint。设置 preview/save 通过 policy watch 立即唤醒 pending monitor，结构变化仍走完整路由刷新，隐藏输出留在 Rust 状态。
-- 最近依据：2026-08-18 mouse reporting 分为标准 xterm 与默认本地选区优先两种 UI 策略；协议层不识别软件名。button/wheel capability 独立，1007 仅在备用屏启用 wheel；release 使用 pointer-up 当前修饰键，cancel 使用最近 pointer 状态。motion 每 16ms 合并最新值，worker 满队列静默丢弃中间帧，press/release 与 closed 失败继续可观察。
-- 最近依据：2026-08-19 输出 snapshot 只刷新终端网格，不推进 selection revision；选区坐标继续只属于 Slint，Copy 通过 `TerminalModel::selection_text()` 读取最新 cell。真实 resize、有效 scroll、回到底部、terminal identity、断开和失焦仍清除局部选区。
-- 最近依据：2026-09-17 Slint 双击在本地手势 owner 下优先请求有界 HTTP(S) URL 范围，否则请求临时 `SelectionType::Semantic` 的 viewport DTO；连续软换行会合并、末尾终端标点排除，终端核心继续负责普通语义边界。第三击请求 `SelectionType::Lines`，软换行合并而硬换行保持边界；显式 selection-valid 保证单 cell 选区可 Copy，reporting、Shift 和 Cmd/Ctrl 目标激活优先。
-- 最近依据：2026-08-18 原生菜单启用状态从高频 `workspace-tabs` model 和 `active-tab-kind` 绑定改为 Rust 发布的 terminal-active、has-multiple-tabs 和 has-active-tab 小布尔值；普通 terminal output、notice、status refresh 或 Tab model 替换不再触发 AppKit menu 重绑，只有安全/快捷键闸门或真实菜单状态变化会重绑 Settings/About。菜单命令仍在激活时读取当前 Tab UUID，不保存 worker、transport、选区或秘密。
-- 最近依据：2026-08-18 Terminal cell metric 同时测量 50 个 Latin `M`、25 个 Han 双宽字形和 3 个 box-drawing 字形，并取最大的单 cell advance；`TerminalModel` 保留逻辑列/宽字符占两格，普通非 ASCII cell 不与 ASCII 合并到同一 Text shaping run，同样式相邻盒线字符则合并为一个 shaping run，grid 在对应的一格或两格 span 内绘制。PTY resize、选区、指针和 cursor 继续消费同一 cell geometry，不改 SSH、tmux、worker 或 transport。
-- 最近依据：2026-08-12 Terminal target hover 以短生命周期 `TerminalTargetHighlight` 返回 active、row 和完整目标的半开 cell 区间；`TerminalPane` 在 Cmd/Ctrl hover、按键和 pointer 事件中本地管理提示，`TerminalGrid` 仅绘制下划线与鼠标指针。修饰键、选择、滚动或离开会清除它，不发布完整行、目标文本、worker 或终端 buffer。
-- 最近依据：2026-08-19 语义高亮继续默认关闭，并从常驻 renderer 移除 URL/路径 Link 类别；renderer 只对 HTTP 状态和成功/信息/警告/错误词使用可选状态色，`dim` 合并进最终系数，背景、选区和光标不调整。URL/路径保持默认前景，仅在按住 Cmd/Ctrl 时由 TerminalGrid 绘制临时下划线；旧配置中的 link/path 字段保留以兼容 schema 但不再生效。
-- 最近依据：2026-10-10 语义识别改为启动预编译 regex/命名捕获 span；仅识别来源明确的等级词和有响应、访问日志或明确 HTTP 属性上下文的状态码，删除旧关键词/短语/数字扫描。保留默认关闭、512 字节 ASCII run 上限、ANSI/特殊样式优先和四类颜色设置。
-- 最近依据：2026-08-20 macOS `sample` 显示主线程大部分样本位于 DisplayLink，且大量进入 Slint `SoftwareRenderer::render_buffer_impl`；主终端 `apply_rendered_terminal` 现复用已有 `TerminalRenderLine`/nested run `VecModel`，只更新实际变化的行，行数变化时 reset 同一 model。随后启用 Slint Skia 与 software renderer，并增加 Appearance > Renderer 的持久化 Automatic/GPU/Software 选择：启动在首个 AppWindow 前读取，macOS Automatic 默认选择 Metal-backed `winit-skia`，Windows/Linux Automatic 默认保持 `winit-software`，`SLINT_BACKEND` 仍可覆盖。该优化不改变 TerminalSnapshot、selection、worker、transport 或安全边界。
-- 最近依据：2026-08-12 `ElidedLabel` 统一测量自然宽度、绘制单行省略和仅溢出时的有界全文 Tooltip；`ElidedButton` 保留标准 Button 的 focus/keyboard/enabled/pressed/accessibility/click 所有权，并显式接收 text、tooltip 覆盖和无障碍名称。SFTP、Settings、Sidebar、认证、会话、工作区 Tab/连接行共用该呈现能力；纯图标和已有富详情 Tooltip 不重复包装。
-- 最近依据：2026-08-12 schema v21 增加 Follow system/English/简体中文界面语言策略；构建内嵌完整 `zh-CN` 静态 Slint 目录，独立保存成功后同步进程 locale 和全部窗口。生成/检查器覆盖 386 条非空翻译、陈旧项和编号占位符；技术错误详情保持原文。
-- 最近依据：2026-08-14 Release 支持不可变的 `YYYY-MM-DD[-N]` tag；Create 只创建新的日期/修订 tag，Retry 只能校验并重试已有 tag，revision 映射由单一 Python helper 派生，Highlights 可将同日修订与首发 tag 比较。
-- 最近依据：2026-08-13 SFTP Transfers 使用 Slint-only 三页及勾选/批量 intent；AppState 持有有界 phase/选择，worker 独占最多 4,096 项扫描的递归发现、最多两个 active/opening stream、暂停/从当前 offset 继续、取消与 join。远端文件和目录下载到当前 Local files 相对树，经非符号链接路径验证、`.part` fsync/无覆盖原子发布；失败、取消和发布后观察到的取消清理该任务创建的内容，完成文件保留。
-- 最近依据：2026-08-13 `TerminalModel` 以有界私有队列返回 `PtyWrite` 协议应答，应用 bridge 只写回当前 Tab 的现有 worker，满足 Windows ConPTY inherit-cursor 启动握手；本地 PTY worker 去重相同尺寸、自动退出时保留 owner 并执行有超时 shutdown，Drop 保留 child-killer 兜底。New Session 以内容 preferred height 驱动 scroll viewport。
-- 最近依据：2026-08-10 用 Slint-local command + bounded revision 增加 Terminal-only Edit Copy/Paste/Select All；主/独立窗口共用 `TerminalPaneGroup`，只有 focused pane 执行，Copy/Paste 复用配置快捷键，Select All 使用不占用 Windows/Linux `Ctrl+A` 的固定 accelerator。
-- 最近依据：2026-08-09 完成多窗口 `WorkspaceTransfer`/`WindowRouter`、SSH/SFTP companion 成组 detached/merge、共享 Slint event loop、窗口内 Tab 路由和 Tab inline Move/Return 动作；其后将 detached 客户区收紧为仅当前 Terminal/SFTP，移除 Tab 条、sidebar、连接选择器、Settings、会话编辑器和客户区菜单，并让 Move/Return 直接携带 Tab UUID；macOS detached Return 随后从会额外占行的 titlebar accessory 改为标准标题栏父视图内的同一行原生按钮；同日完成窗口级、最多八叶的 `PaneTree` 和 UUID 定向 `TerminalPaneGroup`，支持主窗口及 detached Terminal 的独立会话拆分、方向焦点和布局恢复，SFTP 保持不可分屏的独立 surface；同日完成 `SshAgent` profile、无密码应用路由、russh 运行时外部 signer、5 identity/30 秒边界与内存 agent loopback 回归；2026-08-08 完成启动资源懒加载、Private key/Serial 模式级发现与代际清理、SFTP-only 终端模型省略和文件图标 cache 回收；2026-08-06 已完成的 SFTP 平台文件图标、snapshot 重验本地打开、独立 subsystem 分块下载后打开、进度/取消、私有缓存清理、取消/预热/GDI 静态竞态修复及 P1-P9 验证记录；2026-08-05 的工作区 Tab 固定跨平台前后循环 accelerator；2026-08-04 的 SSH 认证前命令隔离、connected-only terminal/SFTP 操作、profile mutation token 与凭据回滚、私有唯一临时文件、配置统一上限和 owned PTY shutdown；同日的会话编辑器可选密码保存、逐 Tab 一次性认证秘密，以及 Terminal 最小对比度设置、schema v17 迁移和按实际单元格背景的 WCAG 前景修正；2026-08-03 的运行时 SSH/SFTP companion UUID、双向 Tab 切换、独立 transport 和 Settings 单例快捷键激活，以及 X11 首个远端 channel 按需本机准备、X server 已知安装位置快照和 Custom executable 设置入口；2026-08-02 的跨平台 X server provider/启动设置、默认开启的 SSH X11 forwarding、显式 loopback no-auth 兼容；2026-08-01 的独立双栏 SFTP Tab、脱敏 diagnostics、终端主屏 reflow、运行时字体资源和双字体设置分离。
-
-## 最近依据
-
-- 2026-10-10：服务器编辑页显示保存密码的后端引用，clear-saved-password 复用独立管理确认并立即执行；逐 profile token/持久化 gate、原存储回滚和 draft identity 保留共用既有应用边界。
-
-- 2026-10-08：`russh` 从 0.63.3 跨 `0.x` minor 升级到 0.64.1，`PublicKeyOrCertificate` host-key 回调、RSA compatibility feature 和 SSH worker 所有权保持不变；`Cargo.lock` 与 CI/双语架构版本说明已同步。
-
-- 2026-10-03：重复链路清理，删除未引用历史解析器及重复图标；设置、字体、目录 history、直连 monitor、SSH probe、原子写入共用实现；SFTP/终端各自 worker、统一 router 刷新和 Cargo Debian 安装清单。详见 `docs/duplicate-link-cleanup.zh.md`。
-
-- 2026-09-25：`ui/workspace-shell.slint` 主布局仅在非 detached 窗口创建 `TerminalPaneGroup`，防止不可见主终端按扣掉侧栏的宽度覆盖独立终端；`src/app/view/tests.rs` 使用无原生窗口的 Slint 数值回归验证唯一尺寸来源、独立窗口不受侧栏影响及主窗口正常随侧栏调整。
-- 2026-09-24：SFTP 本地多选、内部拖动及 Finder 路径经 `sftp_bridge` 后台递归发现组成单条 worker 批次命令；`sftp/transfer` 在文件上传前创建并重验远端目录。每 Tab 两条活动传输是并发限制，其余文件在有界队列等待；同名冲突选择仍限定本批次。
-
-- 2026-09-18：终端文本 run 和一格/两格光标内容按协议 cell span 左边缘绘制；删除非 ASCII 的本地强制居中，不改变宽字符占格、逻辑列或输入/传输安全边界。
-- 2026-09-17：移除日志 writer 的 CRLF 重写。Unix Local PTY 在 shell 启动前通过 termios 启用 `OPOST | ONLCR`；SSH 保持既有 `pty-req` 同一模式。终端模型和 reflow 继续按原始字节语义处理裸 `LF`。
-- 2026-09-18：SSH profile 的 X11 forwarding 改为 Off、Untrusted (`-X`) 与 Trusted (`-Y`)；旧 bool 缺失/true 保持 Trusted，false 为 Off。全局 X11 Settings 只选择本机 provider/path。Trusted 保持首个 channel 的惰性本机准备；Untrusted 在已完成 host-key/认证后创建私有短时 `xauth generate … untrusted` 授权，20 分钟后拒绝新的 channel，不得使用 no-auth 或可信 cookie 回退。
-- 2026-09-11：SFTP/Local 行名称保留完整有界 DTO，列宽不足时由共享 `ElidedLabel` 省略，并在溢出悬浮提示中按字符换行显示全文；本地 blocking 目录读取保持 2 MiB 名称/路径文本预算和独立 unavailable 计数，AppState 对完整有界快照按 250 条分页，远端继续使用 raw cursor 分页；远端与本地默认均为 Modified 降序，排序先于分页释放。
-- 2026-08-28：`softbuffer::Surface::damage_support()` 将 native damage 消费能力显式化；Win32、Wayland protocol 4+、X11 XShm 和 Core Graphics tiles 可直接转发矩形，Web 合并为 bounding rectangle，KMS 由驱动决定，X11 Wire/旧 Wayland/Orbital 使用整帧，Android 标记 lock-time 约束。winit software bridge 对 full-frame/lock-time backend 直接调用 `present()`；应用层 `TermDamage`/Slint dirty region 和 macOS 专属 `SoftwarePresentationMode` 不变。
-- 2026-08-27：SSH/Telnet 的 16ms transport flush 改为输出缓冲区非空时才启动的一次性 timer；Local PTY reader EOF/错误通过有界命令通道唤醒 owner，空闲 child 检查降为 1s，EOF 后 25ms 快速确认最多持续一秒；macOS `WindowActiveChanged` 保持快速路径，`isKeyWindow` 兜底放宽到 500ms。队列容量、16 KiB 输出上限、输入/resize/shutdown、SSH trust/凭据和终端 parser 不变。
-- 2026-08-25：`TerminalSnapshot` 携带 `dirty_rows/full_refresh`；普通输出只对 TermDamage 报告的可见行进行 renderer/model 增量更新，首帧、视口或尺寸变化、full damage 和渲染 key 变化回退整行更新。Slint 保留 item-tree 遍历和 backend present 语义。
-- 2026-08-25：TerminalGrid 非紧凑文字 run 直接使用定位到 cell span 的 `Text`，移除仅用于透明背景/定位的 per-run `Rectangle`；中文/非 ASCII 仍在一格或两格逻辑跨度内居中，英文保持左对齐，选区与静态缓存边界不变。
-- 2026-08-25：TerminalGrid 的紧凑/非紧凑文字子树改为固定保留并仅切换 `visible`；模式设置变化不再销毁和重建每行文字 item。选区使用逐行固定容器和单个 cell-range fill，只更新位置、宽度和可见性；静态行缓存只覆盖背景、文字和装饰，应用层 tile/partition 链路保持删除。
-- 2026-08-24：撤回应用层终端 tile/partition model；当前单层 `TerminalRenderLine` 仍按 source/render revision 复用干净行，`TermDamage` 和 Slint 内部 dirty region 保留。此前 tile 候选仅作为历史审计记录，不再作为当前实现或 A/B 选项。
-- 2026-08-23：连续窗口 resize 采用 resize-only terminal snapshot；AppState 先比较规范化 `TerminalModel::size()` 再请求指定 worker，SSH/Telnet watch 与 Local pending latest-value 对相同行列去重；WindowRouter 结构变化仍回退 full refresh，Serial 无 PTY resize 通道。此前 app 拆分、内存/线程生命周期逻辑和弱 `AppState` 预热边界保持不变。
+- 刷新触发：新增/删除模块、入口、跨层契约、构建/CI 或持久化事实时更新相应路径和定位；功能实现和验证历史追加到月度记录。
+- 最近依据：2026-10-20 全项目整理，复核 Cargo/CI、Rust/Slint 入口和 test 模块；X11 认证前置、六项依赖更新及现有平台边界已核对。
+- 地图只保留当前路由，不继续累积旧任务的“当前/最近”段落。此前地图逐字保存在[历史地图快照](project-map-before-2026-10-20.md)，实施状态见 [current.md](current.md)，历史见 [changes/2026/10.md](changes/2026/10.md)。
 
 ## 最后更新时间
 
-- 2026-10-16 10:50 +0800：滚轮接收夹具仅在 Windows 主动收尾时补充接受 ConnectionAborted/10053；提前断线与其它平台仍拒绝，native CI 待重跑，本轮只做编译/静态检查。
-
-- 2026-10-16：TerminalPane 在本地选择优先模式下取消 stationary release 的远端点击补发；按下时缓存 owner，双/三击沿用，远端手势先清理本地选区。主/独立窗口共用，无词边界、滚轮或 SSH 改动。
-
-- 2026-10-15 18:04 +0800：滚轮接收夹具增加显式关闭标记与严格服务端结果分类，提前 reset/其它错误仍失败；20 轮重复与完整 873 项门禁通过。
-
-- 2026-10-15 17:23 +0800：补入主/独立窗口到真实 SSH 服务端字节的进程隔离回归，标准 872 项测试通过；保留 native OS/Codex 故障复现边界。
-
-- 2026-10-15 16:39 +0800：跨平台滚轮定位读取 `src/app/terminal_bridge/native.rs` 的 Winit 事件与 `input.rs` 的 local-history/wheel-route/wheel-enqueue，统一诊断目标为 `ax_ssh::terminal_scroll`；两端原生复现方法见 `docs/development.md`/`docs/development.zh.md`。现有无窗口组件回归不能替代操作系统鼠标/Codex 会话复现。
-
-- 2026-10-15 15:22 +0800：补入终端透明输入代理的撤销/重做隔离与主/独立窗口按键回归入口。
-
-- 2026-10-15 11:22 +0800：侧栏共用间距定为 8px、派生缩进 25px；四项功能及双语说明分项提交。
-
-- 2026-10-15 10:51 +0800：更新跨批次输出帧期限、软件呈现节奏与未准入快照隔离边界。
-
-- 2026-10-15 09:15 +0800：补入 Windows 本地路径格式化/交互回归与侧栏间距路由。
-
-- 2026-10-14 17:28 +0800：统一侧栏 Group 文件夹/箭头 glyph 与紧凑缩进路由。
-
-- 2026-10-14 17:22 +0800：补入连接等待期尺寸/焦点回归入口与 TerminalPane 的本地重排、等待焦点和安全输入边界。
-
-- 2026-10-14 10:47 +0800：补入共享文字实际宽度/截断提示和会话页面数字布局/hover/点击/秘密占位回归路由。
-
-- 2026-10-14 09:45 +0800：补入共享编辑内核、平台/安全策略和真实键盘回归路由；直接路径/中间省略和两侧导航保持既有边界。
-
-- 2026-10-13 23:54 +0800：SFTP 主操作、统一 SVG、分段导航与无窗口交互回归路由更新。
-
-- 2026-10-13 17:55 +0800：终端显隐移除固定等待，四协议新增有界事件处理和分包/预算回归。
-- 2026-10-13 17:00 +0800：SFTP 原生鼠标事件、文件承诺生命周期与行为回归路由更新。
-- 2026-10-13 08:37 +0800：代码职责合规拆分、受保护密钥后端及回归入口更新。
-
-- 2026-10-12 23:20 +0800：刷新 Codecov 行为覆盖测试与双语测量入口；生成报告只位于 ignored target。
-- 2026-10-12 +0800：标准录音需求驱动音频桥接、共享设备租约、取消/源清理回归与无手动媒体行路由；翻译维护脚本与当前目录一致。
-- 2026-10-11 22:58 +0800：统一主/子窗口动作图标、Theme 外观与原生标题栏映射路由。
-- 2026-10-11 19:23 +0800：schema v36、远程编辑大小设置和动态检查已完成；743 项测试及本机 ARM64 门禁通过。
-- 2026-10-11 18:52 +0800：外部编辑模块、系统关联/副本监听、原子回传及内置 UI 移除；737 项测试及两个 macOS 架构门禁完成。
-
-- 2026-10-11 16:07 +0800：SFTP 性能实现及测试路由；720 项测试与两个 macOS 架构门禁完成，真实远端/GUI 留用户验收。
-
-- 2026-10-11 10:22 +0800：补齐剪贴板附件、音频采集/转写、应用媒体 DTO 与 SSH 辅助通道入口；高亮/URL 和终端媒体分别提交为 858b5bf、36a9f1d，707 项测试与两种 macOS 架构验证完成，真机验收保留。
-
-- 2026-10-11 08:33 +0800：URL 目标使用 regex 候选和 rust-url 校验，修复 `)。HTTP` 后文并入链接；14 项专项、689 项全量测试和 native 门禁通过，预览程序已更新。
-
-- 2026-10-11 00:31 +0800：terminal_render 私有 regex matcher 与 span 接线完成；25 项专项和 682 项全量测试通过，标准等级/HTTP 上下文、Settings 双语提示及旧 token 扫描移除均已同步。
-
-- 2026-10-10 15:04 +0800：增加 worker 单请求延迟采样、应用临时平滑状态、Tab-only 刷新和窗口焦点采样定位；无 schema 或主机信任变化。
-
-- 2026-10-10 13:49 +0800：系统图标选择器的共享应用查询增加常用优先、其余显示名称排序，定位唯一常用列表和搜索顺序；领域目录、身份/识别与保存边界不变。
-
-- 2026-10-10 09:06 +0800：逐服务器确认后立即清除密码与原存储回滚定位完成；8 项专项/650 项完整测试和原生 macOS check/Clippy/build 通过。
-
-- 2026-10-09 18:04 +0800：schema v35 手动图标与逐服务器识别缓存，选择器共用领域目录，Group/服务器/Local Shell 统一 20px 图标框；642 项测试与原生 macOS target check/严格 Clippy/build 通过。
-- 2026-10-09 17:04 +0800：连接侧栏/标签接入系统图标与受限 release 探测；侧栏搜索、同身份 Group model 刷新和默认彩色图标配置已接通，schema v34 持久化默认关闭的主题着色选项。 Local Shell 按本机系统/发行版映射，116 项规范名称目录生成共用 Rust/Slint 图标映射和双语索引；本机 630 项测试通过。
-
-- 2026-10-09 11:10 +0800：补入 Windows Server Commons/Microsoft wordmark，排除非官方 Windows Server 2025 候选；`assets/os-icons/` 328 个图形文件、656 次小尺寸渲染和 193 项新增图形复核记录已同步，资源保持未接入 UI/打包。
-
-- 2026-10-08 15:55 +0800：Windows/Linux 窗口控件改为固定 viewbox 矢量路径；尺寸集中到 Theme，补充 Tooltip、焦点和无障碍默认动作。
-
-- 2026-10-08：升级 `russh` 到 0.64.1 并完成本机 Rust 1.97 门禁；CI 原生 Windows/Linux 目标仍由对应 runner 验证。
-
-- 2026-10-02：行首选项改为每步 `Up/Down + Home`，明确目标行首与远端按键绑定的边界。
-
-- 2026-10-02：补充主/独立窗口标准 pointer callback 与 Slint 事件回归定位。
-
-- 2026-10-01 11:49 +0800：SFTP 本地栏对当前目录增加每 Tab 原生文件系统事件监听；单槽信号合并事件并复用后台读取，目录切换时重绑、关闭 Tab 时释放；网络文件系统仍可手动刷新。
-- 2026-10-01 11:08 +0800：SFTP 成功下载、上传和远端写操作按受影响目录刷新对应可见栏；目录加载期间合并一次后续刷新，切换目录时丢弃旧请求。
-- 2026-09-30 15:53 +0800：Settings > SFTP 新增应用级本地打开快照上限；0 同时取消单文件和私有缓存总字节限制，仍保留文件数、扫描与过期清理。Finder 原生拖出继续走直接下载，不进入该缓存。
-- 2026-09-28 10:48 +0800：Windows 窗口重新聚焦触发 renderer 失效和整窗重绘，Win32 softbuffer 失效时重置 buffer age；活动 Tab 条仅滚动显示，不再延迟夺取终端 IME 焦点。
-
-- 2026-09-24 17:43 +0800：SFTP 会话重置保留本地目录、已加载行与选择，同时废弃在途本地列表结果；远端同路径刷新继续允许上传，目标切换仍阻止误传。
-- 2026-09-23 23:24 +0800：新增锁定 Skia 1.18.1 的 `vendor/i-slint-renderer-skia/` 路由，仅补动态组件销毁时的 layer cache 清理；Cargo patch、许可和双语架构已同步。
-- 2026-09-18：终端文本 run 和一格/两格光标内容按协议 cell span 左边缘绘制；删除非 ASCII 的本地强制居中，不改变宽字符占格、逻辑列或输入/传输安全边界。
-- 2026-09-18 15:40 +0800：macOS Finder 拖入以每个已送达 `DroppedFile` 的当前 AppKit 坐标精确命中可见 Remote files；几何只负责选择目标，实时 SFTP 状态由 `sftp_bridge` 在入队前最终校验。固定目标结果和无敏感原生日志留在 `terminal_bridge`，SFTP queue/worker 边界不变。
-- 2026-09-20：OSC 52 由 `TerminalModel` 以默认关闭的 `Osc52::CopyPaste` opt-in 实现；应用层只接受默认 clipboard，`TerminalOutputEffects` 将有界写入经 `dispatch_ui` 投递到平台 API，读取请求以 Tab-local token/generation pending 状态等待 Allow/Deny。配置、Settings preview/save、四类 transport monitor 和双语文档已同步；selection clipboard、Sixel、Kitty、iTerm2 图形协议仍关闭，剪贴板内容不进入日志/持久化。
-- 2026-09-22：移除物理数字小键盘 application-keypad/SS3 专用拦截、`TerminalKeypadKey`、`encode_key_with_modes` 和终端 keypad model 读取；小键盘保留物理事件元数据并统一走标准 Slint/Winit 文本或逻辑键路径，Kitty keyboard/CSI-u 与 `modifyOtherKeys` 仍关闭。
-- 2026-09-23：新增终端绘制策略配置边界；item-tree 保持唯一活动实现，Canvas 仅作为后续绘制原型的持久化预留值。
-- 2026-09-17：终端换行责任下移至 PTY 行规程：Unix Local PTY 在 shell exec 前启用 `OPOST | ONLCR`，SSH 保持 `pty-req` 同一模式；移除 logging writer 的 CRLF 改写，TerminalModel/reflow 保留原始 `LF` 语义。
-- 2026-09-19：终端呈现事务改由标准 `CSI ?2026h/l` 和上游 deadline 控制；DEC `CSI ?25l/h` 只改变光标可见性，首帧没有旧 snapshot 时也不发布局部输出。解析、协议应答、soft-wrap/reflow、mouse reporting 和 transport 边界不变。
-- 2026-09-01 21:57 +0800：Shortcuts 页面补齐固定的 Select All、Previous Tab、Next Tab 平台快捷键展示；普通 FlatTextInput 与原生 TextEdit 保留 Copy/Cut/Paste/Select All，SecretTextInput 增加仅粘贴的右键操作并继续阻止秘密复制。
-- 2026-09-01 18:37 +0800：Windows 已显示 Winit 窗口只在活动 terminal 的 `ESC =` application-keypad 模式下捕获无修饰、非合成的物理数字小键盘，并经既有 terminal input security/route 边界发送 SS3 序列；普通 NumLock、IME 和快捷键仍由 Slint 处理。
-- 2026-08-28 09:18 +0800：增加跨平台 `DamageSupport` capability 与 winit fallback 说明，更新 vendor ownership、backend 矩阵及应用层复用边界。
-- 2026-08-27 13:49 +0800：macOS Software 默认呈现改为 damage backing store，显式 `layer-images` 保留为兼容性回退；配置仍在首个 surface 前应用。
-- 2026-08-27 11:04 +0800：终端 worker/UI 空闲唤醒策略改为按需/低频；SSH/Telnet 不再空缓冲区循环 flush，Local PTY 保留有界快速退出确认与 1s 兜底，macOS 激活兜底为 500ms。
-- 2026-08-27 10:03 +0800：TerminalGrid pointer callback 同时发布所在格与最近插入边界；TerminalPane 用行优先半开范围支持精确单格拖选，并把绘制与复制统一规范化到同一包含式首末格。xterm mouse reporting、Rust 语义单词和逻辑行范围不变。
-- 2026-08-26 18:06 +0800：macOS Software 的可选 Core Animation backing-store 实验已将 tile-local damage 从左上原点物理像素转为 CALayer 左下原点 point，delegate clip 按逆变换读取 CPU backing；默认 `setContents(CGImage)` 路径不变。
-- 2026-08-26 13:35 +0800：software presentation 几何 bridge 只在 macOS Software renderer 启用，scale/pane/notice/reset 会重新发布有界 hint，窗口释放会注销 registry；CoreGraphics surface 每个 buffer/present 周期只读一次 layout generation，generation/scale 变化时才 clone snapshot 并重建 layer。
-- 2026-08-26：macOS Software backend 新增终端 pane 几何桥接与可配置 row-aligned presentation layer；终端区域按 1-16 行（默认 4）倍数划分，sidebar/tab/空白区继续使用 fixed fallback grid。应用层仍只有单层 `TerminalRenderLine` model，Software 不增加固定 FPS 上限。
-- 2026-08-25：Software renderer 的可见输出不再使用固定 FPS timer 或窗口负载档位；worker 立即进入 `AppState` 的单槽 refresh gate，UI 消费 pending snapshot 前会合并较新的 `TermDamage`，而 snapshot 构造后才来的输出至多触发一个 follow-up。控制序列等没有可见变化的初始 snapshot 不进入 Slint event queue。macOS CoreGraphics 改为固定物理像素 tile 的 damage-aware 提交，只为相交 tile 创建独立 `CGImage`；首帧、resize、Retina scale 变化、invalidate 和 occlusion 恢复仍整组刷新。若要进一步消除 tile copy，需要 IOSurface/Metal 或显式可回收的多缓冲呈现，不接受同一 image 后备上的不安全 damage 写入。
-- 2026-08-24：应用层 dirty tile/partition 链路已删除；目标平台 software/GPU CPU A/B 仍待同负载采样，视觉上用户已确认 Software renderer 的 Settings、Tab、终端位置和空白区域正常。
-- 2026-08-21：四协议终端 UI publication 统一采用 dirty-only 双策略；focused 首帧立即并按连续时长使用 16/33/50 ms（受 Appearance focused FPS 上限约束），可见未聚焦 pane 按 Appearance unfocused FPS 刷新（默认 4 FPS，范围 1-120），hidden 无 deadline，route revision/policy watch 使 pending 输出在焦点、Tab 或设置变化后重算。
-- 2026-08-21：Terminal surface 顶部/底部分别保留 1px/2px 外间距；终端完整行向下取整并把零散高度放在首行上方，消除顶部首行裁切，同时保持末行底部锚定和所有输入坐标共用原点。
-- 2026-08-22：内存/线程生命周期施工完成：Tokio runtime 使用 2-4 个 async worker、最多 8 个 blocking worker，blocking 空闲 2 秒后允许退出；SFTP 图标预热目标改用 `Weak<AppState>`，清理扩展 icon 返回释放数量；Fontique/平台缓存仍须通过重复 footprint/vmmap 采样判断。
-- 2026-08-23：新增 renderer 无关的 AppWindow 显式资源释放入口；Return/Close 和进程退出都会清空 Slint models、编辑器/SFTP/安全字段并在 Tokio shutdown 前移除 detached/main 窗口强引用。
-- 2026-08-23：detached 初始化只保留 Terminal/SFTP surface 所需 model，sidebar、connection、Settings、session-editor、shell/X11 与 font-option model 为空；字体资源按选中 family 懒加载，Fontique shared collection 不承诺运行时卸载。
-- 2026-08-22：完成 `src/app.rs` 功能拆分，新增 `src/app/{runtime,window_bridge,platform_support}.rs`；完整 locked/offline fmt/check/Clippy/test、tracker、相对 Markdown 链接和 diff 检查通过，窗口视觉/原生激活仍由目标平台用户验收。
-- 2026-08-20：根据 macOS sample 定位主线程 software renderer 与整模型替换热点；主终端 render-line/run model 改为 identity-preserving 原地更新，未变化行跳过通知；启用 Skia feature 并增加 Appearance > Renderer 的持久化 Automatic/GPU/Software 选择，启动在首个 AppWindow 前读取，macOS Automatic 默认选择 Metal-backed `winit-skia`，其它桌面平台 Automatic 默认保持 software renderer，保留 `SLINT_BACKEND` 显式覆盖。
-- 2026-08-19：URL/路径目标只由 Cmd/Ctrl 临时下划线提示；常驻 renderer 只保留 HTTP/状态词语义色，Settings 仅显示四项状态颜色并兼容读取旧 link/path 字段。
-- 2026-08-19：输出刷新与 Slint-local 选区解耦；刷新期间保留选区，Copy 读取选区坐标对应的最新 cell；resize/scroll/identity/focus 清理边界保持不变。
-- 2026-08-18：终端 viewport identity 变化通过有界 selection revision 清除 Slint-local 陈旧选区；soft wrap/hard break 复制和 output/resize/scroll 失效均有回归覆盖。
-- 2026-08-18：拆分 button/wheel reporting capability；1007 不再接管按钮，release/cancel 使用事件时修饰键，motion 按帧合并并以有界 lossy worker 入队处理背压。
-- 2026-08-18：新增 schema v23 的 Terminal mouse interaction policy；协议层修正 SGR/传统 release 差异并覆盖 1000/1002/1003、修饰键和宽字符 cell 坐标。
-- 2026-08-18：终端 cell width 同时校准主字体、Han fallback 和盒线字形；非 ASCII cell 独立 run 并在固定逻辑 span 内居中，避免 fallback shaping 影响后续 ASCII 列。
-- 2026-08-18：原生菜单的动态 enabled 状态改为 Rust 发布的稳定 menu-state 布尔值；普通终端 output、notice、status refresh 和 Tab model 替换不再触发 AppKit menu 重绑，菜单命令仍在激活时读取当前 Tab UUID。
-- 2026-08-18：TerminalPane 的 xterm mouse reporting 仲裁改为默认本地拖选，按住 Alt/Option 才转发 click/release/drag/cell motion；滚轮保留 reporting 路径，Shift+滚轮进入本地 scrollback。无软件名特判，终端模型、worker、SSH trust 和凭据边界不变。
-- 2026-08-17：日期 tag push 直接触发唯一 Release workflow；Release 在 build 前校验 annotated tag 与版本元数据，移除 Create、Retry、tag CI dispatch、轮询和二次 Release dispatch。CI 只为默认分支保存共享 cache。
-- 2026-08-17：终端视口的可见行数改为向上取整，最后一行始终贴住 pane 底边；不足整行时裁切顶部首行，超过最大行数的空间保留在网格上方。模型的内容/scrollback resize 语义和 UUID 定向 PTY resize 路径保持不变。
-- 2026-08-15：SFTP 远端文件行新增共享 `FlatActionMenu` 右键菜单，Download/Delete 从顶部工具栏迁入菜单；未选中命中行先成为唯一选择，已选中行保留当前多选集合。菜单只复用既有 Slint/Rust callbacks，不新增本地删除、worker、transport 或文件系统状态。
-- 2026-08-14：日期 tag push 曾复用 `Retry Existing Release` 的 annotated tag/metadata 验证、精确 SHA CI 与成功后的 Release dispatch；该旧链路已由 2026-08-17 的 direct Release 设计替代。
-- 2026-08-14：开始整理日期化发布重试路由；当时 Create workflow 保留新日期 tag 的一次性创建职责，Retry Existing Release 负责已有 tag 的校验和 CI/Release dispatch；该旧链路已由 2026-08-17 的 direct Release 设计替代。
-- 2026-08-14：刷新本地 PTY 满事件队列 shutdown 路由；正常输出保持有界反压，owner 取消优先终止待投递事件，process-group SIGKILL 成功后不再进入 child-killer 的额外等待路径。
-- 2026-08-13：完成终端连续 resize 边界修复；共享 `TerminalSize` 统一模型、AppState、local/SSH/Telnet backend 的尺寸上限，SSH 交互 PTY 明确启用 `OPOST/ONLCR`，硬换行列归零和真实 loopback PTY mode 回归通过。旧版普通高度顶部对齐/余量留底的视口规则已在 2026-08-17 改为向上取整并底部锚定；模型扩容语义不变。
-- 2026-08-14：终端纵向扩容直接使用锁定 `alacritty_terminal` 语义；只恢复真实 scrollback，历史不足时内容留在顶部、空行留在底部，禁止模型层强制底部锚定。
-- 2026-08-12 17:31 +0800：补充界面语言配置、内嵌简体中文目录、独立保存/多窗口 locale 切换及翻译校验路由。
-- 2026-08-12 21:13 +0800：补充 GitHub Release Highlights 生成器、发布正文与 CI Python 回归路由。
-- 2026-08-12 22:20 +0800：刷新本地 SFTP 文件打开路由，标注 identity 与可观察元数据 fingerprint 的替换拒绝边界；快速同长度原地修改不一定改变平台可查询的时间字段。
-- 2026-08-12 22:55 +0800：更新本地文件打开回归路由，原地长度变化是跨平台确定性断言；保留已验证 handle 的私有缓存复制边界。
-- 2026-08-13 06:06 +0800：刷新 SFTP 递归下载、Local files 原子发布、三状态 Transfers 页面及 worker-lifetime pause/resume 路由。
-- 2026-08-13：新增独立版本化 workspace snapshot 路由；`src/config/workspace.rs` 校验 Tab/window/pane 引用和终端/路径上限，`src/app/state/tabs.rs` 与 `src/app/panes.rs` 负责 DTO 导出/恢复，`src/app.rs` 负责启动重建 worker 和退出原子保存；不保存 live connection、凭据或临时 host-key 状态。
-
-- 2026-09-26：窗口保持增加可选普通几何/最大化 DTO、显示器/DPI 恢复、防抖串行 checkpoint 和退出 flush；启动优先私有快照，补齐独立 SFTP 和非活动分屏恢复。
-- 2026-09-26：系统文件管理器拖入坐标桥接扩展到 Windows Win32 与 Linux X11；Wayland/其他平台回退到当前外部 hover 的 Winit 坐标。无可靠坐标、非 Remote files 区域或未就绪 SFTP 状态均拒绝上传，不按活动目录猜测；新增 `src/app/native_file_drop.rs` 与 Linux `x11-dl` 依赖，Windows/Linux 原生 GUI 由 CI 和用户验收。
-
-- 2026-10-03：补充 application 光标隐藏固定 24 ms 合并、timer 无后续输出超时、快照/生命周期边界；核对并修正文档中 software 未聚焦 FPS 描述，现有实现对所有 renderer 的未聚焦终端限帧。
-
-- 2026-10-11：新增外部编辑副本/监听与 guarded 字节下载/原子发布模块及回归；移除内置 SFTP 文本框和文本回调，Slint 只发布路径/状态。
-- 2026-10-11：主/独立窗口动作图标改用 `ui/icons/` 与 Theme 共用源；SFTP 重命名从顶部迁入远端行菜单，经 `SftpRenameDialog`/OverlayHost 捕获原始 Tab/路径和名称草稿，应用层复核目标后发送既有 worker 操作。
-- 2026-10-12：增加 build/languages.rs 和 config/language.rs 路由；目录元数据自动生成语言清单，Settings 使用临时索引，配置保存稳定 locale，系统匹配支持 script/region 和繁体回退。
-- 2026-10-12：新增 de/es/fr/ko/pt-BR/zh-TW 六种语言，各 547 UI + 118 search keys；繁体地区匹配 zh-TW，葡萄牙语跨地区默认巴西目录；搜索表与 headless 选取测试覆盖全部注册语言。
-- 2026-10-12：新增 ru/uk/en-GB 完整目录；uk 为乌克兰语，英国使用 en-GB；英式显示拼写保持稳定英文路由，en-US/en-AU 等仍选择源英文。
+- 2026-10-20 09:08 +0800

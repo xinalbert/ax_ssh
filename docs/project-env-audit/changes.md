@@ -1257,3 +1257,13 @@
 - 受影响文件：`src/app/behavior_tests.rs`、`src/app/behavior_tests/terminal_wheel.rs`、双语开发说明和环境/实施记录。
 - 更新后的命令或环境：复用锁定 russh/Tokio/Slint、固定测试 host key/凭据、bounded loopback listener/队列及标准 Cargo 门禁；没有新增软件、运行时依赖或 CI targets。
 - 验证结果：两项接收测试及标准 fmt/check/严格 all-target Clippy/872 项测试通过，无 warning；10 个相对链接和本轮 tracker 记录有效，84 项历史问题无新增。新测试在原生 Windows/Linux CI 的执行与实际 OS 鼠标/Codex 复现分别保留，不以本机结果替代。
+
+
+## 2026-10-20 09:08 +0800 全项目整理环境快照
+
+- 触发原因：用户要求全项目按规范整理，现有 current 混排多年任务和旧版依赖/目标事实。
+- 执行内容：用 Cargo/lock/CI、本机 CLI 和最终测试核对当前状态；旧 current 的 105363 字节逐字归档到 `history-before-2026-10-20.md`，新 current 只保留当前环境、命令、验证边界及历史链接。
+- 影响文件：`docs/project-env-audit/current.md`、`docs/project-env-audit/history-before-2026-10-20.md`、`docs/project-env-audit/changes.md`。
+- 环境事实：Rust 2024/MSRV 1.92.0、锁定 Slint 1.18.1/russh 0.64.1 和升级后的媒体依赖；本机 rustc/Cargo 1.99.0、Python 3.14.6，ARM64 macOS/Windows MSVC Rust targets；本轮未安装工具链/SDK/包或调整依赖。
+- 验证：布局移动后的 880 项 Rust 回归已通过；基线 fmt/check/严格 Clippy、665 × 11 翻译、生成图标和本地链接已通过，最终源码及新增校验脚本收尾见实施记录。
+- 剩余边界：无 Windows/Linux 原生环境，不执行非原生 Intel 程序；真实设备/keyring/GUI/远端仍由对应平台验收，不启动应用或自主截图。

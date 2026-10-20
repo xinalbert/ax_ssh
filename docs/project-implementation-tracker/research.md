@@ -1,5 +1,7 @@
 # 项目研究记录
 
+历史时间字段说明：2026-10-20 整理时，缺失的精确时刻优先依据原始标题补齐；否则使用可追溯的 Git 入库时间并逐条标明依据。原始事件日期/时区保留，入库时间不等同事件发生时间，实施内容与结论未改写。允许缺少时间字段的旧月份条目保持原样。
+
 ## 2026-10-13 标准光标显隐与有界重绘
 
 - 时间：2026-10-13 17:55 +0800
@@ -22,7 +24,10 @@
 
 ## 2026-10-01 标准终端的输入回底与刷新视口链路
 
-- 时间：2026-10-01
+- 时间：2026-10-01 20:33 +0800
+- 时间依据：本文件首次收录该标题的 Git 提交 `779726a691d6`；仅表示记录入库时间，原事件具体时分未记录。
+
+- 原始时间：2026-10-01
 - 检索问题：标准 terminal 如何在用户查看 scrollback 时处理持续输出、键盘输入和粘贴，避免视口跳动？
 - 检索原因：用户要求按标准 terminal 行为修复历史视口中的输入、回车和粘贴交互，并区分输出刷新与用户输入的滚动责任。
 - 来源列表：[xterm.js CoreService](https://github.com/xtermjs/xterm.js/blob/master/src/common/services/CoreService.ts)；[xterm.js Viewport](https://github.com/xtermjs/xterm.js/blob/master/src/browser/Viewport.ts)；[Alacritty event.rs](https://github.com/alacritty/alacritty/blob/master/alacritty/src/event.rs)；[WezTerm scroll_to_bottom_on_input](https://github.com/wezterm/wezterm/blob/main/docs/config/lua/config/scroll_to_bottom_on_input.md)。
@@ -41,6 +46,9 @@
 - 未解决问题：Windows/Linux 原生 GUI 与网络挂载目录需目标平台验收；网络目录事件缺失时仍须手动刷新。
 
 ## 2026-09-30 交互终端高延迟输入标准
+
+- 时间：2026-10-01 12:47 +0800
+- 时间依据：本文件首次收录该标题的 Git 提交 `cc31a5355f43`；仅表示记录入库时间，原事件具体时分未记录。
 
 - 检索问题：标准 SSH/TCP 和主流终端如何处理高 RTT 下的按键延迟，AxSSH 应采用哪些低风险调整？
 - 检索原因：用户要求按相关建议调整项目的远端输入体验；需要区分协议标准、TCP 小包优化和预测回显架构。
@@ -73,6 +81,9 @@
 - 验证边界：离线单元/状态/Slint 编译验证协议数据流与有界性；真实 TUI、光标与下划线视觉、平台 PTY 像素行为仍由目标平台用户验收。
 
 ## 2026-09-15 全应用键盘事件与终端输入协议
+
+- 时间：2026-09-16 08:57 +0800
+- 时间依据：本文件首次收录该标题的 Git 提交 `7ee3722159e9`；仅表示记录入库时间，原事件具体时分未记录。
 
 - 检索问题：终端输入、快捷键录制、普通文本/IME、物理数字小键盘和日志是否应共享同一个应用级键盘事件；AxSSH 应如何参考 AxShell 以及其它终端程序的输入分层？
 - 检索原因：原实现的 Slint callback 仍拆成多个 `bool` 与原始文本，`log_keyboard_event` 会重新构造终端键，`NormalizedKeyboardInput.key` 也直接使用终端专用 `TerminalKey`，导致物理键身份、逻辑键语义和终端编码边界混在一起。
@@ -107,6 +118,9 @@
 - 未解决问题：AxSSH 尚未实现证书颁发机构信任，因此证书服务端仍不可用；`rustsec/audit-check` 需在 GitHub-hosted runner 访问 advisory 数据库，目标平台真实 SSH/agent/SFTP 互操作仍需手工验收。
 
 ## 2026-08-25 macOS Software damage-aware tile present
+
+- 时间：2026-08-25 21:35 +0800
+- 时间依据：本文件首次收录该标题的 Git 提交 `001e9c1e3a5e`；仅表示记录入库时间，原事件具体时分未记录。
 
 - 检索问题：如何在 macOS Software renderer 中缩小 damage 提交范围，同时保持 CPU framebuffer 复用和 Core Animation 异步读取安全？
 - 检索原因：用户 sample 显示完整 `CGImage` clone、CoreGraphics image-data lock 和 vImage color conversion 是 Software 路径主要热点，需要评估 tile 化提交是否能降低成本。
@@ -149,6 +163,9 @@
 
 ## 2026-08-23 Fontique 路径字体源与内存占用
 
+- 时间：2026-08-23 11:54 +0800
+- 时间依据：本文件首次收录该标题的 Git 提交 `7383ae6d226d`；仅表示记录入库时间，原事件具体时分未记录。
+
 - 检索问题：Maple/Iosevka/Monaspace 是否需要把完整 TTF 读入 `Vec<u8>`，以及改用路径源后能否降低应用侧常驻内存。
 - 检索原因：用户提供的 SoftwareRenderer sample 中，Maple Regular/Bold 两个 anonymous malloc 合计约 39.3 MiB，与资源文件大小相符；当前 `src/app/font_bridge.rs` 先 `fs::read` 再通过 Fontique `Blob` 注册。
 - 来源列表：锁定 Fontique 0.10.0 的 `Collection::load_fonts_from_paths`、`SourceKind::Path`、`SourceCache`、`font::FontInfo` 实现；Slint 1.17.1 `fontique_010::shared_collection` 文档；用户提供的 2026-08-23 10:04 sample 及 `assets/fonts/` 文件大小。
@@ -181,6 +198,9 @@
 
 ## 2026-08-22 Slint 脏区域/脏行刷新上游状态
 
+- 时间：2026-08-22 17:57 +0800
+- 时间依据：本文件首次收录该标题的 Git 提交 `c5eed6f7c12b`；仅表示记录入库时间，原事件具体时分未记录。
+
 - 检索问题：Slint 对单行 model 更新、partial rendering 和多矩形 dirty region 的处理是否仍有已知问题，相关修复是否已合并，以及当前锁定版本是否包含修复。
 - 检索原因：AxSSH 依赖 Slint 1.17.1，终端输出已在应用层按脏 terminal 和稳定行 model 做增量更新；需要确认上游 renderer 是否仍会扩大脏区域，避免把应用层优化误判为 Slint 已支持按行提交。
 - 来源列表：Issue/PR [#2143](https://github.com/slint-ui/slint/issues/2143)、PR [#4268](https://github.com/slint-ui/slint/pull/4268)、PR [#9467](https://github.com/slint-ui/slint/pull/9467)、PR [#9743](https://github.com/slint-ui/slint/pull/9743)、PR [#10725](https://github.com/slint-ui/slint/pull/10725)、PR [#11441](https://github.com/slint-ui/slint/pull/11441)、Issue [#12752](https://github.com/slint-ui/slint/issues/12752)、已合并 PR [#12758](https://github.com/slint-ui/slint/pull/12758)、仍开放 PR [#12656](https://github.com/slint-ui/slint/pull/12656)、仍开放 PR [#12806](https://github.com/slint-ui/slint/pull/12806)、Slint [v1.17.1](https://github.com/slint-ui/slint/releases/tag/v1.17.1)。
@@ -189,6 +209,9 @@
 - 未解决问题：#12758 合并时点晚于 v1.17.1（2026-07-07），当前锁定 v1.17.1 的 `internal/backends/winit/renderer/sw.rs` 仍使用 `bounding_box_size()`；需要在后续 Slint patch/nightly 发布后重新检查源码或锁定 commit，并在 macOS GPU/software 与 Linux Wayland 分别验证。下次复查可用 `curl` 查询 PR `merged_at`、release tag 和 `raw.githubusercontent.com/slint-ui/slint/<ref>/internal/backends/winit/renderer/sw.rs` 是否已改为 `region.iter()`。
 
 ## 2026-08-14 终端纵向扩容与 scrollback 语义
+
+- 时间：2026-08-14 08:07 +0800
+- 时间依据：本文件首次收录该标题的 Git 提交 `7461716660cc`；仅表示记录入库时间，原事件具体时分未记录。
 
 - 检索问题：普通 shell 终端在纵向放大、光标位于原底行且没有可恢复历史时，新增的空行应位于顶部还是底部？
 - 检索原因：用户截图显示 AxSSH 将普通输出下推至窗口底部并在顶部留下大面积空白，需要判定这是否符合主流终端行为后再修改缓冲区层。
@@ -358,6 +381,9 @@
 
 ## 2026-08-14 GitHub Actions Retry And Same-Day Release Tags
 
+- 时间：2026-08-14 10:29 +0800
+- 时间依据：本文件首次收录该标题的 Git 提交 `1666d166cc50`；仅表示记录入库时间，原事件具体时分未记录。
+
 - 检索问题：同一日期已有 release tag 时，CI 或平台打包失败需要安全地重试；若需要第二个同日发行，应如何命名并保持包版本可区分？
 - 检索原因：已有 `2026-08-14` 的 CI 和 Release 失败后不能安全地覆盖 tag；需要确定能重试已有 tag、又能创建当天第二个独立发行的 GitHub Actions 约定。
 - 来源列表：GitHub Docs, [Triggering a workflow](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/trigger-a-workflow), [Reusing workflows](https://docs.github.com/en/actions/how-tos/sharing-automations/reusing-workflows), [Using concurrency](https://docs.github.com/en/actions/how-tos/write-workflows/choose-when-workflows-run/control-workflow-concurrency)；用户指定的 AxShell 参考仓库近期 tag 使用 `v2026.7.16-1`。
@@ -385,6 +411,9 @@
 - 未解决问题：Skia cache 的实际 CPU 收益和 Retina 纹理 footprint 必须用相同窗口、pane 数和持续输出 A/B；software 模式不预期从 layer cache 获益，目标平台视觉一致性由用户验收。
 
 ## 2026-08-23 连续窗口 resize 的合并与刷新范围
+
+- 时间：2026-08-24 07:32 +0800
+- 时间依据：本文件首次收录该标题的 Git 提交 `38b3a2a1d445`；仅表示记录入库时间，原事件具体时分未记录。
 
 - 检索问题：Slint/Winit 及成熟终端在连续窗口 resize 期间如何避免重复 surface/model 重排和闪烁？
 - 检索原因：用户观察到改变窗口大小时画面闪烁、不流畅，需要确认应用层 resize 请求与 renderer surface 重配置的低风险处理顺序。
@@ -469,7 +498,10 @@
 
 ## 2026-10-02 备用屏幕滚轮与复制光标行首
 
-- 时间：2026-10-02 +0800
+- 时间：2026-10-02 22:59 +0800
+- 时间依据：本文件首次收录该标题的 Git 提交 `f5dda6afb0f9`；仅表示记录入库时间，原事件具体时分未记录。
+
+- 原始时间：2026-10-02 +0800
 - 检索问题：保持通用终端行为时，能否在滚轮移动复制光标后固定行首？
 - 检索原因：用户确认滚轮修复可用，进一步要求避免光标在不同行尾左右跳动。
 - 来源列表：[xterm alternateScroll](https://www.invisible-island.net/xterm/manpage/xterm.html)；[tmux start-of-line](https://man.openbsd.org/tmux#start-of-line)；本机 tmux 3.6a 隔离 socket 默认配置实验。
@@ -479,7 +511,10 @@
 
 ## 2026-10-02 滚轮移动后的目标行首复核
 
-- 时间：2026-10-02 +0800
+- 时间：2026-10-02 22:59 +0800
+- 时间依据：本文件首次收录该标题的 Git 提交 `f5dda6afb0f9`；仅表示记录入库时间，原事件具体时分未记录。
+
+- 原始时间：2026-10-02 +0800
 - 检索问题：怎样让每一步行首动作作用于上下移动后的目标行？
 - 检索原因：用户要求修正滚轮行首行为；前置 Home 作用于原行，不能仅凭发送字节断言目标行位置。
 - 来源列表：沿用前轮核查的 [xterm Wheel mice](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html#h2-Wheel-mice)；本机 tmux 隔离 socket、空配置和 emacs copy-mode 的坐标实验；`src/app/terminal_bridge.rs`。
@@ -530,6 +565,9 @@
 
 ## 2026-10-11 终端 agent 的剪贴板与麦克风链路
 
+- 时间：2026-10-11 10:23 +0800
+- 时间依据：本文件首次收录该标题的 Git 提交 `94f6a10eb536`；仅表示记录入库时间，原事件具体时分未记录。
+
 - 检索问题：文本/图片剪贴板、SSH 远端麦克风和 Codex CLI 的标准能力如何接合？
 - 检索原因：用户要求核对标准实现，原有协议尺寸/授权有缺口，音频与图片未实现。
 - 来源列表：[xterm OSC 52](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html)、[arboard](https://docs.rs/arboard/3.6.1/arboard/struct.Clipboard.html)、[RFC 4254](https://www.rfc-editor.org/rfc/rfc4254.html)、[CPAL 0.17.3](https://docs.rs/crate/cpal/0.17.3/source/README.md)、[PipeWire pipe source](https://pipewire.pages.freedesktop.org/pipewire/page_pulse_module_pipe_source.html)、[Apple 麦克风用途](https://developer.apple.com/documentation/bundleresources/information-property-list/nsmicrophoneusagedescription)、[whisper.cpp CLI](https://github.com/ggml-org/whisper.cpp/tree/master/examples/cli)、[Codex configuration](https://learn.chatgpt.com/docs/config-file/config-reference)。
@@ -549,6 +587,9 @@
 
 ## 2026-10-11 23:21 +0800 原会话精确中断接口
 
+- 时间：2026-10-11 23:21 +0800
+- 时间依据：原始标题已明确记录的时间；本轮只补机器字段。
+
 - 检索问题：如何只中断指定原会话的执行，并确认接手后不再同时修改项目。
 - 检索原因：用户明确授权中断原会话；本机控制 socket 的原始 JSONL 请求未成功，需要确认其真实传输协议。
 - 来源列表：[OpenAI Codex App Server](https://learn.chatgpt.com/docs/app-server)；本机已安装 Codex 的 CLI help 与生成的 TurnInterruptParams/ThreadReadParams schema。
@@ -557,6 +598,9 @@
 - 未解决问题：无；用户视觉与 Windows/Linux 原生验收仍按 WI3 保留。
 
 ## 2026-10-12 标准系统录音请求与按需 SSH 音频
+
+- 时间：2026-10-12 08:42 +0800
+- 时间依据：本文件首次收录该标题的 Git 提交 `f359a9713a6d`；仅表示记录入库时间，原事件具体时分未记录。
 
 - 检索问题：如何让任意使用系统音频接口的 CLI 触发采集，避免匹配某个 CLI 的命令或显示文本。
 - 检索原因：用户明确要求 CLI 自动调用及标准化，现有手动媒体行和连续采集不符合该要求。

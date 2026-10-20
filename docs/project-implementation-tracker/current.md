@@ -2,63 +2,66 @@
 
 ## 当前目标
 
-- 目标 ID：20261016-x11-authentication-isolation
-- 目标：把远端 X11 setup 的逐连接 cookie 校验移到本机 X server 准备之前，避免无效请求触发本机探测或自动启动。
-- 交付物：SSH transport 内的有界认证门禁、确定性回归、双语架构/使用说明、研究/实施记录和两笔本地提交。
+- 目标 ID：20261020-project-organization
+- 目标：按 AGENTS、Rust/Slint 架构与工程验证要求整理全项目的模块布局、文档事实、历史元数据和持续校验入口。
+- 交付物：职责清晰且行为不变的测试布局、可追溯的历史记录整理、当前环境/双语工程说明、仓库静态校验及验证结果；按用户后续授权分组本地提交。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/ssh/x11.rs`、必要的 SSH 回归、双语架构/使用说明和实施记录。
-- 不在本轮范围内：服务器配置修改、用户 profile/default 变更、禁用系统 launchd、UI 修改、依赖升级、推送或安装版替换。
-- 所有权：SSH transport 拥有 channel、cookie、setup 校验和本机准备顺序；现有 XServerPlan 仍负责平台发现/启动，UI 不接触认证数据。
-- 安全：先确认 SSH channel 以允许发送 X11 setup，再在长度/超时上限内核验当前连接的 cookie；通过前不触碰本机 DISPLAY/xauth/socket/provider。无效请求只结束自己的 relay，不中断 SSH，不放宽主机密钥或本机授权。
+- 当前范围：项目自有 `src/`、工程脚本/CI、双语文档、环境与实施记录；审查 Cargo/Slint/平台边界的一致性。
+- 不在本轮范围内：功能/视觉重设计、配置与协议变化、依赖/工具链升级、vendor/参考项目源码整理、安装版替换、推送和发布。
+- 所有权：测试移入原模块的私有 tests 子模块，保留生成类型唯一声明、UI/领域/transport 边界；工程校验不进入运行时或引入额外依赖。
+- 安全：保留 host-key 默认拒绝、凭据零化、X11 认证前置、有界队列和 worker 取消/关闭；文档只更正可核实事实，历史原始内容与时间来源保持可追溯。
 
 ## 当前状态
 
 - 阶段：已完成
 - 开工判定：允许开工
-- 是否需要联网：是，已完成
+- 是否需要联网：否
 - 多 agent：未使用
 
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| XI1 | completed | 当前链路、现场日志和标准边界 | RFC/OpenSSH/sshd_config/XQuartz/launchd 与本机源码 | 错误 cookie 日志不能识别远端 UID/PID；OpenSSH 也先连接本机 display |
-| XI2 | completed | 认证先于本机副作用的最小实现 | 有界 setup、零化 cookie、取消/失败和 untrusted 到期边界审阅 | 保留 untrusted 在 SSH 请求前生成受限授权的必要准备 |
-| XI3 | completed | 认证隔离及真实 relay 回归 | 错误/跨连接 cookie、畸形/截断/超时、分片/双字节序及数据完整性 | 注入准备步骤和 loopback 假本机 peer；13 项聚焦测试通过 |
-| XI4 | completed | 仓库 Cargo 门禁 | focused/fmt/check/严格 all-target Clippy/test/diff | 399 library + 481 binary 共 880 项通过；本机 ARM64 macOS |
-| XI5 | completed | 双语说明、地图和跟踪收尾 | 12 条相对链接、skill/current/map/新增记录及完整 diff 审阅 | 完整 tracker 的 84 项历史错误无新增；原生/真实 X11 待验收 |
-| XC1 | completed | X11 修复、回归和双语说明提交 | 显式暂存并审阅完整 staged diff | 5a9c6d2；沿用上一轮已通过的源码，不重复测试或编译 |
-| XC2 | completed | 研究/实施记录提交及收尾 | current/map/新增记录、相对链接、diff 和最终状态 | 本记录随第二笔提交归档；仅本地提交，不推送 |
+| P1 | completed | 全项目结构/边界/依赖/CI/文档与本机基线 | 清洁 HEAD、Cargo、地图、架构、静态扫描与现有生成检查 | 181 Rust/46 Slint/10 Python 文件；84 项历史时间字段错误 |
+| P2 | completed | 较大内联测试移到 10 个私有子模块 | 生产前缀/测试格式化正文逐字对照；880 项测试通过 | 132 个测试函数迁移；三项图标测试归入 settings tests 命名空间 |
+| P3 | completed | 文档事实、环境快照与历史元数据整理 | 两份旧快照逐字归档；历史正文可还原；严格 tracker 通过 | 84 项错误归零：5 项标题时刻、79 项标明 Git 入库依据 |
+| P4 | completed | 仓库静态校验和 CI/发布预检生成检查 | 4 项新校验回归、26 项 Python 回归、现有翻译/图标检查 | Python 标准库，保持原生目标矩阵与 Cargo 门禁 |
+| P5 | completed | Cargo 门禁、整体审阅和实施收尾 | fmt/check/严格 all-target Clippy/880 Rust + 26 Python 及完整文档校验 | 本机 ARM64 macOS；其它平台与 GUI 不扩大结论 |
+| C1 | completed | 私有测试模块与配套架构说明提交 | 显式暂存、staged diff 与原始测试正文对照 | `29eddc6`；沿用已完成的 Cargo 验证 |
+| C2 | completed | 仓库校验、CI 与开发说明提交 | 显式暂存、完整 staged diff/check | `8cc841f`；沿用已完成的 Python/工作流验证 |
+| C3 | completed | 当前快照、历史修复与实施记录提交 | 归档逐字对照、文档/tracker/diff 复核；提交后核对最终工作区 | 本记录随第三笔提交归档；仅本地提交，不推送 |
 
 ## 已完成
 
-- 干净基线为 `b0fe55c`；前轮六项依赖升级已单独提交，不混入本次。
-- 基线 trusted 请求到达后先准备/探测本机 server，再校验 setup；连接 launchd DISPLAY socket 本身也可能启动 XQuartz。现已将认证前移到所有逐通道本机准备之前。
-- RFC 要求 fake cookie 校验/替换，未要求本机连接与认证的具体先后；OpenSSH 同样先连接 display。本轮收紧为 AxSSH 的防副作用隔离，不误称 OpenSSH 已采用该顺序。
-- 每个 trusted 连接已有随机 cookie，队列和活动 relay 各限八个；可沿用这些边界完成最小顺序调整。
-- 新增五项认证隔离/relay 回归，使用内存分片流和随机 loopback 端口的假本机 peer；不访问真实 DISPLAY、xauth 或启动图形程序。
-- 配套双语架构/使用说明和地图已更新，明确错误 cookie 不能触发本机准备，以及正确 cookie、untrusted 预授权和服务器 UID 隔离的边界。
-- 用户授权提交后，修复/回归/双语说明已提交为 `5a9c6d2`；剩余四份研究/实施记录独立归档，源码未再修改，本轮未重复测试或编译。
+- 基线 `4cdf69c` 工作区干净。Rust 2024/MSRV 1.92.0、Slint 1.18.1、本地 vendor 补丁与已升级依赖均与 Cargo 一致。
+- 当前本机 rustc/Cargo 1.99.0；只安装 ARM64 macOS 与 Windows MSVC Rust target，Windows SDK/执行环境和 Linux 原生环境不可用。
+- 默认 locked/offline check、fmt、665 × 11 翻译、生成翻译和系统图标检查通过；生产代码初筛未发现裸 unwrap/expect、无界通道或 mod.rs。
+- 39 份工程 Markdown 的 141 条相对链接初查通过；环境 current 混入大量旧状态，且 arboard/rubato 事实滞后；架构 X11 职责表与实际委托本机启动的描述冲突。
+- 九个实现文件的大型测试块移至十个私有文件；生产前缀和格式化后的测试正文逐字比对一致，平台 cfg、测试辅助边界与功能保持。三项原顶层图标测试只调整为标准 tests 命名空间。
+- 历史 84 项时间字段补充可核实元数据，保留原始日期/时区、标题和实施内容；5 项使用原始标题的确切时刻，79 项明确标为 Git 入库时间，允许缺失时间的旧月份条目保持原样。
+- 环境 current 从 744 行收敛为当前快照，地图从 426 行收敛为当前路由；两份原文件逐字归档，旧“本轮/当前”结论不再覆盖新事实。
+- 新增只读仓库校验和四项回归，覆盖本地路径/编码/越界、代码示例、文档配对、入口和参考树边界；CI 和发布预检复用，并补入现有生成图标检查。
+- 当前源码完整 Cargo 门禁通过，26 项 Python 回归和 Python 3.10 语法检查通过；修正新校验脚本在 macOS /var 与 /private/var 表示差异下的路径归一化。五目标 CI/发布预检 YAML、技能和最终差异检查通过；无额外依赖、公开 API 或功能/视觉修改。
+- 用户后续授权本地提交：测试布局/架构说明为 `29eddc6`，校验脚本/CI/开发说明为 `8cc841f`；当前快照、历史元数据和实施记录作为第三笔归档，未再修改实现或重复运行测试/编译。
 
 ## 验证
 
-- 已完成：13 项 X11 聚焦测试（新增五项）和最终源码的 880 项全量测试（399 library + 481 binary）通过；fmt、locked/offline check、严格 all-target Clippy 和 diff 检查通过。错误/跨连接 cookie、畸形/截断/超时/取消、大小端逐字节分片及假本机 TCP peer 的授权替换/no-auth/后续数据/双向 EOF 均已验证。八份 Markdown 的 12 条相对链接和项目 skill/current/map/新增记录通过；完整 tracker 的 84 项历史错误集未变化。
-- 未完成：真实 XQuartz/远端图形应用手工验收及 Windows/Linux 原生 CI；不将本机假 peer 结果扩大为原生图形启动验收。
+- 已完成：399 library + 481 binary 共 880 项 Rust 测试和最终脚本的 26 项 Python 回归通过；fmt、locked/offline check、严格 all-target Clippy、53 份 Markdown/源入口、665 × 11 翻译、116 项图标生成、完整 tracker、skill、CI/release YAML、Python 3.10 语法及 diff/新增文件空白检查通过。9 个生产前缀/测试正文、两份旧快照逐字验证，84 项历史变更仅补元数据、743 条其它历史原样。
+- 未完成：Windows/Linux 原生 CI 和真实系统 GUI/设备/远端验收；本机没有对应执行环境，不将本机通过扩大为其它平台已通过。
 
 ## 风险与阻塞
 
-- 客户端只能确认持有此连接 cookie，无法识别远端真实 UID/PID；持有正确 cookie 的后台进程仍可触发启动。
-- `X11UseLocalhost yes` 只限制服务器 loopback，并不独立实现同机按用户隔离；服务器权限/namespace 改造不属于本轮客户端改动。
-- Untrusted 生成受限授权本身需要本机 server，仍可能在建立 shell 前启动；不以隔离名义降级至 trusted/no-auth。
-- 本机仅可原生执行 ARM64 macOS，真实 XQuartz/Windows/Linux GUI 生命周期需外部验收；不读取自建应用截图作为证据。
+- 历史条目缺少精确事件时间，不能把猜测时刻写成事实；若以 Git 入库时间补机器字段，必须逐条标明来源并保留原始时间/内容。
+- 本机不具备 Windows/Linux 原生执行环境，不以源码共同分支或 Rust target 安装代替原生验收。
+- 参考 checkout 与 vendor 保持独立边界；不访问真实 keyring、设备或远端，不自主截图。
 
 ## 下一步
 
-- 本记录独立提交后核对两笔提交及最终工作区；真实 X11 和 Windows/Linux 验收边界保留。本轮不推送或替换安装版。
+- 本记录随第三笔提交归档后核对三笔提交与最终工作区；后续由原生 CI 验证其它平台。不推送、创建 tag 或替换安装版。
 
 ## 最后更新时间
 
-- 2026-10-16 15:15 +0800
+- 2026-10-20 09:37 +0800
