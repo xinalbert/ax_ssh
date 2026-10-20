@@ -189,7 +189,7 @@ fn terminal_notice_shows_retry_for_exhausted_reconnects() {
     assert!(notice.visible);
     assert_eq!(notice.severity, "error");
     assert_eq!(notice.primary_action, "retry");
-    assert_eq!(notice.primary_label, "Retry");
+    assert!(!notice.restart);
     assert_eq!(notice.secondary_action, "close-tab");
 }
 
@@ -197,10 +197,10 @@ fn terminal_notice_shows_retry_for_exhausted_reconnects() {
 fn terminal_notice_omits_repeated_failure_title() {
     let notice = TerminalNoticeSnapshot::failed(
         "Connection failed: Network is unreachable (os error 51)",
-        "Retry",
+        false,
     );
 
-    assert_eq!(notice.title, "Connection failed");
+    assert_eq!(notice.kind, TerminalNoticeKind::Failed);
     assert_eq!(notice.message, "Network is unreachable (os error 51)");
 }
 
@@ -299,7 +299,7 @@ fn terminal_notice_allows_local_shell_restart_after_failure() {
 
     assert!(notice.visible);
     assert_eq!(notice.primary_action, "retry");
-    assert_eq!(notice.primary_label, "Restart");
+    assert!(notice.restart);
     assert_eq!(notice.secondary_action, "close-tab");
 }
 
@@ -321,7 +321,7 @@ fn terminal_notice_stays_with_its_tab_when_switching_tabs() {
     assert!(!state.active_snapshot().notice.visible);
 
     assert!(state.activate_tab(first));
-    assert_eq!(state.active_snapshot().notice.primary_label, "Restart");
+    assert!(state.active_snapshot().notice.restart);
 }
 
 #[test]

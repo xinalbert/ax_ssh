@@ -111,12 +111,11 @@ pub(in crate::app) fn apply_active_snapshot(
     let notice = snapshot.notice;
     ui.set_active_tab_notice_visible(notice.visible);
     ui.set_active_tab_notice_severity(notice.severity.into());
-    ui.set_active_tab_notice_title(notice.title.into());
+    ui.set_active_tab_notice_kind(terminal_notice_kind(notice.kind));
     ui.set_active_tab_notice_message(notice.message.into());
     ui.set_active_tab_notice_primary_action(notice.primary_action.into());
-    ui.set_active_tab_notice_primary_label(notice.primary_label.into());
+    ui.set_active_tab_notice_restart(notice.restart);
     ui.set_active_tab_notice_secondary_action(notice.secondary_action.into());
-    ui.set_active_tab_notice_secondary_label(notice.secondary_label.into());
     if let Some(editor) = snapshot.editor {
         ui.set_editor_credential_storage(editor.credential_storage.clone().into());
         ui.set_editor_default_credential_storage(editor.default_credential_storage.clone().into());
@@ -896,16 +895,25 @@ fn update_terminal_render_lines_dirty(
     true
 }
 
+fn terminal_notice_kind(kind: state::TerminalNoticeKind) -> TerminalNoticeKind {
+    match kind {
+        state::TerminalNoticeKind::None => TerminalNoticeKind::None,
+        state::TerminalNoticeKind::ClipboardRead => TerminalNoticeKind::ClipboardRead,
+        state::TerminalNoticeKind::Reconnecting => TerminalNoticeKind::Reconnecting,
+        state::TerminalNoticeKind::Ended => TerminalNoticeKind::Ended,
+        state::TerminalNoticeKind::Failed => TerminalNoticeKind::Failed,
+    }
+}
+
 fn terminal_notice_view(notice: TerminalNoticeSnapshot) -> TerminalNoticeViewState {
     TerminalNoticeViewState {
         visible: notice.visible,
         severity: notice.severity.into(),
-        title: notice.title.into(),
+        kind: terminal_notice_kind(notice.kind),
         message: notice.message.into(),
         primary_action: notice.primary_action.into(),
-        primary_label: notice.primary_label.into(),
+        restart: notice.restart,
         secondary_action: notice.secondary_action.into(),
-        secondary_label: notice.secondary_label.into(),
     }
 }
 

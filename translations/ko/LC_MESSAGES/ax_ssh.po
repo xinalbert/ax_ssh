@@ -55,6 +55,9 @@ msgstr ">_"
 msgid "A focused terminal workspace for SSH, Telnet, serial, and local shell sessions."
 msgstr "SSH, Telnet, 직렬 연결 및 로컬 셸을 위한 터미널 작업 공간입니다."
 
+msgid "A remote application wants to read your default clipboard."
+msgstr "원격 애플리케이션이 기본 클립보드를 읽으려고 합니다."
+
 msgid "APPLICATION"
 msgstr "애플리케이션"
 
@@ -75,6 +78,9 @@ msgstr "강조 / 포커스"
 
 msgid "Add Server"
 msgstr "서버 추가"
+
+msgid "Allow"
+msgstr "허용"
 
 msgid "Allow local connections without X authority"
 msgstr "X 인증 없이 로컬 연결 허용"
@@ -220,6 +226,9 @@ msgstr "설정 검색 지우기"
 msgid "Clear the saved password for {0} now? This takes effect immediately. Your other edits will remain unsaved."
 msgstr "{0}의 저장된 비밀번호를 지금 지우시겠습니까? 즉시 적용되며 다른 변경 사항은 저장되지 않은 상태로 남습니다."
 
+msgid "Close"
+msgstr "닫기"
+
 msgid "Close Current Tab"
 msgstr "현재 탭 닫기"
 
@@ -270,6 +279,12 @@ msgstr "연결됨 · SSH 지연 시간 측정 시간 초과"
 
 msgid "Connected · SSH latency unavailable"
 msgstr "연결됨 · SSH 지연 시간 사용 불가"
+
+msgid "Connection failed"
+msgstr "연결 실패"
+
+msgid "Connection lost"
+msgstr "연결 끊김"
 
 msgid "Connection protocol"
 msgstr "연결 프로토콜"
@@ -384,6 +399,9 @@ msgstr "{0} 및 저장된 자격 증명을 삭제하시겠습니까?"
 
 msgid "Delete {0}? Servers in this group will move to Ungrouped."
 msgstr "{0}을(를) 삭제하시겠습니까? 이 그룹의 서버는 그룹 없음으로 이동합니다."
+
+msgid "Deny"
+msgstr "거부"
 
 msgid "Detect again on next connection"
 msgstr "다음 연결 시 다시 감지"
@@ -979,6 +997,9 @@ msgstr "원격 및 로컬 파일 영역 크기"
 msgid "Remote channels"
 msgstr "원격 채널 수"
 
+msgid "Remote clipboard request"
+msgstr "원격 클립보드 요청"
+
 msgid "Remote default directory"
 msgstr "기본 원격 디렉터리"
 
@@ -1033,6 +1054,9 @@ msgstr "기본값 복원"
 msgid "Reset filters"
 msgstr "필터 초기화"
 
+msgid "Restart"
+msgstr "다시 시작"
+
 msgid "Restore Window"
 msgstr "창 복원"
 
@@ -1050,6 +1074,9 @@ msgstr "선택 항목 재개"
 
 msgid "Resume {0}"
 msgstr "{0} 재개"
+
+msgid "Retry"
+msgstr "다시 시도"
 
 msgid "Return Workspace to Main Window"
 msgstr "작업 공간을 기본 창으로 되돌리기"
@@ -1254,6 +1281,9 @@ msgstr "서버 SFTP 최대 파일 크기 (GiB)"
 
 msgid "Server SFTP simultaneous transfers"
 msgstr "서버 SFTP 동시 전송 수"
+
+msgid "Session ended"
+msgstr "세션 종료"
 
 msgid "Session group"
 msgstr "세션 그룹"

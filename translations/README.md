@@ -94,6 +94,11 @@ Numeric placeholders may be reordered; neither their identity nor number of
 occurrences may change. CI and release preflight check catalogs and generated
 search arrays.
 
+Fixed connection-notice titles and Retry/Restart/Close buttons, along with the
+OSC 52 clipboard-read question and Allow/Deny buttons, use Slint `@tr` keys.
+Rust sends a notice kind and stable action IDs; switching languages updates the
+visible wording without changing the one-time authorization or retry route.
+
 Runtime technical errors, logs, user values, and remote terminal text are outside
 this catalog. Language changes reuse the existing save-before-apply transaction
 and update main and detached windows on the UI thread. New translations still

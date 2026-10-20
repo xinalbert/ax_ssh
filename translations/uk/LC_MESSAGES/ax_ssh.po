@@ -55,6 +55,9 @@ msgstr ">_"
 msgid "A focused terminal workspace for SSH, Telnet, serial, and local shell sessions."
 msgstr "Робоча область термінала для SSH, Telnet, послідовних портів і локальної оболонки."
 
+msgid "A remote application wants to read your default clipboard."
+msgstr "Віддалена програма хоче прочитати ваш основний буфер обміну."
+
 msgid "APPLICATION"
 msgstr "ПРОГРАМА"
 
@@ -75,6 +78,9 @@ msgstr "Акцент / фокус"
 
 msgid "Add Server"
 msgstr "Додати сервер"
+
+msgid "Allow"
+msgstr "Дозволити"
 
 msgid "Allow local connections without X authority"
 msgstr "Дозволити локальні з’єднання без авторизації X"
@@ -220,6 +226,9 @@ msgstr "Очистити пошук налаштувань"
 msgid "Clear the saved password for {0} now? This takes effect immediately. Your other edits will remain unsaved."
 msgstr "Видалити збережений пароль для {0} зараз? Зміна набуде чинності одразу. Інші зміни залишаться незбереженими."
 
+msgid "Close"
+msgstr "Закрити"
+
 msgid "Close Current Tab"
 msgstr "Закрити поточну вкладку"
 
@@ -270,6 +279,12 @@ msgstr "Під’єднано · Час перевірки затримки SSH 
 
 msgid "Connected · SSH latency unavailable"
 msgstr "Під’єднано · Затримка SSH недоступна"
+
+msgid "Connection failed"
+msgstr "Помилка підключення"
+
+msgid "Connection lost"
+msgstr "З’єднання втрачено"
 
 msgid "Connection protocol"
 msgstr "Протокол з’єднання"
@@ -384,6 +399,9 @@ msgstr "Видалити {0} і збережені облікові дані?"
 
 msgid "Delete {0}? Servers in this group will move to Ungrouped."
 msgstr "Видалити {0}? Сервери цієї групи буде переміщено до «Без групи»."
+
+msgid "Deny"
+msgstr "Відхилити"
 
 msgid "Detect again on next connection"
 msgstr "Визначити знову під час наступного з’єднання"
@@ -979,6 +997,9 @@ msgstr "Розміри панелей віддалених і локальних
 msgid "Remote channels"
 msgstr "Віддалені канали"
 
+msgid "Remote clipboard request"
+msgstr "Віддалений запит буфера обміну"
+
 msgid "Remote default directory"
 msgstr "Типовий віддалений каталог"
 
@@ -1033,6 +1054,9 @@ msgstr "Відновити типові налаштування"
 msgid "Reset filters"
 msgstr "Скинути фільтри"
 
+msgid "Restart"
+msgstr "Перезапустити"
+
 msgid "Restore Window"
 msgstr "Відновити вікно"
 
@@ -1050,6 +1074,9 @@ msgstr "Продовжити вибрані"
 
 msgid "Resume {0}"
 msgstr "Продовжити {0}"
+
+msgid "Retry"
+msgstr "Повторити"
 
 msgid "Return Workspace to Main Window"
 msgstr "Повернути робочу область до головного вікна"
@@ -1254,6 +1281,9 @@ msgstr "Максимальний розмір файлу SFTP сервера у 
 
 msgid "Server SFTP simultaneous transfers"
 msgstr "Одночасні передачі SFTP сервера"
+
+msgid "Session ended"
+msgstr "Сеанс завершено"
 
 msgid "Session group"
 msgstr "Група сеансів"

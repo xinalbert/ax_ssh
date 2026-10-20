@@ -453,12 +453,12 @@ impl TerminalTabState {
             return TerminalNoticeSnapshot::reconnecting(status);
         }
 
-        let retry_label = if self.is_local() { "Restart" } else { "Retry" };
+        let restart = self.is_local();
         if self.failure_status(status) {
-            return TerminalNoticeSnapshot::failed(status, retry_label);
+            return TerminalNoticeSnapshot::failed(status, restart);
         }
         if self.ended_status(status) {
-            return TerminalNoticeSnapshot::ended(status, retry_label);
+            return TerminalNoticeSnapshot::ended(status, restart);
         }
 
         TerminalNoticeSnapshot::default()

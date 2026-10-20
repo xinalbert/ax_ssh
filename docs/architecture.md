@@ -278,6 +278,10 @@ carry the pane UUID back to the application, which revalidates the window route
 before restarting the existing worker route or closing the affected tab. The
 notice is deliberately absent while a host-key or authentication security phase
 is active; those existing blocking security overlays remain authoritative.
+Snapshots carry a typed notice kind, stable action IDs and technical details.
+Slint owns translated titles, Retry/Restart/Close labels and the OSC 52
+Allow/Deny question and labels, including their accessible text. Language changes
+update existing notices without changing authorization or retry decisions.
 Only a newly created `TerminalPane` queues one input focus retry until its first
 layout pass completes, then rechecks visibility, pane focus, and blocking notices.
 A connected pane focuses its native IME proxy; a connecting pane focuses a

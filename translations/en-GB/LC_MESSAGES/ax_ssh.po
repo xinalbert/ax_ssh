@@ -55,6 +55,9 @@ msgstr ">_"
 msgid "A focused terminal workspace for SSH, Telnet, serial, and local shell sessions."
 msgstr "A focused terminal workspace for SSH, Telnet, serial, and local shell sessions."
 
+msgid "A remote application wants to read your default clipboard."
+msgstr "A remote application wants to read your default clipboard."
+
 msgid "APPLICATION"
 msgstr "APPLICATION"
 
@@ -75,6 +78,9 @@ msgstr "Accent / focus"
 
 msgid "Add Server"
 msgstr "Add Server"
+
+msgid "Allow"
+msgstr "Allow"
 
 msgid "Allow local connections without X authority"
 msgstr "Allow local connections without X authority"
@@ -220,6 +226,9 @@ msgstr "Clear settings search"
 msgid "Clear the saved password for {0} now? This takes effect immediately. Your other edits will remain unsaved."
 msgstr "Clear the saved password for {0} now? This takes effect immediately. Your other edits will remain unsaved."
 
+msgid "Close"
+msgstr "Close"
+
 msgid "Close Current Tab"
 msgstr "Close Current Tab"
 
@@ -270,6 +279,12 @@ msgstr "Connected · SSH latency probe timed out"
 
 msgid "Connected · SSH latency unavailable"
 msgstr "Connected · SSH latency unavailable"
+
+msgid "Connection failed"
+msgstr "Connection failed"
+
+msgid "Connection lost"
+msgstr "Connection lost"
 
 msgid "Connection protocol"
 msgstr "Connection protocol"
@@ -384,6 +399,9 @@ msgstr "Delete {0} and its saved credential?"
 
 msgid "Delete {0}? Servers in this group will move to Ungrouped."
 msgstr "Delete {0}? Servers in this group will move to Ungrouped."
+
+msgid "Deny"
+msgstr "Deny"
 
 msgid "Detect again on next connection"
 msgstr "Detect again on next connection"
@@ -979,6 +997,9 @@ msgstr "Remote and local file pane sizes"
 msgid "Remote channels"
 msgstr "Remote channels"
 
+msgid "Remote clipboard request"
+msgstr "Remote clipboard request"
+
 msgid "Remote default directory"
 msgstr "Remote default directory"
 
@@ -1033,6 +1054,9 @@ msgstr "Reset defaults"
 msgid "Reset filters"
 msgstr "Reset filters"
 
+msgid "Restart"
+msgstr "Restart"
+
 msgid "Restore Window"
 msgstr "Restore Window"
 
@@ -1050,6 +1074,9 @@ msgstr "Resume selected"
 
 msgid "Resume {0}"
 msgstr "Resume {0}"
+
+msgid "Retry"
+msgstr "Retry"
 
 msgid "Return Workspace to Main Window"
 msgstr "Return Workspace to Main Window"
@@ -1254,6 +1281,9 @@ msgstr "Server SFTP maximum file size in GiB"
 
 msgid "Server SFTP simultaneous transfers"
 msgstr "Server SFTP simultaneous transfers"
+
+msgid "Session ended"
+msgstr "Session ended"
 
 msgid "Session group"
 msgstr "Session group"

@@ -201,6 +201,8 @@ Rust 拥有的终端 snapshot 还可以携带一条小型、按 Tab/pane 归属�
 窄窗口的动作按钮纵向排列，提示不压缩终端网格。
 其中的 Retry 与 Close 意图会把 pane UUID 交回 application；application 在重新启动既有 worker 路由或关闭对应
 Tab 前，会先重验窗口路由。host-key 或认证安全 phase 活跃时不显示该 notice，既有的阻塞式安全覆盖层仍是唯一权威。
+snapshot 只携带提示类型、稳定 action ID 和技术详情；Slint 负责标题、重试/重新启动/关闭及 OSC 52
+允许/拒绝问题和按钮的翻译与可访问文案。切换语言会更新已有提示，不改变授权或重试决策。
 只有新建的 `TerminalPane` 会把一次输入焦点重试排到首次布局完成后，并重新核验其仍可见、focused 且没有阻塞提示。
 已连接 pane 聚焦原生 IME proxy；连接中的 pane 聚焦不接受文本的 `FocusScope`，承接 Enter/Space 而不缓冲或发送输入，
 避免旧侧栏焦点再次打开连接。IME proxy 和远端输入仍要求 `connected`，安全覆盖层继续优先持有焦点。

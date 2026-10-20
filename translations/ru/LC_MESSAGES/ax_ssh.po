@@ -55,6 +55,9 @@ msgstr ">_"
 msgid "A focused terminal workspace for SSH, Telnet, serial, and local shell sessions."
 msgstr "Рабочая область терминала для SSH, Telnet, последовательных портов и локальной оболочки."
 
+msgid "A remote application wants to read your default clipboard."
+msgstr "Удалённое приложение хочет прочитать ваш основной буфер обмена."
+
 msgid "APPLICATION"
 msgstr "ПРИЛОЖЕНИЕ"
 
@@ -75,6 +78,9 @@ msgstr "Акцент / фокус"
 
 msgid "Add Server"
 msgstr "Добавить сервер"
+
+msgid "Allow"
+msgstr "Разрешить"
 
 msgid "Allow local connections without X authority"
 msgstr "Разрешить локальные подключения без авторизации X"
@@ -220,6 +226,9 @@ msgstr "Очистить поиск настроек"
 msgid "Clear the saved password for {0} now? This takes effect immediately. Your other edits will remain unsaved."
 msgstr "Удалить сохранённый пароль для {0} сейчас? Изменение вступит в силу сразу. Остальные правки останутся несохранёнными."
 
+msgid "Close"
+msgstr "Закрыть"
+
 msgid "Close Current Tab"
 msgstr "Закрыть текущую вкладку"
 
@@ -270,6 +279,12 @@ msgstr "Подключено · Истекло время проверки за�
 
 msgid "Connected · SSH latency unavailable"
 msgstr "Подключено · Задержка SSH недоступна"
+
+msgid "Connection failed"
+msgstr "Ошибка подключения"
+
+msgid "Connection lost"
+msgstr "Соединение потеряно"
 
 msgid "Connection protocol"
 msgstr "Протокол подключения"
@@ -384,6 +399,9 @@ msgstr "Удалить {0} и сохранённые учётные данные
 
 msgid "Delete {0}? Servers in this group will move to Ungrouped."
 msgstr "Удалить {0}? Серверы этой группы будут перемещены в «Без группы»."
+
+msgid "Deny"
+msgstr "Отклонить"
 
 msgid "Detect again on next connection"
 msgstr "Определить заново при следующем подключении"
@@ -979,6 +997,9 @@ msgstr "Размеры панелей удалённых и локальных �
 msgid "Remote channels"
 msgstr "Удалённые каналы"
 
+msgid "Remote clipboard request"
+msgstr "Удалённый запрос буфера обмена"
+
 msgid "Remote default directory"
 msgstr "Удалённый каталог по умолчанию"
 
@@ -1033,6 +1054,9 @@ msgstr "Восстановить настройки по умолчанию"
 msgid "Reset filters"
 msgstr "Сбросить фильтры"
 
+msgid "Restart"
+msgstr "Перезапустить"
+
 msgid "Restore Window"
 msgstr "Восстановить окно"
 
@@ -1050,6 +1074,9 @@ msgstr "Продолжить выбранные"
 
 msgid "Resume {0}"
 msgstr "Продолжить {0}"
+
+msgid "Retry"
+msgstr "Повторить"
 
 msgid "Return Workspace to Main Window"
 msgstr "Вернуть рабочую область в главное окно"
@@ -1254,6 +1281,9 @@ msgstr "Максимальный размер файла SFTP сервера в 
 
 msgid "Server SFTP simultaneous transfers"
 msgstr "Одновременные передачи SFTP сервера"
+
+msgid "Session ended"
+msgstr "Сеанс завершён"
 
 msgid "Session group"
 msgstr "Группа сеансов"

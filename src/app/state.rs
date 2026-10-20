@@ -540,16 +540,25 @@ impl Default for ActiveTabSnapshot {
     }
 }
 
+#[derive(Clone, Copy, Default, Debug, PartialEq, Eq)]
+pub(super) enum TerminalNoticeKind {
+    #[default]
+    None,
+    ClipboardRead,
+    Reconnecting,
+    Ended,
+    Failed,
+}
+
 #[derive(Clone, Default, Debug, PartialEq, Eq)]
 pub(super) struct TerminalNoticeSnapshot {
     pub(super) visible: bool,
     pub(super) severity: &'static str,
-    pub(super) title: &'static str,
+    pub(super) kind: TerminalNoticeKind,
     pub(super) message: String,
     pub(super) primary_action: &'static str,
-    pub(super) primary_label: &'static str,
+    pub(super) restart: bool,
     pub(super) secondary_action: &'static str,
-    pub(super) secondary_label: &'static str,
 }
 
 impl TerminalNoticeSnapshot {
@@ -557,12 +566,11 @@ impl TerminalNoticeSnapshot {
         Self {
             visible: true,
             severity: "warning",
-            title: "Remote clipboard request",
-            message: "A remote application wants to read your default clipboard.".to_owned(),
+            kind: TerminalNoticeKind::ClipboardRead,
+            message: String::new(),
             primary_action: "allow-osc52-clipboard-read",
-            primary_label: "Allow",
+            restart: false,
             secondary_action: "deny-osc52-clipboard-read",
-            secondary_label: "Deny",
         }
     }
 
@@ -570,41 +578,38 @@ impl TerminalNoticeSnapshot {
         Self {
             visible: true,
             severity: "warning",
-            title: "Connection lost",
+            kind: TerminalNoticeKind::Reconnecting,
             message: message.to_owned(),
             primary_action: "",
-            primary_label: "",
+            restart: false,
             secondary_action: "close-tab",
-            secondary_label: "Close",
         }
     }
 
-    pub(super) fn ended(message: &str, retry_label: &'static str) -> Self {
+    pub(super) fn ended(message: &str, restart: bool) -> Self {
         Self {
             visible: true,
             severity: "warning",
-            title: "Session ended",
+            kind: TerminalNoticeKind::Ended,
             message: message.to_owned(),
             primary_action: "retry",
-            primary_label: retry_label,
+            restart,
             secondary_action: "close-tab",
-            secondary_label: "Close",
         }
     }
 
-    pub(super) fn failed(message: &str, retry_label: &'static str) -> Self {
+    pub(super) fn failed(message: &str, restart: bool) -> Self {
         Self {
             visible: true,
             severity: "error",
-            title: "Connection failed",
+            kind: TerminalNoticeKind::Failed,
             message: message
                 .strip_prefix("Connection failed: ")
                 .unwrap_or(message)
                 .to_owned(),
             primary_action: "retry",
-            primary_label: retry_label,
+            restart,
             secondary_action: "close-tab",
-            secondary_label: "Close",
         }
     }
 }

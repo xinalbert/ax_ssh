@@ -303,12 +303,11 @@ pub(super) fn release_window_resources(ui: &AppWindow) {
     ui.set_active_tab_status("".into());
     ui.set_active_tab_notice_visible(false);
     ui.set_active_tab_notice_severity("".into());
-    ui.set_active_tab_notice_title("".into());
+    ui.set_active_tab_notice_kind(TerminalNoticeKind::None);
     ui.set_active_tab_notice_message("".into());
     ui.set_active_tab_notice_primary_action("".into());
-    ui.set_active_tab_notice_primary_label("".into());
+    ui.set_active_tab_notice_restart(false);
     ui.set_active_tab_notice_secondary_action("".into());
-    ui.set_active_tab_notice_secondary_label("".into());
 
     ui.set_host_key_dialog_open(false);
     ui.set_host_key_endpoint("".into());

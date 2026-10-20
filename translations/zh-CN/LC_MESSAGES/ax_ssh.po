@@ -55,6 +55,9 @@ msgstr ">_"
 msgid "A focused terminal workspace for SSH, Telnet, serial, and local shell sessions."
 msgstr "专注于 SSH、Telnet、串口和本地 Shell 会话的终端工作区。"
 
+msgid "A remote application wants to read your default clipboard."
+msgstr "远程应用请求读取默认剪贴板。"
+
 msgid "APPLICATION"
 msgstr "应用"
 
@@ -75,6 +78,9 @@ msgstr "强调色 / 焦点"
 
 msgid "Add Server"
 msgstr "添加服务器"
+
+msgid "Allow"
+msgstr "允许"
 
 msgid "Allow local connections without X authority"
 msgstr "允许无 X authority 的本地连接"
@@ -220,6 +226,9 @@ msgstr "清除设置搜索"
 msgid "Clear the saved password for {0} now? This takes effect immediately. Your other edits will remain unsaved."
 msgstr "立即清除{0}的已保存密码？确认后立即生效，其他编辑内容不会随之保存。"
 
+msgid "Close"
+msgstr "关闭"
+
 msgid "Close Current Tab"
 msgstr "关闭当前标签页"
 
@@ -270,6 +279,12 @@ msgstr "已连接 · SSH 延迟探测超时"
 
 msgid "Connected · SSH latency unavailable"
 msgstr "已连接 · 无法获取 SSH 延迟"
+
+msgid "Connection failed"
+msgstr "连接失败"
+
+msgid "Connection lost"
+msgstr "连接已断开"
 
 msgid "Connection protocol"
 msgstr "连接协议"
@@ -384,6 +399,9 @@ msgstr "删除 {0} 及其已保存的凭据？"
 
 msgid "Delete {0}? Servers in this group will move to Ungrouped."
 msgstr "删除 {0}？该组中的服务器将移至“未分组”。"
+
+msgid "Deny"
+msgstr "拒绝"
 
 msgid "Detect again on next connection"
 msgstr "下次连接时重新识别"
@@ -979,6 +997,9 @@ msgstr "远端和本地文件窗格大小"
 msgid "Remote channels"
 msgstr "远端声道"
 
+msgid "Remote clipboard request"
+msgstr "远程剪贴板请求"
+
 msgid "Remote default directory"
 msgstr "远端默认目录"
 
@@ -1033,6 +1054,9 @@ msgstr "恢复默认值"
 msgid "Reset filters"
 msgstr "重置过滤规则"
 
+msgid "Restart"
+msgstr "重新启动"
+
 msgid "Restore Window"
 msgstr "还原窗口"
 
@@ -1050,6 +1074,9 @@ msgstr "继续所选"
 
 msgid "Resume {0}"
 msgstr "继续 {0}"
+
+msgid "Retry"
+msgstr "重试"
 
 msgid "Return Workspace to Main Window"
 msgstr "将工作区返回主窗口"
@@ -1254,6 +1281,9 @@ msgstr "服务器 SFTP 单文件大小上限（GiB）"
 
 msgid "Server SFTP simultaneous transfers"
 msgstr "服务器 SFTP 同时传输数"
+
+msgid "Session ended"
+msgstr "会话已结束"
 
 msgid "Session group"
 msgstr "会话组"

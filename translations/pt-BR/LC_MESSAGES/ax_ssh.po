@@ -55,6 +55,9 @@ msgstr ">_"
 msgid "A focused terminal workspace for SSH, Telnet, serial, and local shell sessions."
 msgstr "Um espaço de trabalho de terminal para SSH, Telnet, conexões seriais e shell local."
 
+msgid "A remote application wants to read your default clipboard."
+msgstr "Um aplicativo remoto quer ler a área de transferência padrão."
+
 msgid "APPLICATION"
 msgstr "APLICATIVO"
 
@@ -75,6 +78,9 @@ msgstr "Destaque / foco"
 
 msgid "Add Server"
 msgstr "Adicionar servidor"
+
+msgid "Allow"
+msgstr "Permitir"
 
 msgid "Allow local connections without X authority"
 msgstr "Permitir conexões locais sem autorização X"
@@ -220,6 +226,9 @@ msgstr "Limpar busca nas configurações"
 msgid "Clear the saved password for {0} now? This takes effect immediately. Your other edits will remain unsaved."
 msgstr "Limpar agora a senha salva de {0}? Isso entra em vigor imediatamente. As outras alterações continuarão sem ser salvas."
 
+msgid "Close"
+msgstr "Fechar"
+
 msgid "Close Current Tab"
 msgstr "Fechar aba atual"
 
@@ -270,6 +279,12 @@ msgstr "Conectado · Tempo limite da medição de latência SSH excedido"
 
 msgid "Connected · SSH latency unavailable"
 msgstr "Conectado · Latência SSH indisponível"
+
+msgid "Connection failed"
+msgstr "Falha na conexão"
+
+msgid "Connection lost"
+msgstr "Conexão perdida"
 
 msgid "Connection protocol"
 msgstr "Protocolo de conexão"
@@ -384,6 +399,9 @@ msgstr "Excluir {0} e suas credenciais salvas?"
 
 msgid "Delete {0}? Servers in this group will move to Ungrouped."
 msgstr "Excluir {0}? Os servidores deste grupo serão movidos para Sem grupo."
+
+msgid "Deny"
+msgstr "Negar"
 
 msgid "Detect again on next connection"
 msgstr "Detectar novamente na próxima conexão"
@@ -979,6 +997,9 @@ msgstr "Tamanhos dos painéis de arquivos remotos e locais"
 msgid "Remote channels"
 msgstr "Canais remotos"
 
+msgid "Remote clipboard request"
+msgstr "Solicitação remota da área de transferência"
+
 msgid "Remote default directory"
 msgstr "Diretório remoto padrão"
 
@@ -1033,6 +1054,9 @@ msgstr "Restaurar padrões"
 msgid "Reset filters"
 msgstr "Redefinir filtros"
 
+msgid "Restart"
+msgstr "Reiniciar"
+
 msgid "Restore Window"
 msgstr "Restaurar janela"
 
@@ -1050,6 +1074,9 @@ msgstr "Retomar selecionadas"
 
 msgid "Resume {0}"
 msgstr "Retomar {0}"
+
+msgid "Retry"
+msgstr "Tentar novamente"
 
 msgid "Return Workspace to Main Window"
 msgstr "Retornar espaço de trabalho à janela principal"
@@ -1254,6 +1281,9 @@ msgstr "Tamanho máximo de arquivos SFTP do servidor em GiB"
 
 msgid "Server SFTP simultaneous transfers"
 msgstr "Transferências SFTP simultâneas do servidor"
+
+msgid "Session ended"
+msgstr "Sessão encerrada"
 
 msgid "Session group"
 msgstr "Grupo de sessões"

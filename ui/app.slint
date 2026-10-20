@@ -17,7 +17,7 @@ import {
     SftpTransferRow,
     SftpViewState,
 } from "sftp-pane.slint";
-import { TerminalNoticeViewState, TerminalPointerInput, TerminalSemanticSelection } from "terminal-pane.slint";
+import { TerminalNoticeKind, TerminalNoticeViewState, TerminalPointerInput, TerminalSemanticSelection } from "terminal-pane.slint";
 import {
     TerminalPaneDividerView,
     TerminalPaneView,
@@ -107,12 +107,11 @@ export component AppWindow inherits Window {
     in property <string> active-tab-status: "";
     in property <bool> active-tab-notice-visible: false;
     in property <string> active-tab-notice-severity: "";
-    in property <string> active-tab-notice-title: "";
+    in property <TerminalNoticeKind> active-tab-notice-kind;
     in property <string> active-tab-notice-message: "";
     in property <string> active-tab-notice-primary-action: "";
-    in property <string> active-tab-notice-primary-label: "";
+    in property <bool> active-tab-notice-restart;
     in property <string> active-tab-notice-secondary-action: "";
-    in property <string> active-tab-notice-secondary-label: "";
     in property <bool> host-key-dialog-open: false;
     in property <string> host-key-endpoint: "";
     in property <string> host-key-fingerprint: "";
@@ -513,12 +512,11 @@ export component AppWindow inherits Window {
     private property <TerminalNoticeViewState> terminal-notice-overlay: {
         visible: root.active-tab-notice-visible,
         severity: root.active-tab-notice-severity,
-        title: root.active-tab-notice-title,
+        kind: root.active-tab-notice-kind,
         message: root.active-tab-notice-message,
         primary_action: root.active-tab-notice-primary-action,
-        primary_label: root.active-tab-notice-primary-label,
+        restart: root.active-tab-notice-restart,
         secondary_action: root.active-tab-notice-secondary-action,
-        secondary_label: root.active-tab-notice-secondary-label,
     };
 
     callback new-session();

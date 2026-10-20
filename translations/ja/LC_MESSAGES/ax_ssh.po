@@ -55,6 +55,9 @@ msgstr ">_"
 msgid "A focused terminal workspace for SSH, Telnet, serial, and local shell sessions."
 msgstr "SSH、Telnet、シリアル、ローカルシェルの接続に対応した端末ワークスペース。"
 
+msgid "A remote application wants to read your default clipboard."
+msgstr "リモートアプリケーションが既定のクリップボードの読み取りを要求しています。"
+
 msgid "APPLICATION"
 msgstr "アプリケーション"
 
@@ -75,6 +78,9 @@ msgstr "アクセント／フォーカス"
 
 msgid "Add Server"
 msgstr "サーバーを追加"
+
+msgid "Allow"
+msgstr "許可"
 
 msgid "Allow local connections without X authority"
 msgstr "X認証なしのローカル接続を許可"
@@ -220,6 +226,9 @@ msgstr "設定の検索をクリア"
 msgid "Clear the saved password for {0} now? This takes effect immediately. Your other edits will remain unsaved."
 msgstr "{0}の保存済みパスワードを削除しますか？直ちに反映されます。他の編集内容は保存されません。"
 
+msgid "Close"
+msgstr "閉じる"
+
 msgid "Close Current Tab"
 msgstr "現在のタブを閉じる"
 
@@ -270,6 +279,12 @@ msgstr "接続済み・SSH遅延計測がタイムアウト"
 
 msgid "Connected · SSH latency unavailable"
 msgstr "接続済み・SSH遅延を取得できません"
+
+msgid "Connection failed"
+msgstr "接続に失敗しました"
+
+msgid "Connection lost"
+msgstr "接続が切断されました"
 
 msgid "Connection protocol"
 msgstr "接続プロトコル"
@@ -384,6 +399,9 @@ msgstr "{0}と保存した認証情報を削除しますか？"
 
 msgid "Delete {0}? Servers in this group will move to Ungrouped."
 msgstr "{0}を削除しますか？このグループのサーバーは「未分類」に移動します。"
+
+msgid "Deny"
+msgstr "拒否"
 
 msgid "Detect again on next connection"
 msgstr "次回の接続時に再検出"
@@ -979,6 +997,9 @@ msgstr "リモート／ローカルのファイルペインのサイズ"
 msgid "Remote channels"
 msgstr "リモートのチャンネル数"
 
+msgid "Remote clipboard request"
+msgstr "リモートからのクリップボード要求"
+
 msgid "Remote default directory"
 msgstr "リモートの既定ディレクトリ"
 
@@ -1033,6 +1054,9 @@ msgstr "既定値に戻す"
 msgid "Reset filters"
 msgstr "フィルターをリセット"
 
+msgid "Restart"
+msgstr "再起動"
+
 msgid "Restore Window"
 msgstr "ウィンドウを元に戻す"
 
@@ -1050,6 +1074,9 @@ msgstr "選択した項目を再開"
 
 msgid "Resume {0}"
 msgstr "{0}を再開"
+
+msgid "Retry"
+msgstr "再試行"
 
 msgid "Return Workspace to Main Window"
 msgstr "ワークスペースをメインウィンドウに戻す"
@@ -1254,6 +1281,9 @@ msgstr "サーバーのSFTPファイルサイズ上限（GiB）"
 
 msgid "Server SFTP simultaneous transfers"
 msgstr "サーバーのSFTP同時転送数"
+
+msgid "Session ended"
+msgstr "セッションが終了しました"
 
 msgid "Session group"
 msgstr "接続グループ"

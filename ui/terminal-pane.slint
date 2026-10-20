@@ -30,15 +30,16 @@ export struct TerminalCursorState {
     text: string,
 }
 
+export enum TerminalNoticeKind { none, clipboard-read, reconnecting, ended, failed }
+
 export struct TerminalNoticeViewState {
     visible: bool,
     severity: string,
-    title: string,
+    kind: TerminalNoticeKind,
     message: string,
     primary_action: string,
-    primary_label: string,
+    restart: bool,
     secondary_action: string,
-    secondary_label: string,
 }
 
 // Rust computes only this bounded viewport-relative range. TerminalPane keeps
@@ -162,6 +163,17 @@ component TerminalPaneCloseButton inherits FocusScope {
 
 export component TerminalNoticeCard inherits FocusScope {
     in property <TerminalNoticeViewState> notice;
+    private property <string> notice-title: root.notice.kind == TerminalNoticeKind.clipboard-read
+        ? @tr("Remote clipboard request")
+        : root.notice.kind == TerminalNoticeKind.reconnecting ? @tr("Connection lost")
+        : root.notice.kind == TerminalNoticeKind.ended ? @tr("Session ended")
+        : root.notice.kind == TerminalNoticeKind.failed ? @tr("Connection failed") : "";
+    private property <string> notice-message: root.notice.kind == TerminalNoticeKind.clipboard-read
+        ? @tr("A remote application wants to read your default clipboard.") : root.notice.message;
+    private property <string> primary-label: root.notice.kind == TerminalNoticeKind.clipboard-read
+        ? @tr("Allow") : root.notice.restart ? @tr("Restart") : @tr("Retry");
+    private property <string> secondary-label: root.notice.kind == TerminalNoticeKind.clipboard-read
+        ? @tr("Deny") : @tr("Close");
     in property <bool> pane-focused;
     callback action(string);
 
@@ -169,7 +181,7 @@ export component TerminalNoticeCard inherits FocusScope {
         root.width < Theme.terminal-notice-stack-threshold;
 
     accessible-role: groupbox;
-    accessible-label: root.notice.title + ": " + root.notice.message;
+    accessible-label: root.notice-title + ": " + root.notice-message;
     focus-on-tab-navigation: true;
 
     init => {
@@ -217,7 +229,7 @@ export component TerminalNoticeCard inherits FocusScope {
             ElidedLabel {
                 accessible-role: text;
                 accessible-label: self.text;
-                text: root.notice.title;
+                text: root.notice-title;
                 text-color: Theme.text;
                 font-size: Theme.font-body-strong;
                 font-weight: 700;
@@ -237,7 +249,7 @@ export component TerminalNoticeCard inherits FocusScope {
                     message-text := Text {
                         width: parent.width;
                         height: self.preferred-height;
-                        text: root.notice.message;
+                        text: root.notice-message;
                         color: Theme.text;
                         font-size: Theme.font-body;
                         wrap: word-wrap;
@@ -250,11 +262,11 @@ export component TerminalNoticeCard inherits FocusScope {
                 spacing: Theme.space-md;
 
                 if !root.notice.secondary_action.is-empty : ElidedButton {
-                    text: root.notice.secondary_label;
+                    text: root.secondary-label;
                     clicked => { root.action(root.notice.secondary_action); }
                 }
                 if !root.notice.primary_action.is-empty : ElidedButton {
-                    text: root.notice.primary_label;
+                    text: root.primary-label;
                     primary: true;
                     clicked => { root.action(root.notice.primary_action); }
                 }
@@ -265,13 +277,13 @@ export component TerminalNoticeCard inherits FocusScope {
 
                 if !root.notice.primary_action.is-empty : ElidedButton {
                     width: parent.width;
-                    text: root.notice.primary_label;
+                    text: root.primary-label;
                     primary: true;
                     clicked => { root.action(root.notice.primary_action); }
                 }
                 if !root.notice.secondary_action.is-empty : ElidedButton {
                     width: parent.width;
-                    text: root.notice.secondary_label;
+                    text: root.secondary-label;
                     clicked => { root.action(root.notice.secondary_action); }
                 }
             }

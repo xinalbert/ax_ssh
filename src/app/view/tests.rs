@@ -5,6 +5,7 @@ mod sftp_navigation;
 mod shortcut_menus;
 mod terminal_connection;
 mod terminal_input;
+mod terminal_notices;
 mod text_editing;
 mod text_overflow;
 
