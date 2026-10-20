@@ -503,8 +503,8 @@ fn switching_to_ssh_agent_discards_password_input_and_credential_reference() {
     ));
 }
 
-#[test]
-fn group_management_persists_and_moves_profiles_to_ungrouped_on_delete() {
+#[tokio::test]
+async fn group_management_persists_and_moves_profiles_to_ungrouped_on_delete() {
     let path = isolated_config_path("groups");
     let mut sessions = SessionStore::default();
     let mut profile = SessionProfile::new("server", "server.example", "alice");
@@ -512,9 +512,15 @@ fn group_management_persists_and_moves_profiles_to_ungrouped_on_delete() {
     sessions.upsert(profile.clone());
     let state = Arc::new(Mutex::new(AppState::new(ConfigStore::new(&path), sessions)));
 
-    update_session_group(&state, "new-group", "", "Staging").expect("group should be added");
-    update_session_group(&state, "rename-group", "Staging", "QA").expect("group should be renamed");
-    update_session_group(&state, "delete-group", "Production", "")
+    let persistence = state.lock().unwrap().persistence_coordinator.clone();
+    update_session_group(&state, &persistence, "new-group", "", "Staging")
+        .await
+        .expect("group should be added");
+    update_session_group(&state, &persistence, "rename-group", "Staging", "QA")
+        .await
+        .expect("group should be renamed");
+    update_session_group(&state, &persistence, "delete-group", "Production", "")
+        .await
         .expect("group should be removed");
 
     let app = state.lock().expect("state should remain readable");
@@ -545,8 +551,8 @@ fn duplicate_session_name_gets_a_unique_copy_suffix() {
     );
 }
 
-#[test]
-fn duplicating_a_profile_keeps_connection_trust_without_reusing_credentials() {
+#[tokio::test]
+async fn duplicating_a_profile_keeps_connection_trust_without_reusing_credentials() {
     let path = isolated_config_path("duplicate");
     let mut sessions = SessionStore::default();
     let mut source = SessionProfile::new("production", "server.example", "alice");
@@ -558,7 +564,10 @@ fn duplicating_a_profile_keeps_connection_trust_without_reusing_credentials() {
     sessions.upsert(source.clone());
     let state = Arc::new(Mutex::new(AppState::new(ConfigStore::new(&path), sessions)));
 
-    duplicate_session_profile(&state, source.id).expect("profile should duplicate");
+    let persistence = state.lock().unwrap().persistence_coordinator.clone();
+    duplicate_session_profile(&state, &persistence, source.id)
+        .await
+        .expect("profile should duplicate");
 
     let app = state.lock().expect("state should remain readable");
     assert_eq!(app.sessions.sessions.len(), 2);
@@ -722,8 +731,8 @@ fn importing_a_server_rekeys_redacts_and_resolves_name_conflicts() {
     assert_eq!(ssh.host_key_fingerprint, None);
 }
 
-#[test]
-fn duplicating_a_group_rekeys_profiles_and_keeps_empty_groups_supported() {
+#[tokio::test]
+async fn duplicating_a_group_rekeys_profiles_and_keeps_empty_groups_supported() {
     let path = isolated_config_path("group-copy");
     let mut sessions = SessionStore::default();
     sessions
@@ -738,8 +747,13 @@ fn duplicating_a_group_rekeys_profiles_and_keeps_empty_groups_supported() {
     sessions.upsert(source.clone());
     let state = Arc::new(Mutex::new(AppState::new(ConfigStore::new(&path), sessions)));
 
-    duplicate_session_group(&state, "Production").expect("group should duplicate");
-    duplicate_session_group(&state, "Empty").expect("empty group should duplicate");
+    let persistence = state.lock().unwrap().persistence_coordinator.clone();
+    duplicate_session_group(&state, &persistence, "Production")
+        .await
+        .expect("group should duplicate");
+    duplicate_session_group(&state, &persistence, "Empty")
+        .await
+        .expect("empty group should duplicate");
 
     let app = state.lock().expect("state should remain readable");
     assert!(

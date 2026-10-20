@@ -51,6 +51,9 @@ Slint UI（.slint）
 
 ## 共同应用流程
 
+- 会话复制、导入和分组变更共用串行 blocking 事务：短时间持应用状态锁取得 profiles/groups，
+  释放锁后读取已提交设置并通过 `ConfigStore` 写盘，成功后只合并 profiles/groups。owned 持久化
+  gate 随 blocking 操作保留，即使异步调用者取消也不会提前放行；Settings 预览既不随之写盘，也不被完成结果覆盖。
 - `SettingsPane` 的预览和保存共用 `submit-draft`；Tab ID 和关闭标志决定是否持久化。
   自带字体读取在 Tokio blocking task 中执行，字体注册仍留在 Slint UI 线程。
 - SFTP 本地和远端目录共用有界历史状态转换；目录读取、路径校验、分页和 request ID 仍由

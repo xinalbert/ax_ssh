@@ -55,7 +55,7 @@ pub(super) struct AppState {
 /// whole-store configuration writes from overwriting one another.
 #[derive(Default)]
 pub(super) struct PersistenceCoordinator {
-    pub(super) gate: tokio::sync::Mutex<()>,
+    pub(super) gate: Arc<tokio::sync::Mutex<()>>,
 }
 
 #[derive(Default)]

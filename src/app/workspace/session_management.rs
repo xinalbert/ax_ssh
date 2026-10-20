@@ -52,8 +52,7 @@ pub(in crate::app) fn wire_session_management(
         let state = state_for_duplicate.clone();
         let persistence = persistence_for_duplicate.clone();
         runtime_for_duplicate.spawn(async move {
-            let _persistence_guard = persistence.gate.lock().await;
-            match duplicate_session_profile(&state, id) {
+            match duplicate_session_profile(&state, &persistence, id).await {
                 Ok(message) => {
                     refresh_session_models(&ui, &state);
                     refresh_workspace(&ui, &state);
@@ -115,8 +114,7 @@ pub(in crate::app) fn wire_session_management(
                 let state = state_for_transfer.clone();
                 let persistence = persistence_for_transfer.clone();
                 runtime_for_transfer.spawn(async move {
-                    let _persistence_guard = persistence.gate.lock().await;
-                    match duplicate_session_group(&state, &target) {
+                    match duplicate_session_group(&state, &persistence, &target).await {
                         Ok(message) => {
                             refresh_session_models(&ui, &state);
                             refresh_workspace(&ui, &state);
@@ -153,8 +151,9 @@ pub(in crate::app) fn wire_session_management(
                 let state = state_for_transfer.clone();
                 let persistence = persistence_for_transfer.clone();
                 runtime_for_transfer.spawn(async move {
-                    let _persistence_guard = persistence.gate.lock().await;
-                    match import_session_transfer(&state, &clipboard, mode, &target) {
+                    match import_session_transfer(&state, &persistence, &clipboard, mode, &target)
+                        .await
+                    {
                         Ok(message) => {
                             refresh_session_models(&ui, &state);
                             refresh_workspace(&ui, &state);
@@ -196,8 +195,7 @@ pub(in crate::app) fn wire_session_management(
             } else if action == "clear-saved-password" {
                 clear_saved_password(&state, &persistence, &target).await
             } else {
-                let _persistence_guard = persistence.gate.lock().await;
-                update_session_group(&state, &action, &target, &value)
+                update_session_group(&state, &persistence, &action, &target, &value).await
             };
             match result {
                 Ok(message) => {
@@ -222,33 +220,32 @@ pub(in crate::app) fn wire_session_management(
     });
 }
 
-pub(super) fn duplicate_session_profile(
+pub(super) async fn duplicate_session_profile(
     state: &Arc<Mutex<AppState>>,
+    persistence: &PersistenceCoordinator,
     session_id: Uuid,
 ) -> Result<String> {
-    let mut app = state
-        .lock()
-        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
-    let mut candidate = app.sessions.clone();
-    let source = candidate
-        .sessions
-        .iter()
-        .find(|profile| profile.id == session_id)
-        .cloned()
-        .context("session not found")?;
-    let mut duplicate = source.clone();
-    duplicate.id = Uuid::new_v4();
-    duplicate.name = duplicate_session_name(&candidate, &source.name)?;
-    if let Some(ssh) = duplicate.ssh_mut() {
-        ssh.credential_storage = None;
-        ssh.credential_vault_key_saved = false;
-    }
-    duplicate.validate()?;
-    candidate.upsert(duplicate);
-    app.config.save(&candidate)?;
-    app.sessions = candidate;
+    let message = update_session_store(state, persistence, move |candidate| {
+        let source = candidate
+            .sessions
+            .iter()
+            .find(|profile| profile.id == session_id)
+            .cloned()
+            .context("session not found")?;
+        let mut duplicate = source.clone();
+        duplicate.id = Uuid::new_v4();
+        duplicate.name = duplicate_session_name(candidate, &source.name)?;
+        if let Some(ssh) = duplicate.ssh_mut() {
+            ssh.credential_storage = None;
+            ssh.credential_vault_key_saved = false;
+        }
+        duplicate.validate()?;
+        candidate.upsert(duplicate);
+        Ok(format!("Session {} duplicated", source.name))
+    })
+    .await?;
     info!(source_session_id = %session_id, "session profile duplicated");
-    Ok(format!("Session {} duplicated", source.name))
+    Ok(message)
 }
 
 pub(super) fn export_session_profile(sessions: &SessionStore, session_id: &str) -> Result<String> {
@@ -407,74 +404,80 @@ fn normalized_transfer_group_name(group_name: &str) -> Result<String> {
     Ok(group_name)
 }
 
-pub(super) fn duplicate_session_group(
+pub(super) async fn duplicate_session_group(
     state: &Arc<Mutex<AppState>>,
+    persistence: &PersistenceCoordinator,
     group_name: &str,
 ) -> Result<String> {
-    let mut app = state
-        .lock()
-        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
-    let mut candidate = app.sessions.clone();
     let source_group = normalized_transfer_group_name(group_name)?;
-    if !candidate.groups.iter().any(|group| group == &source_group) {
-        anyhow::bail!("group not found");
-    }
-    let source_profiles = candidate
-        .sessions
-        .iter()
-        .filter(|profile| normalize_group_name(&profile.group_name) == source_group)
-        .cloned()
-        .collect::<Vec<_>>();
-    if source_profiles.len() > MAX_SESSION_TRANSFER_PROFILES {
-        anyhow::bail!("group exceeds the {MAX_SESSION_TRANSFER_PROFILES} server duplicate limit");
-    }
-    let duplicate_group = duplicate_group_name(&candidate, &source_group)?;
-    candidate.add_group(&duplicate_group)?;
-    for source in source_profiles {
-        let mut duplicate = source.clone();
-        duplicate.id = Uuid::new_v4();
-        duplicate.name = duplicate_session_name(&candidate, &source.name)?;
-        duplicate.group_name = duplicate_group.clone();
-        if let Some(ssh) = duplicate.ssh_mut() {
-            ssh.credential_storage = None;
-            ssh.credential_vault_key_saved = false;
+    let message = update_session_store(state, persistence, move |candidate| {
+        if !candidate.groups.iter().any(|group| group == &source_group) {
+            anyhow::bail!("group not found");
         }
-        duplicate.validate()?;
-        candidate.upsert(duplicate);
-    }
-    app.config.save(&candidate)?;
-    app.sessions = candidate;
+        let source_profiles = candidate
+            .sessions
+            .iter()
+            .filter(|profile| normalize_group_name(&profile.group_name) == source_group)
+            .cloned()
+            .collect::<Vec<_>>();
+        if source_profiles.len() > MAX_SESSION_TRANSFER_PROFILES {
+            anyhow::bail!(
+                "group exceeds the {MAX_SESSION_TRANSFER_PROFILES} server duplicate limit"
+            );
+        }
+        let duplicate_group = duplicate_group_name(candidate, &source_group)?;
+        candidate.add_group(&duplicate_group)?;
+        for source in source_profiles {
+            let mut duplicate = source.clone();
+            duplicate.id = Uuid::new_v4();
+            duplicate.name = duplicate_session_name(candidate, &source.name)?;
+            duplicate.group_name = duplicate_group.clone();
+            if let Some(ssh) = duplicate.ssh_mut() {
+                ssh.credential_storage = None;
+                ssh.credential_vault_key_saved = false;
+            }
+            duplicate.validate()?;
+            candidate.upsert(duplicate);
+        }
+        Ok(format!(
+            "Group {source_group} duplicated as {duplicate_group}"
+        ))
+    })
+    .await?;
     info!("session group duplicated");
-    Ok(format!(
-        "Group {source_group} duplicated as {duplicate_group}"
-    ))
+    Ok(message)
 }
 
-fn import_session_transfer(
+async fn import_session_transfer(
     state: &Arc<Mutex<AppState>>,
+    persistence: &PersistenceCoordinator,
     text: &str,
     mode: SessionImportMode,
     target_group: &str,
 ) -> Result<String> {
-    let mut app = state
-        .lock()
-        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
-    let mut candidate = app.sessions.clone();
-    let (profile_count, imported_group) =
-        import_session_transfer_into_store(&mut candidate, text, mode, target_group)?;
-    app.config.save(&candidate)?;
-    app.sessions = candidate;
-    info!(profile_count, "session configuration imported");
-    if profile_count == 0 {
-        Ok(format!(
-            "Group {} imported",
-            imported_group.context("import did not create a group")?
-        ))
-    } else if profile_count == 1 {
-        Ok("Imported 1 server".to_owned())
-    } else {
-        Ok(format!("Imported {profile_count} servers"))
+    if text.len() > MAX_SESSION_TRANSFER_BYTES {
+        anyhow::bail!("session import exceeds the {MAX_SESSION_TRANSFER_BYTES} byte limit");
     }
+    let text = text.to_owned();
+    let target_group = target_group.to_owned();
+    let (message, profile_count) = update_session_store(state, persistence, move |candidate| {
+        let (profile_count, imported_group) =
+            import_session_transfer_into_store(candidate, &text, mode, &target_group)?;
+        let message = if profile_count == 0 {
+            format!(
+                "Group {} imported",
+                imported_group.context("import did not create a group")?
+            )
+        } else if profile_count == 1 {
+            "Imported 1 server".to_owned()
+        } else {
+            format!("Imported {profile_count} servers")
+        };
+        Ok((message, profile_count))
+    })
+    .await?;
+    info!(profile_count, "session configuration imported");
+    Ok(message)
 }
 
 pub(super) fn import_session_transfer_into_store(
@@ -632,39 +635,93 @@ pub(super) fn duplicate_session_name(sessions: &SessionStore, name: &str) -> Res
     }
 }
 
-pub(super) fn update_session_group(
+pub(super) async fn update_session_group(
     state: &Arc<Mutex<AppState>>,
+    persistence: &PersistenceCoordinator,
     action: &str,
     target: &str,
     value: &str,
 ) -> Result<String> {
-    let mut app = state
-        .lock()
-        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
-    let mut candidate = app.sessions.clone();
-    let (changed, message) = match action {
-        "new-group" => {
-            let group_name = normalize_group_name(value);
-            let changed = candidate.add_group(&group_name)?;
-            (changed, format!("Group {group_name} created"))
+    let action = action.to_owned();
+    let target = target.to_owned();
+    let value = value.to_owned();
+    update_session_store(state, persistence, move |candidate| {
+        let (changed, message) = match action.as_str() {
+            "new-group" => {
+                let group_name = normalize_group_name(&value);
+                let changed = candidate.add_group(&group_name)?;
+                (changed, format!("Group {group_name} created"))
+            }
+            "rename-group" => {
+                let old_name = normalize_group_name(&target);
+                let new_name = normalize_group_name(&value);
+                let changed = candidate.rename_group(&old_name, &new_name)?;
+                (changed, format!("Group renamed to {new_name}"))
+            }
+            "delete-group" => {
+                let group_name = normalize_group_name(&target);
+                let changed = candidate.remove_group(&group_name);
+                (changed, format!("Group {group_name} removed"))
+            }
+            _ => anyhow::bail!("unknown session action"),
+        };
+        if !changed {
+            anyhow::bail!("group was not changed");
         }
-        "rename-group" => {
-            let old_name = normalize_group_name(target);
-            let new_name = normalize_group_name(value);
-            let changed = candidate.rename_group(&old_name, &new_name)?;
-            (changed, format!("Group renamed to {new_name}"))
-        }
-        "delete-group" => {
-            let group_name = normalize_group_name(target);
-            let changed = candidate.remove_group(&group_name);
-            (changed, format!("Group {group_name} removed"))
-        }
-        _ => anyhow::bail!("unknown session action"),
-    };
-    if !changed {
-        anyhow::bail!("group was not changed");
-    }
-    app.config.save(&candidate)?;
-    app.sessions = candidate;
-    Ok(message)
+        Ok(message)
+    })
+    .await
 }
+
+async fn update_session_store<T: Send + 'static>(
+    state: &Arc<Mutex<AppState>>,
+    persistence: &PersistenceCoordinator,
+    update: impl FnOnce(&mut SessionStore) -> Result<T> + Send + 'static,
+) -> Result<T> {
+    update_session_store_with(state, persistence, update, ConfigStore::save).await
+}
+
+async fn update_session_store_with<T: Send + 'static>(
+    state: &Arc<Mutex<AppState>>,
+    persistence: &PersistenceCoordinator,
+    update: impl FnOnce(&mut SessionStore) -> Result<T> + Send + 'static,
+    save: impl FnOnce(&ConfigStore, &SessionStore) -> Result<()> + Send + 'static,
+) -> Result<T> {
+    let guard = persistence.gate.clone().lock_owned().await;
+    let state = state.clone();
+    tokio::task::spawn_blocking(move || {
+        // Keep serialization even if the async caller is cancelled during fsync.
+        let _guard = guard;
+        let (config, groups, profiles) = {
+            let app = state
+                .lock()
+                .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+            (
+                app.config.clone(),
+                app.sessions.groups.clone(),
+                app.sessions.sessions.clone(),
+            )
+        };
+        // Do not persist transient Settings previews as a side effect of CRUD.
+        let mut candidate = config
+            .load()
+            .context("failed to reload committed session store")?;
+        candidate.groups = groups;
+        candidate.sessions = profiles;
+        let result = update(&mut candidate)?;
+        save(&config, &candidate)?;
+        let mut app = state
+            .lock()
+            .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+        // Only these fields belong to this transaction. UI previews may change
+        // while disk I/O is in progress; keep them and recent-workspace state.
+        app.sessions.groups = candidate.groups;
+        app.sessions.sessions = candidate.sessions;
+        Ok(result)
+    })
+    .await
+    .context("session management persistence task failed")?
+}
+
+#[cfg(test)]
+mod tests;

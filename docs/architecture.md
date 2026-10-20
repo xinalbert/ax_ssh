@@ -57,6 +57,12 @@ Process startup (src/main.rs)
 
 ## Shared application flows
 
+- Session duplication, import and group changes share a serialized blocking
+  transaction. It snapshots profiles/groups under a short application-state
+  lock, reloads committed settings and writes through `ConfigStore` without that
+  lock, then publishes only profiles/groups after success. An owned persistence
+  gate remains with the blocking operation even if its async caller is cancelled;
+  Settings previews remain independent of both the disk candidate and completion.
 - `SettingsPane` passes its draft through one `submit-draft` function for preview
   and save. The tab ID and close flag select persistence; bundled-font reads run
   on Tokio blocking tasks and registration stays on the Slint UI thread.
