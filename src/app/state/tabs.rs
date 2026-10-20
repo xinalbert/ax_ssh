@@ -44,6 +44,7 @@ impl AppState {
             system_detections: HashMap::new(),
             system_release_probes: HashMap::new(),
             persistence_coordinator: Arc::new(PersistenceCoordinator::default()),
+            worker_shutdowns: super::super::worker_shutdown::WorkerShutdowns::default(),
             local_terminal_number: 0,
             session_filter: String::new(),
             serial_ports: Vec::new(),
@@ -433,6 +434,21 @@ impl AppState {
 
     pub(in crate::app) fn close_tab(&mut self, tab_id: Uuid) -> Option<ClosedTab> {
         let index = self.tabs.iter().position(|tab| tab.id == tab_id)?;
+        // Revoke local intents and request worker cancellation before removing
+        // its tab. Joining the worker belongs to WorkerShutdowns, never the UI.
+        if let WorkspaceTabKind::Terminal(terminal) = &mut self.tabs[index].kind {
+            terminal.cancel_reconnect();
+            if let Some(probe) = terminal.take_pending_probe()
+                && probe.cancel.send(()).is_err()
+            {
+                tracing::debug!(%tab_id, "host-key probe already stopped while closing tab");
+            }
+            if let Some(worker) = &terminal.worker
+                && let Err(error) = worker.request_disconnect()
+            {
+                tracing::debug!(%tab_id, %error, "disconnect request deferred to worker shutdown");
+            }
+        }
         let mut tab = self.tabs.remove(index);
         if let Some(companion_tab_id) = tab.companion_tab_id.take()
             && let Some(companion) = self.tabs.iter_mut().find(|tab| tab.id == companion_tab_id)
@@ -440,7 +456,7 @@ impl AppState {
         {
             companion.companion_tab_id = None;
         }
-        let (kind, worker, pending_probe) = match &mut tab.kind {
+        let (kind, worker) = match &mut tab.kind {
             WorkspaceTabKind::Terminal(terminal) => (
                 ClosedTabKind::Terminal {
                     release_file_icon_cache: terminal.is_sftp()
@@ -452,12 +468,11 @@ impl AppState {
                         }),
                 },
                 terminal.worker.take(),
-                terminal.take_pending_probe(),
             ),
-            WorkspaceTabKind::Settings => (ClosedTabKind::Settings, None, None),
+            WorkspaceTabKind::Settings => (ClosedTabKind::Settings, None),
             WorkspaceTabKind::SessionEditor(_) => {
                 self.serial_ports.clear();
-                (ClosedTabKind::SessionEditor, None, None)
+                (ClosedTabKind::SessionEditor, None)
             }
         };
         if self.active_tab_id == Some(tab_id) {
@@ -467,11 +482,7 @@ impl AppState {
                 .or_else(|| self.tabs.last())
                 .map(|tab| tab.id);
         }
-        Some(ClosedTab {
-            kind,
-            worker,
-            pending_probe,
-        })
+        Some(ClosedTab { kind, worker })
     }
 
     fn insert_connection_tab(

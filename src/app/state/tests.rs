@@ -568,13 +568,7 @@ fn closing_one_pending_tab_keeps_another_tabs_authentication_prompt() {
             vault_unlock_only: false,
         });
 
-    let closed = state.close_tab(first_tab).expect("first tab should close");
-    closed
-        .pending_probe
-        .expect("closing a probing tab should return its cancellation sender")
-        .cancel
-        .send(())
-        .expect("probe task should still receive cancellation");
+    state.close_tab(first_tab).expect("first tab should close");
     assert!(first_cancelled.try_recv().is_ok());
     assert!(state.activate_tab(second_tab));
     assert!(matches!(

@@ -261,8 +261,9 @@ pub(in crate::app) fn close_workspace_tab(
         Ok(mut app) => tab_ids
             .into_iter()
             .filter_map(|closed_tab_id| {
-                app.close_tab(closed_tab_id)
-                    .map(|closed| (closed_tab_id, closed))
+                let mut closed = app.close_tab(closed_tab_id)?;
+                retain_closed_worker(&mut app, &mut closed, runtime);
+                Some((closed_tab_id, closed))
             })
             .collect::<Vec<_>>(),
         Err(_) => {
@@ -274,7 +275,7 @@ pub(in crate::app) fn close_workspace_tab(
         set_status(ui, "Tab not found");
         return;
     }
-    release_closed_tabs(closed_tabs, state, ui, runtime);
+    release_closed_tabs(closed_tabs, state, ui);
     refresh_session_models(ui, state);
     refresh_workspace(ui, state);
 }
@@ -288,7 +289,13 @@ pub(in crate::app) fn close_terminal_child_pane(
     runtime: &Handle,
 ) -> bool {
     let closed = match state.lock() {
-        Ok(mut app) => router.remove_terminal_child_pane(window_id, tab_id, &mut app),
+        Ok(mut app) => {
+            let mut closed = router.remove_terminal_child_pane(window_id, tab_id, &mut app);
+            if let Some(closed) = &mut closed {
+                retain_closed_worker(&mut app, closed, runtime);
+            }
+            closed
+        }
         Err(_) => {
             set_status(ui, "Cannot update terminal panes");
             return false;
@@ -297,19 +304,26 @@ pub(in crate::app) fn close_terminal_child_pane(
     let Some(closed) = closed else {
         return false;
     };
-    release_closed_tabs(vec![(tab_id, closed)], state, ui, runtime);
+    release_closed_tabs(vec![(tab_id, closed)], state, ui);
     refresh_session_models(ui, state);
     refresh_workspace(ui, state);
     true
+}
+
+fn retain_closed_worker(app: &mut AppState, closed: &mut ClosedTab, runtime: &Handle) {
+    // Called under the same lock that removes the worker from its tab. Exit
+    // cannot drain application resources between removal and registration.
+    if let Some(worker) = closed.worker.take() {
+        drop(app.worker_shutdowns.start(runtime, worker));
+    }
 }
 
 fn release_closed_tabs(
     closed_tabs: Vec<(Uuid, ClosedTab)>,
     state: &Arc<Mutex<AppState>>,
     ui: &slint::Weak<AppWindow>,
-    runtime: &Handle,
 ) {
-    for (closed_tab_id, closed) in closed_tabs {
+    for (_, closed) in closed_tabs {
         match closed.kind {
             ClosedTabKind::Settings => clear_settings_option_models(ui, state),
             ClosedTabKind::SessionEditor => clear_session_editor_resources(ui),
@@ -319,23 +333,6 @@ fn release_closed_tabs(
             ClosedTabKind::Terminal {
                 release_file_icon_cache: false,
             } => {}
-        }
-        if let Some(probe) = closed.pending_probe
-            && probe.cancel.send(()).is_err()
-        {
-            debug!(tab_id = %closed_tab_id, "host-key probe already stopped while closing tab");
-        }
-        if let Some(worker) = closed.worker {
-            let ui = ui.clone();
-            runtime.spawn(async move {
-                if let Err(error) = worker.shutdown().await {
-                    warn!(tab_id = %closed_tab_id, %error, "failed to shut down closed tab worker");
-                    set_status(
-                        &ui,
-                        &format!("Cannot close terminal worker cleanly: {error}"),
-                    );
-                }
-            });
         }
     }
 }

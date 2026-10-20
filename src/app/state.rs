@@ -42,6 +42,7 @@ pub(super) struct AppState {
     system_detections: HashMap<Uuid, ax_ssh::config::SystemDetection>,
     system_release_probes: HashMap<Uuid, (Uuid, Uuid)>,
     pub(super) persistence_coordinator: Arc<PersistenceCoordinator>,
+    pub(super) worker_shutdowns: super::worker_shutdown::WorkerShutdowns,
     local_terminal_number: u32,
     pub(super) session_filter: String,
     serial_ports: Vec<SerialPortDescriptor>,
@@ -683,7 +684,6 @@ impl Default for SessionEditorSnapshot {
 pub(super) struct ClosedTab {
     pub(super) kind: ClosedTabKind,
     pub(super) worker: Option<TerminalWorker>,
-    pub(super) pending_probe: Option<PendingProbe>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

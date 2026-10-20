@@ -54,6 +54,10 @@ Slint UI（.slint）
 - 会话复制、导入和分组变更共用串行 blocking 事务：短时间持应用状态锁取得 profiles/groups，
   释放锁后读取已提交设置并通过 `ConfigStore` 写盘，成功后只合并 profiles/groups。owned 持久化
   gate 随 blocking 操作保留，即使异步调用者取消也不会提前放行；Settings 预览既不随之写盘，也不被完成结果覆盖。
+- `src/app/worker_shutdown.rs` 独立于可见 Tab 持有清理任务。关闭 Tab 先取消重连/媒体/剪贴板意图与
+  probe，并请求断开，再删除 Tab 路由。registry 回收已完成任务，进程退出在既有 25 秒期限内统一等待
+  先前关闭的 Tab 与剩余 worker；工作区替换和本地 shell 收尾可等待 completion receipt，任务所有权仍属 registry。
+  worker 从 Tab 状态移出与清理登记在同一次状态锁内完成，并发退出排空不会漏掉正在转交的 worker。
 - `SettingsPane` 的预览和保存共用 `submit-draft`；Tab ID 和关闭标志决定是否持久化。
   自带字体读取在 Tokio blocking task 中执行，字体注册仍留在 Slint UI 线程。
 - SFTP 本地和远端目录共用有界历史状态转换；目录读取、路径校验、分页和 request ID 仍由
@@ -86,6 +90,7 @@ Slint UI（.slint）
 | `src/app/platform_support.rs` | 剪贴板、仅构建元数据诊断、外部打开器和 macOS application menu 接线 | 秘密、session 持久化或 SSH/worker 状态 |
 | `src/app/window_state.rs` | UI 线程普通窗口几何采集、屏幕/DPI 适配和最大化恢复 | 文件系统、worker、凭据或生成组件声明 |
 | `src/app/workspace_autosave.rs` | 防抖快照、单槽最新待写状态、后台串行写盘与退出排空 | 原生窗口所有权、凭据或 SSH 状态 |
+| `src/app/worker_shutdown.rs` | worker 清理任务所有权、完成通知和有总期限的退出 drain | Slint 类型、可见 Tab 状态、transport 实现或持久化 |
 | `src/app/window_router.rs` | 私有多窗口路由、detached transfer 与 pane tree 所有权 | 生成类型声明、功能实现、SSH 协议细节或 JSON schema 细节 |
 | `src/app/macos_window.rs` | 主线程 AppKit 标题栏、运行中应用图标和标准应用菜单 action 绑定 | 生成的 Slint 类型、持久化设置、SSH 或 worker 状态 |
 | `src/app/native_file_drop.rs` | Windows 与 Linux 系统文件管理器拖入时的原生光标查询、逻辑坐标转换和安全回退边界 | 文件系统访问、SFTP 状态、transfer queue 或目标选择 |
@@ -537,8 +542,8 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
 6. 每个已保存连接的终端 Tab 最多持有一个 transport worker。SSH 只在完成信任和认证后
    启动；Telnet 直接启动明文 TCP worker；Serial 先枚举元数据并解析已保存的 USB 身份，
    只有用户明确要求连接后才打开选定设备。同 profile 的重复 Tab 使用彼此独立的有界命令/
-   事件队列。关闭 Tab 时先移除 attempt 路由，再异步 shutdown worker，迟到事件不会更新
-   其他 Tab。
+   事件队列。关闭 Tab 时先取消本地意图/probe 并请求断开，再移除 attempt 路由；清理任务继续由应用
+   shutdown registry 持有，迟到事件不会更新其他 Tab，立即退出也会等待该 worker。
    SSH 信任与认证仍在进行时，worker 会继续等待并丢弃已经排队的 shell/SFTP 操作；只有明确的
    `Disconnect` 或 controller 被释放才会取消该连接尝试，普通操作必须等到 `Connected` 后生效。
    共享 russh client config 明确启用 `TCP_NODELAY`，避免少量交互 channel data 等待 Nagle
@@ -1024,8 +1029,8 @@ cookie 只能证明持有此转发连接的授权，不能证明远端 UID/PID�
 - SFTP-only worker 观察 SSH transport，浏览器观察 SFTP subsystem channel；即使没有界面命令，
   任一连接关闭也会进入既有有界重连流程。目录请求遇到传输或协议故障时也会结束浏览器，路径或权限
   状态错误则只影响该次请求；
-- 关闭 Tab 先使 Tab/attempt 路由失效，再请求 worker shutdown；
-- 窗口退出对所有剩余 worker 请求断开，在五秒应用总时限内并发等待 join，超时后中止剩余任务，显式
+- 关闭 Tab 先取消并请求断开，再使 Tab/attempt 路由失效，清理任务转交应用 shutdown registry；
+- 窗口退出对所有剩余 worker 请求断开，与先前正在关闭的 worker 一起在 25 秒应用总时限内并发等待 join，超时后中止剩余任务，显式
   释放所有 detached/主窗口 Slint model 和窗口强引用，最后再关闭 Tokio。
 
 ## SFTP 浏览与写操作契约

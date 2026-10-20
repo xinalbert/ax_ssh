@@ -345,8 +345,15 @@ fn open_workspace_file(
         };
 
         let snapshot = remap_workspace_snapshot_ids(snapshot);
-        let (workers, pending_probes) = match state.lock() {
-            Ok(mut app) => app.drain_runtime_resources(),
+        let (completions, pending_probes) = match state.lock() {
+            Ok(mut app) => {
+                let (workers, probes) = app.drain_runtime_resources();
+                let completions = workers
+                    .into_iter()
+                    .map(|worker| app.worker_shutdowns.start(&Handle::current(), worker))
+                    .collect::<Vec<_>>();
+                (completions, probes)
+            }
             Err(_) => {
                 reset_open_gate();
                 set_status(&ui, "Cannot stop current workspace");
@@ -356,8 +363,8 @@ fn open_workspace_file(
         for pending_probe in pending_probes {
             let _ = pending_probe.cancel.send(());
         }
-        for worker in workers {
-            if let Err(error) = worker.shutdown().await {
+        for completion in completions {
+            if let Err(error) = completion.await {
                 warn!(%error, "failed to shut down worker before workspace replacement");
             }
         }

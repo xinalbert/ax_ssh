@@ -274,7 +274,7 @@ fn terminal_output_preserves_local_selection_revision() {
 
 #[cfg(not(windows))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
-async fn finishing_local_terminal_returns_its_worker_for_explicit_shutdown() {
+async fn finishing_local_terminal_registers_cleanup_before_releasing_state() {
     let state = Arc::new(Mutex::new(AppState::new(
         ConfigStore::new(
             std::env::temp_dir().join(format!("axssh-local-finish-{}.json", Uuid::new_v4())),
@@ -297,11 +297,11 @@ async fn finishing_local_terminal_returns_its_worker_for_explicit_shutdown() {
         .expect("local shell should report startup");
     assert!(matches!(started, Some(LocalShellEvent::Started { .. })));
 
-    let finished = finish_local_terminal(&state, tab_id, "finished")
+    let finished = finish_local_terminal(&state, tab_id, "finished", &Handle::current())
         .expect("local terminal should transition to finished");
-    let worker = finished
-        .worker
-        .expect("finished transition must preserve the worker owner");
+    let completion = finished
+        .completion
+        .expect("finished transition must register the worker owner");
     {
         let app = state.lock().expect("state should lock");
         let terminal = app.terminal(tab_id).expect("local terminal should remain");
@@ -310,7 +310,9 @@ async fn finishing_local_terminal_returns_its_worker_for_explicit_shutdown() {
         assert!(!terminal.worker_running);
         assert_eq!(terminal.status, "finished");
     }
-    tokio::time::timeout(Duration::from_secs(5), worker.shutdown())
+    let shutdowns = std::mem::take(&mut state.lock().unwrap().worker_shutdowns);
+    assert!(shutdowns.finish(Duration::from_secs(5)).await);
+    tokio::time::timeout(Duration::from_secs(5), completion)
         .await
         .expect("worker shutdown must remain bounded")
         .expect("finished local worker should shut down cleanly");

@@ -1,4 +1,5 @@
 use super::*;
+use tokio::time::timeout;
 
 #[test]
 fn multiline_dictation_does_not_submit_in_a_terminal_without_bracketed_paste() {

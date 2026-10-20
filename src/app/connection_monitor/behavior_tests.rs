@@ -1,5 +1,6 @@
 use super::*;
 use ax_ssh::terminal::TerminalOutputChunk;
+use tokio::time::timeout;
 
 struct Fixture {
     state: Arc<Mutex<AppState>>,

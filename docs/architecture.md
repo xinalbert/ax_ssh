@@ -63,6 +63,14 @@ Process startup (src/main.rs)
   lock, then publishes only profiles/groups after success. An owned persistence
   gate remains with the blocking operation even if its async caller is cancelled;
   Settings previews remain independent of both the disk candidate and completion.
+- `src/app/worker_shutdown.rs` owns cleanup tasks independently of visible tabs.
+  Tab close cancels reconnect/media/clipboard intents and probes and requests
+  disconnect before removing the tab route. The registry reaps completed tasks
+  and process exit drains both earlier tab closes and remaining live workers under
+  the existing 25-second deadline. Workspace replacement and local-shell cleanup
+  retain completion receipts while the registry retains task ownership.
+  Removing a worker from tab state and registering its cleanup use the same
+  state lock, so a concurrent exit drain cannot miss the transferred worker.
 - `SettingsPane` passes its draft through one `submit-draft` function for preview
   and save. The tab ID and close flag select persistence; bundled-font reads run
   on Tokio blocking tasks and registration stays on the Slint UI thread.
@@ -107,6 +115,7 @@ Process startup (src/main.rs)
 | `src/app/platform_support.rs` | Clipboard access, build-only diagnostics, external opener calls, and macOS application-menu wiring | Secrets, session state persistence, or SSH/worker state |
 | `src/app/window_state.rs` | UI-thread normal window geometry capture, monitor/DPI fitting and maximized restoration | Filesystem, workers, credentials or generated component declarations |
 | `src/app/workspace_autosave.rs` | Debounced checkpoints, one latest pending snapshot and serialized background writes with shutdown drain | Native window ownership, credentials or SSH state |
+| `src/app/worker_shutdown.rs` | Worker cleanup task ownership, completion receipts and deadline-based exit drain | Slint types, visible Tab state, transport implementation or persistence |
 | `src/app/window_router.rs` | Private multi-window route, detached-transfer and pane-tree ownership | Generated type declaration, feature implementations, SSH protocol details, or JSON schema details |
 | `src/app/macos_window.rs` | Main-thread AppKit title-bar setup, running-application icon, and standard application-menu action binding | Generated Slint types, persisted settings, SSH or worker state |
 | `src/app/native_file_drop.rs` | Windows and Linux native cursor lookup for external file-manager drops, with logical-coordinate conversion and safe fallback boundaries | Filesystem access, SFTP state, transfer queue, or target selection |
@@ -856,9 +865,10 @@ tab-local terminal connection notice deliberately remains non-blocking.
    worker immediately; Serial first enumerates metadata and resolves the saved
    USB identity, then opens the selected device only because the user requested
    connection. Bounded command/event queues remain independent between
-   duplicate profile tabs. Closing a tab removes its attempt route before
-   asynchronously shutting down the worker, so late events cannot update
-   another tab.
+   duplicate profile tabs. Closing a tab cancels pending local intents/probes and
+   requests disconnect before removing its attempt route. Cleanup remains owned
+   by the application shutdown registry, so late events cannot update another
+   tab and immediate process exit still waits for that worker.
    While SSH trust and authentication are still in progress, the worker keeps
    waiting and discards any already-queued shell or SFTP operation. Only an
    explicit `Disconnect` or a dropped controller cancels that connection
@@ -1640,9 +1650,10 @@ Authenticated connections follow this lifecycle:
   enters the existing bounded reconnect path. Transport/protocol failure in a
   directory request also ends the browser, while a path or permission status
   remains a request-local error;
-- tab close invalidates the tab/attempt route before requesting worker shutdown;
-- window shutdown requests disconnect for every remaining worker, joins them
-  concurrently under a five-second application deadline (aborting any
+- tab close requests cancellation/disconnect before invalidating the tab/attempt
+  route, and transfers its cleanup to the application shutdown registry;
+- window shutdown requests disconnect for every remaining worker and joins them
+  together with already-closing workers under a 25-second application deadline (aborting any
   stragglers), explicitly releases all detached and main-window Slint models
   and window handles, and only then shuts down Tokio.
 

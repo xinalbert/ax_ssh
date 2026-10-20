@@ -17,8 +17,7 @@ use slint::TimerMode;
 use slint::{ComponentHandle, Model, ModelRc, SharedString, VecModel};
 use tokio::runtime::{Handle, Runtime};
 use tokio::sync::{mpsc, oneshot};
-use tokio::task::JoinSet;
-use tokio::time::{Duration, timeout};
+use tokio::time::Duration;
 use tracing::{debug, error, info, warn};
 use uuid::Uuid;
 
@@ -111,6 +110,7 @@ mod view;
 mod window_bridge;
 mod window_router;
 mod window_state;
+mod worker_shutdown;
 mod workspace;
 mod workspace_autosave;
 
@@ -442,11 +442,16 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     window_router.capture_placements();
     let final_snapshot = state.lock().ok().map(|app| window_router.snapshot(&app));
     runtime.block_on(autosave.finish(final_snapshot));
-    let (workers, pending_probes) = match state.lock() {
-        Ok(mut app) => app.drain_runtime_resources(),
-        Err(_) => {
+    let (workers, pending_probes, mut shutdowns) = match state.lock() {
+        Ok(mut app) => {
+            let (workers, probes) = app.drain_runtime_resources();
+            (workers, probes, std::mem::take(&mut app.worker_shutdowns))
+        }
+        Err(poisoned) => {
             warn!("state lock poisoned during shutdown; continuing resource cleanup");
-            (Vec::new(), Vec::new())
+            let mut app = poisoned.into_inner();
+            let (workers, probes) = app.drain_runtime_resources();
+            (workers, probes, std::mem::take(&mut app.worker_shutdowns))
         }
     };
     for pending_probe in pending_probes {
@@ -458,32 +463,10 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
             );
         }
     }
-    let workers_timed_out = runtime.block_on(async move {
-        let mut pending = JoinSet::new();
-        for worker in workers {
-            pending.spawn(async move { worker.shutdown().await });
-        }
-        let completed = timeout(Duration::from_secs(25), async {
-            while let Some(result) = pending.join_next().await {
-                match result {
-                    Ok(Ok(())) => {}
-                    Ok(Err(error)) => {
-                        warn!(%error, "failed to shut down terminal worker cleanly");
-                    }
-                    Err(error) => {
-                        warn!(%error, "terminal worker shutdown task failed");
-                    }
-                }
-            }
-        })
-        .await
-        .is_ok();
-        if !completed {
-            pending.abort_all();
-            while pending.join_next().await.is_some() {}
-        }
-        !completed
-    });
+    for worker in workers {
+        drop(shutdowns.start(runtime.handle(), worker));
+    }
+    let workers_timed_out = !runtime.block_on(shutdowns.finish(Duration::from_secs(25)));
     if workers_timed_out {
         warn!(
             "terminal worker shutdown exceeded the application timeout; remaining tasks were aborted"

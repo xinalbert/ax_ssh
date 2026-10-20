@@ -73,7 +73,7 @@ pub(super) fn spawn_local_shell_monitor(
     let runtime_for_monitor = runtime.clone();
     runtime.spawn(async move {
         let mut terminal_event = false;
-        let mut finished_worker = None;
+        let mut shutdown_completion = None;
         let mut presentation =
             crate::app::terminal_presentation::TerminalPresentation::new();
         loop {
@@ -150,8 +150,9 @@ pub(super) fn spawn_local_shell_monitor(
                         &state,
                         tab_id,
                         &format!("Local shell exited: {status}"),
+                        &runtime_for_monitor,
                     ) {
-                        finished_worker = finished.worker;
+                        shutdown_completion = finished.completion;
                         if !global_window_router().is_some_and(|router| {
                             close_terminal_child_pane(
                                 &router,
@@ -180,8 +181,9 @@ pub(super) fn spawn_local_shell_monitor(
                         &state,
                         tab_id,
                         &format!("Local shell failed: {message}"),
+                        &runtime_for_monitor,
                     ) {
-                        finished_worker = finished.worker;
+                        shutdown_completion = finished.completion;
                         refresh_workspace(&ui, &state);
                     }
                     break;
@@ -191,13 +193,13 @@ pub(super) fn spawn_local_shell_monitor(
         presentation.clear_pending_output();
         if !terminal_event
             && let Some(finished) =
-                finish_local_terminal(&state, tab_id, "Local shell worker stopped")
+                finish_local_terminal(&state, tab_id, "Local shell worker stopped", &runtime_for_monitor)
         {
-            finished_worker = finished.worker;
+            shutdown_completion = finished.completion;
             refresh_workspace(&ui, &state);
         }
-        if let Some(worker) = finished_worker
-            && let Err(error) = worker.shutdown().await
+        if let Some(completion) = shutdown_completion
+            && let Err(error) = completion.await
         {
             warn!(tab_id = %tab_id, %error, "failed to reclaim stopped local shell worker");
         }
@@ -219,13 +221,14 @@ pub(super) fn mutate_local_terminal(
 }
 
 pub(super) struct FinishedLocalTerminal {
-    pub(super) worker: Option<TerminalWorker>,
+    pub(super) completion: Option<oneshot::Receiver<()>>,
 }
 
 pub(super) fn finish_local_terminal(
     state: &Arc<Mutex<AppState>>,
     tab_id: Uuid,
     status: &str,
+    runtime: &Handle,
 ) -> Option<FinishedLocalTerminal> {
     match state.lock() {
         Ok(mut app) if app.terminal(tab_id).is_some_and(TerminalTabState::is_local) => {
@@ -236,7 +239,10 @@ pub(super) fn finish_local_terminal(
             terminal.connected = false;
             terminal.worker_running = false;
             terminal.status = status.to_owned();
-            Some(FinishedLocalTerminal { worker })
+            // Move cleanup to the registry before releasing the state lock,
+            // so concurrent process exit cannot miss this worker.
+            let completion = worker.map(|worker| app.worker_shutdowns.start(runtime, worker));
+            Some(FinishedLocalTerminal { completion })
         }
         Ok(_) | Err(_) => None,
     }

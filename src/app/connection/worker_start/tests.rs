@@ -1,4 +1,5 @@
 use super::*;
+use tokio::time::timeout;
 
 struct Fixture {
     state: Arc<Mutex<AppState>>,

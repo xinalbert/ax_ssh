@@ -3,6 +3,7 @@
 use super::*;
 use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
 use slint::platform::{EventLoopProxy, Platform, WindowAdapter};
+use tokio::time::timeout;
 
 mod terminal_wheel;
 
