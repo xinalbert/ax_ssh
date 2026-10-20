@@ -100,7 +100,7 @@ Slint UI（.slint）
 | `src/x_server.rs` | 平台 X server provider 选项、系统应用发现与标准路径兜底、本机 display 候选和有界进程启动 | SSH channel、UI 状态、cookie、profile 修改或远端服务器配置 |
 | `src/ssh.rs` | russh handler、主机密钥决策、密码/私钥/运行时 agent 认证、shell 与服务端发起的 X11 channel 边界 | 窗口更新、持久化会话修改、UI 格式化、agent identity 管理 |
 | `src/ssh/private_keys.rs` | 本机 `.ssh` 私钥发现和阻塞式密钥加载 | passphrase 持久化、UI 状态、主机信任决策 |
-| `src/ssh/x11.rs` | 本机 DISPLAY 解析、精确 xauth cookie 查询、X11 setup 校验/替换、本机端点连接和 relay | UI 状态、profile 修改、cookie 持久化、启动 X server 或修改访问控制 |
+| `src/ssh/x11.rs` | X11 认证门禁、本机 DISPLAY/xauth 解析、委托 `XServerPlan` 的有界准备、setup 替换、端点连接和 relay | UI 状态、profile 修改、cookie 持久化、provider 专用进程启动实现或远端访问控制修改 |
 | `src/ssh/worker.rs` 与 `src/ssh/worker/` | 有界 session 启动/命令，以及私有 shell/X11 和 SFTP-only 生命周期模块；合并式 resize、批量事件、取消和关闭 | UI 状态或 profile 持久化 |
 | `src/sftp.rs`、`src/sftp/transfer.rs` 与 `src/sftp/transfer/cache.rs` | 有界 SFTP v3 packet 适配、目录浏览、worker 所有的分块下载/上传、文本编辑、重命名/删除和私有临时文件发布/清理 | Slint 类型、凭据、profile 持久化、detached opener 调用或 russh 信任决策 |
 | `src/telnet.rs` | 明文 TCP 生命周期、RFC 854 选项过滤、NAWS、有界输入输出、取消和关闭 | 凭据、SSH 信任、UI 状态或终端渲染 |
@@ -111,6 +111,11 @@ Slint UI（.slint）
 SFTP facade 组合私有 `sftp_bridge/{navigation,files,drag,transfers}.rs`；本地上传扫描归于 `local_files/upload.rs`。terminal facade 按输入、原生事件、几何、输出、剪贴板、链接目标、pane 动作和本地 shell 监控组合子模块；`workspace/startup.rs` 负责 checkpoint 恢复与最近文件清理。生成 Slint 类型仍只在 `src/app.rs` 声明。
 
 `config/settings.rs` 聚合分类设置并显式导出；`state/tabs.rs` 保留生命周期，其子模块负责刷新、快照和终端状态。SFTP transfer 子模块负责控制、上传、下载和递归发现，worker handle 与 public DTO 保持原 facade。`ui/sftp/{types,directory,transfers}.slint` 由 pane 显式导入；schema、callback payload、布局和 transport 所有权保持原契约。
+
+较大的回归集位于原 owner 的私有子模块：`local_shell/tests.rs`、`sftp/tests.rs`、
+`ssh/x11/tests.rs`、`terminal/input/tests.rs`，以及应用 input、font、settings、presentation、
+rendering 的 `tests.rs`。父模块在 `cfg(test)` 下只声明一次；测试辅助代码保持私有，不扩大
+运行时 API，也不改变 UI、领域或 transport 的职责归属。
 
 `CredentialStore::with_entry_factory` 和 `PasswordEntry` 是受保护 provider 与应用隔离测试所需的显式 library 边界，该 adapter 返回自有值与通用错误，平台错误留在 credentials 内部，避免测试访问真实 keyring 或替换进程全局后端。私有持久化在替换前确认临时文件权限，父目录同步失败带上下文返回；替换后的同步失败意味着新文件可能已发布，不能报告持久化成功。上传发布必须等待写入、源验证和远端 CLOSE 成功；发布前观察到取消不得返回 `Published`。
 

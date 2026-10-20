@@ -118,7 +118,7 @@ Process startup (src/main.rs)
 | `src/x_server.rs` | Platform X-server provider options, system application discovery with standard-path fallback, local display candidates, and bounded process startup | SSH channels, UI state, cookies, profile mutation, or remote server configuration |
 | `src/ssh.rs` | russh handler, host-key decision, password/private-key/runtime-agent authentication, shell and server-opened X11 channel boundary | Window updates, persistent session mutation, UI formatting, agent identity management |
 | `src/ssh/private_keys.rs` | Local `.ssh` private-key discovery and blocking key loading | Passphrase persistence, UI state, host trust decisions |
-| `src/ssh/x11.rs` | Local DISPLAY resolution, exact xauth cookie lookup, X11 setup validation/rewrite, local endpoint connection, and relay | UI state, profile mutation, cookie persistence, X-server startup, or access-control changes |
+| `src/ssh/x11.rs` | X11 authentication gating, local DISPLAY/xauth resolution, bounded preparation delegated to `XServerPlan`, setup rewrite, endpoint connection, and relay | UI state, profile mutation, cookie persistence, provider-specific process launching, or remote access-control changes |
 | `src/ssh/worker.rs` and `src/ssh/worker/` | Bounded session startup/commands, plus private shell/X11 and SFTP-only lifecycle modules; coalesced resize, batched events, cancellation and shutdown | UI state or profile persistence |
 | `src/sftp.rs`, `src/sftp/edit.rs`, `src/sftp/transfer.rs`, and `src/sftp/transfer/cache.rs` | Bounded SFTP v3 packet adapter, directory browser, worker-owned chunked download/upload, guarded byte edits, rename/delete and private temporary publication/cleanup | Slint types, credentials, profile persistence, detached opener calls, or russh trust decisions |
 | `src/telnet.rs` | Plaintext TCP lifetime, RFC 854 option filtering, NAWS, bounded input/output, cancellation and shutdown | Credentials, SSH trust, UI state or terminal rendering |
@@ -129,6 +129,13 @@ Process startup (src/main.rs)
 The SFTP application facade composes private `sftp_bridge/{navigation,files,drag,transfers}.rs` modules; local upload discovery belongs to `local_files/upload.rs`. The terminal facade composes input, native events, geometry, output, clipboard, targets, pane actions and local-shell monitoring. `workspace/startup.rs` owns checkpoint recovery and recent-file reconciliation. Generated Slint types remain declared only in `src/app.rs`.
 
 `config/settings.rs` aggregates category modules with explicit exports; `state/tabs.rs` keeps Tab lifecycle while its children own refresh batching, snapshots and terminal state. SFTP transfer children own control, upload, download and discovery; worker handles and public DTOs retain their existing facade. `ui/sftp/{types,directory,transfers}.slint` are imported explicitly by the pane. These moves preserve schema, callback payloads, layout and transport ownership.
+
+Larger regression suites live in private child modules alongside their owner:
+`local_shell/tests.rs`, `sftp/tests.rs`, `ssh/x11/tests.rs`,
+`terminal/input/tests.rs`, and the application input, font, settings,
+presentation and rendering `tests.rs` files. Their parents declare each module
+once under `cfg(test)`. Test helpers stay private; moving them does not widen the
+runtime API or move domain/transport ownership into the UI.
 
 `CredentialStore::with_entry_factory` and `PasswordEntry` form the intentional library boundary for protected providers and isolated application tests. The adapter returns owned values and generic errors; platform errors stay inside credentials. This avoids real keyring access or process-global backend replacement in tests. Private persistence restricts temporary-file permissions before replacement and reports directory-sync failures with context. A sync failure after replacement means the new file may already be published; it does not report durable success. Upload publication requires successful writes, source validation and remote CLOSE, and cancellation observed before publication cannot report `Published`.
 
