@@ -18,7 +18,7 @@
 | `LICENSE`、`THIRD_PARTY_NOTICES.md` | AxSSH GPL 主许可证与独立第三方许可边界 | 修改授权、分发或打包声明时 | 原创软件使用 GPL-3.0-only；Slint/OFL 字体/MIT vendor/平台文件图标依赖保留各自声明 |
 | `src/` | Rust 库边界、进程、UI bridge、配置、系统凭据、终端、日志和 transport | 修改行为、状态、存储、凭据、终端、日志或连接时 | `lib.rs` 导出 audio/media/config/credentials/logging/ssh/sftp/telnet/serial/terminal；生成的 Slint 类型只在 `app.rs` 使用 |
 | `ui/` | Slint 页面、共享 Settings 控件和集中式设计 token（含 icons 共用 SVG） | 修改布局、视觉状态、主题或 UI callback 时 | 页面不持有静态颜色/字号/间距字面量，不执行文件系统或网络操作 |
-| `translations/` | 构建时内嵌的 Slint 界面翻译目录与语言元数据 | 增加或修改静态文案、locale 或语言选择时 | PO 目录为 `de`/`en-GB`/`es`/`fr`/`ja`/`ko`/`pt-BR`/`ru`/`uk`/`zh-CN`/`zh-TW`，各 665 keys；`en` 仅保存源语言元数据；每个目录的 `language.json` 驱动 build 注册表与 Settings model；PO 为译文来源，维护脚本生成静态搜索数组并校验完整性，旧 build_zh 命令兼容；远端内容、用户值、日志与技术错误详情不进入翻译键 |
+| `translations/` | 构建时内嵌的 Slint 界面翻译目录与语言元数据 | 增加或修改静态文案、locale 或语言选择时 | PO 目录为 `de`/`en-GB`/`es`/`fr`/`ja`/`ko`/`pt-BR`/`ru`/`uk`/`zh-CN`/`zh-TW`，各 675 keys；`en` 仅保存源语言元数据；每个目录的 `language.json` 驱动 build 注册表与 Settings model；PO 为译文来源，维护脚本生成静态搜索数组并校验完整性，旧 build_zh 命令兼容；远端内容、用户值、日志与技术错误详情不进入翻译键 |
 | `assets/fonts/` | 项目自带应用/Terminal 字体、许可证和作者声明 | 修改字体选择或打包资源时 | JetBrains Mono 四个字重由 Rust 编译进可执行文件作为默认基线；Maple 和 Iosevka 分别为必需的 Han/缺失符号回退资源，其余 TTF 从运行时资源路径读取；均不经 Slint import，也不读取参考子模块 |
 | `assets/ion/` | 用户提供 Terminal 图标的跨平台资源集与说明 | 接入应用图标、打包或替换品牌图标时 | `terminal_icon.svg` 是唯一源；Slint/winit 使用 256px PNG，Windows 嵌入 ICO，macOS Dock/Bundle 使用 PNG/ICNS，Linux package 安装 hicolor PNG 集 |
 | `assets/os-icons/` | 官网/Iconify/社区系统与平台 SVG/PNG、原生变体和来源许可清单 | 为系统标识选图、核对身份或 light/dark 命名时 | 328 个系统图标、178 个系统/平台条目；`ui/folder/` 另存连接分组的 Iconify 文件夹 UI 资源，不计入系统图标清单 |
@@ -77,6 +77,9 @@
 | `src/app/platform_support.rs` | 平台剪贴板、诊断信息、外部打开器和 macOS application menu | `set_platform_clipboard_text`、`diagnostic_info`、`configure_macos_application_menu` | cfg 隔离平台 API；诊断只输出构建元数据，不输出 host/path/password/session 内容 |
 | `src/app/window_state.rs` | 普通窗口几何缓存与显示器适配 | `capture`、`prepare`、`restore` | 尺寸/坐标/最大化恢复、DPI 与拔屏回退；Wayland 不强制定位 |
 | `src/app/workspace_autosave.rs` | 防抖工作区快照与串行后台写盘 | `WorkspaceAutosave`、`CheckpointSchedule`、`write_snapshots` | 单槽最新快照、元数据比对、文本定期采样及退出 flush |
+| `src/app/worker_shutdown.rs`、`src/app/worker_shutdown/tests.rs` | 独立于可见 Tab 的 worker 清理所有权 | `WorkerShutdowns`、`start`、`finish` | 关闭前取消/断开、工作区替换和本地 shell 完成通知、退出统一 25 秒 drain、立即退出/错误/超时回归 |
+| `src/app/workspace/session_management.rs` 及其 `tests.rs` | 会话复制/导入/分组后台事务 | `update_session_store`、owned persistence gate | 短锁快照、锁外读写、成功后只合并 profiles/groups；慢盘/失败/取消/导入脱敏回归 |
+| `ui/terminal-pane.slint`、`src/app/view/tests/terminal_notices.rs` | 类型化提示与展示层翻译 | `TerminalNoticeKind`、`TerminalNoticeCard` | 主/独立窗口语言切换、授权固定动作、技术详情保留；不截图 |
 | `src/app/window_router.rs` | 私有多窗口 workspace 路由与阻塞式输入闸门 | `WindowRouter`、`WindowView`、`WindowTerminalUpdates`、`workspace_actions_locked`、`terminal_presentation_mode`、`terminal_updates`、`GLOBAL_WINDOW_ROUTER` | 多 `AppWindow` 生命周期、可见 Tab/focused pane、每窗口 PaneTree、detached/main route 与 Return/close；完整视图带当前活动连接的单个 summary，标题栏图标跟随隐藏子 pane 的焦点和已保存身份；模态状态与 active Tab 的 pending security phase 共同锁定 Tab/Pane/workspace 动作；按活动 tree 动态分类 Focused/Unfocused/Hidden 并发布轻量 route revision，按脏 UUID 只为当前活动 pane tree 构造 terminal snapshot；macOS 激活事件为快速路径，500ms AppKit 状态读取只作遗漏兜底；不持有 transport、Slint 强引用或秘密 |
 | `src/app/panes.rs` | 有界 Terminal Tab 内 pane 布局 | `PaneTree`、`PaneLayout`、`PaneDividerPlacement`、`PaneDirection`、`MAX_TERMINAL_PANES` | 稳定 workspace Tab UUID、0.1-0.9 split ratio、前序 divider、终端分行/分列、相邻方向焦点和最多 8 pane 限制；只保存 UUID、volatile 布局和焦点，不保存 Slint、worker、buffer 或秘密 |
 | `src/app/font_bridge.rs` | 运行时字体资源与系统等宽字体 bridge | `FontRegistry`、`font_options`、`load_bundled_fonts`、`load_terminal_font_on_demand`、`configure_terminal_fallbacks` | UI 线程注册应用字体；JetBrains Mono 保留嵌入 source，Maple/Iosevka/Monaspace 以经过大小校验的路径 source 交给 Fontique 按需加载；Terminal 首次加载 Maple 与 Iosevka，Han 回退保持 Maple 在先、Common 缺失符号使用 Iosevka；字体注册代次驱动终端布局缓存失效并刷新主/分离窗口；两个下拉固定自带字体在前，Tokio blocking worker 只返回有界系统字体族名称 |
@@ -229,9 +232,9 @@
 ## 刷新规则
 
 - 刷新触发：新增/删除模块、入口、跨层契约、构建/CI 或持久化事实时更新相应路径和定位；功能实现和验证历史追加到月度记录。
-- 最近依据：2026-10-20 全项目整理，复核 Cargo/CI、Rust/Slint 入口和 test 模块；X11 认证前置、六项依赖更新及现有平台边界已核对。
+- 最近依据：2026-10-20 提示翻译、会话管理后台事务与 worker 清理 registry；此前全项目整理，复核 Cargo/CI、Rust/Slint 入口和 test 模块；X11 认证前置、六项依赖更新及现有平台边界已核对。
 - 地图只保留当前路由，不继续累积旧任务的“当前/最近”段落。此前地图逐字保存在[历史地图快照](project-map-before-2026-10-20.md)，实施状态见 [current.md](current.md)，历史见 [changes/2026/10.md](changes/2026/10.md)。
 
 ## 最后更新时间
 
-- 2026-10-20 09:08 +0800
+- 2026-10-20 16:44 +0800
