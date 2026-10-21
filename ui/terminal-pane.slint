@@ -27,6 +27,7 @@ export struct TerminalCursorState {
     visible: bool,
     shape: int,
     blinking: bool,
+    color: color,
     text: string,
 }
 
@@ -319,6 +320,12 @@ export component TerminalPane inherits Rectangle {
         ? root.view.cursor_state[0].cells : root.view.cursor_cells;
     private property <bool> cursor-visible: root.view.cursor_state.length > 0
         ? root.view.cursor_state[0].visible : root.view.cursor_visible;
+    private property <int> cursor-shape: root.view.cursor_state.length > 0
+        ? root.view.cursor_state[0].shape : root.view.cursor_shape;
+    private property <bool> cursor-blinking: root.view.cursor_state.length > 0
+        ? root.view.cursor_state[0].blinking : root.view.cursor_blinking;
+    private property <color> cursor-color: root.view.cursor_state.length > 0
+        ? root.view.cursor_state[0].color : root.view.cursor_color;
     private property <string> cursor-text: root.view.cursor_state.length > 0
         ? root.view.cursor_state[0].text : root.view.cursor_text;
     private property <string> terminal-font-family: root.view.font_family;
@@ -477,9 +484,9 @@ export component TerminalPane inherits Rectangle {
         cursor_column: root.cursor-column-in-grid,
         cursor_cells: root.cursor-cells-in-grid,
         cursor_visible: root.cursor-visible,
-        cursor_shape: root.view.cursor_shape,
-        cursor_blinking: root.view.cursor_blinking,
-        cursor_color: root.view.cursor_color,
+        cursor_shape: root.cursor-shape,
+        cursor_blinking: root.cursor-blinking,
+        cursor_color: root.cursor-color,
         cursor_text: root.cursor-text,
         font_family: root.terminal-font-family,
         font_registry_generation: root.view.font_registry_generation,
@@ -858,7 +865,7 @@ export component TerminalPane inherits Rectangle {
 
     Timer {
         running: root.cursor-blink-enabled
-            && root.view.cursor_blinking
+            && root.cursor-blinking
             && root.connected && ime-input.has-focus && root.cursor-visible
             && !root.selecting && !root.selection-active;
         interval: 530ms;

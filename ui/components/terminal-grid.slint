@@ -373,8 +373,8 @@ export component TerminalGrid inherits Rectangle {
                 max(root.cell-width, preedit-value.preferred-width))
             : 0px;
         height: root.cell-height;
-        visible: root.view.connected && root.view.cursor_visible
-            && root.preedit-text != "";
+        // Remote DECTCEM controls only the protocol cursor, not local IME text.
+        visible: root.view.connected && root.preedit-text != "";
         background: root.view.background;
 
         preedit-value := Text {

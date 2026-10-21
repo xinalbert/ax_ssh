@@ -672,6 +672,7 @@ pub(super) fn terminal_view_from_snapshot(
     let cursor_row = snapshot.cursor_row.min(i32::MAX as usize) as i32;
     let cursor_column = snapshot.cursor_column.min(i32::MAX as usize) as i32;
     let cursor_cells = snapshot.cursor_cells.clamp(1, 2) as i32;
+    let cursor_color = to_slint_color(renderer.cursor_color(snapshot.cursor_color));
     let cursor_state = TerminalCursorState {
         row: cursor_row,
         column: cursor_column,
@@ -679,6 +680,7 @@ pub(super) fn terminal_view_from_snapshot(
         visible: snapshot.cursor_visible,
         shape: terminal_cursor_shape(snapshot.cursor_shape),
         blinking: snapshot.cursor_blinking,
+        color: cursor_color,
         text: cursor_text.clone(),
     };
     TerminalViewState {
@@ -698,7 +700,7 @@ pub(super) fn terminal_view_from_snapshot(
         cursor_visible: snapshot.cursor_visible,
         cursor_shape: terminal_cursor_shape(snapshot.cursor_shape),
         cursor_blinking: snapshot.cursor_blinking,
-        cursor_color: to_slint_color(renderer.cursor_color(snapshot.cursor_color)),
+        cursor_color,
         cursor_text,
         font_family: ui.get_terminal_font_family(),
         font_registry_generation: ui.get_font_registry_generation(),
@@ -801,6 +803,7 @@ fn terminal_view_from_snapshot_incremental(
     }
 
     let cursor_text: SharedString = snapshot.cursor_text.into();
+    let cursor_color = to_slint_color(renderer.cursor_color(snapshot.cursor_color));
     let cursor_state = TerminalCursorState {
         row: snapshot.cursor_row.min(i32::MAX as usize) as i32,
         column: snapshot.cursor_column.min(i32::MAX as usize) as i32,
@@ -808,6 +811,7 @@ fn terminal_view_from_snapshot_incremental(
         visible: snapshot.cursor_visible,
         shape: terminal_cursor_shape(snapshot.cursor_shape),
         blinking: snapshot.cursor_blinking,
+        color: cursor_color,
         text: cursor_text.clone(),
     };
     if !replace_vec_model_rows(&terminal.cursor_state, vec![cursor_state.clone()]) {
@@ -828,7 +832,7 @@ fn terminal_view_from_snapshot_incremental(
     terminal.cursor_visible = snapshot.cursor_visible;
     terminal.cursor_shape = terminal_cursor_shape(snapshot.cursor_shape);
     terminal.cursor_blinking = snapshot.cursor_blinking;
-    terminal.cursor_color = to_slint_color(renderer.cursor_color(snapshot.cursor_color));
+    terminal.cursor_color = cursor_color;
     terminal.cursor_text = cursor_text;
     terminal.font_family = ui.get_terminal_font_family();
     terminal.font_registry_generation = ui.get_font_registry_generation();

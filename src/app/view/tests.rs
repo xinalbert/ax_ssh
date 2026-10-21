@@ -4,6 +4,7 @@ use slint::Model;
 mod sftp_navigation;
 mod shortcut_menus;
 mod terminal_connection;
+mod terminal_cursor;
 mod terminal_input;
 mod terminal_notices;
 mod text_editing;
@@ -876,6 +877,7 @@ fn terminal_pane_snapshots_update_existing_model_rows() {
         shape: 0,
         blinking: false,
         text: "b".into(),
+        color: Default::default(),
     }]));
     let panes = ModelRc::new(VecModel::from(vec![
         first_pane,
@@ -911,6 +913,7 @@ fn terminal_pane_snapshots_update_existing_model_rows() {
             shape: 0,
             blinking: false,
             text: "a".into(),
+            color: Default::default(),
         }]));
     let updated_dividers = vec![TerminalPaneDividerView {
         id: 0,
@@ -1114,6 +1117,7 @@ fn terminal_pane_snapshot_keeps_parent_row_when_only_nested_models_change() {
         shape: 0,
         blinking: false,
         text: "b".into(),
+        color: Default::default(),
     }]));
     let panes = ModelRc::new(VecModel::from(vec![pane]));
     let dividers = ModelRc::new(VecModel::from(Vec::<TerminalPaneDividerView>::new()));
@@ -1130,6 +1134,7 @@ fn terminal_pane_snapshot_keeps_parent_row_when_only_nested_models_change() {
         shape: 0,
         blinking: false,
         text: "a".into(),
+        color: Default::default(),
     }]));
     updated.terminal.cursor_row = 3;
     updated.terminal.cursor_column = 7;
