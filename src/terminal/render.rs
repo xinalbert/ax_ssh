@@ -416,6 +416,8 @@ pub(super) fn styled_line(
 
         let invisible_default = text.chars().all(|character| character == ' ')
             && style.background == TerminalColor::Default
+            // Inverse spaces paint the foreground as a visible background.
+            && !style.inverse
             && !style.underline
             && !style.strikethrough;
         if !invisible_default {

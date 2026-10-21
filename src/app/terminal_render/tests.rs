@@ -57,6 +57,46 @@ fn semantic_settings() -> TerminalRenderSettings {
 }
 
 #[test]
+fn inverse_space_cursors_survive_parsing_and_rendering_with_the_native_cursor_hidden() {
+    for (prefix, column) in [("", 0), ("dfa1", 4), ("中文", 4)] {
+        let mut terminal = ax_ssh::terminal::TerminalModel::new(20, 3, 10);
+        terminal.process(format!("\x1b[?25l{prefix}\x1b[7m \x1b[27m").as_bytes());
+        let source = terminal.snapshot();
+        assert!(!source.cursor_visible);
+        let rendered = render_terminal(source, settings());
+        assert_eq!(
+            rendered.lines[0].backgrounds,
+            vec![RenderedTerminalBackgroundRun {
+                column,
+                cells: 1,
+                background: settings().default_foreground,
+            }],
+            "the inverse space after {prefix:?} must remain a visible block"
+        );
+
+        terminal.process(b"\r\x1b[2K\x1b[7mX\x1b[27m");
+        let occupied = render_terminal(terminal.snapshot(), settings());
+        assert_eq!(occupied.lines[0].backgrounds[0].column, 0);
+        terminal.process(b"\r\x1b[2K\x1b[7m \x1b[27m");
+        let blank = terminal.snapshot();
+        assert!(blank.dirty_rows.contains(&0));
+        assert_eq!(
+            render_terminal(blank, settings()).lines[0].backgrounds,
+            occupied.lines[0].backgrounds,
+            "moving from an inverse letter to an inverse space keeps its background"
+        );
+
+        terminal.process(b"\r\x1b[2K");
+        let cleared = render_terminal(terminal.snapshot(), settings());
+        assert!(cleared.lines[0].backgrounds.is_empty());
+        assert!(
+            cleared.lines[0].runs.is_empty(),
+            "plain blank rows stay compact"
+        );
+    }
+}
+
+#[test]
 fn terminal_local_default_background_overrides_the_theme_surface() {
     let mut source = snapshot(TerminalStyle::default());
     source.background_color = TerminalColor::Rgb {
