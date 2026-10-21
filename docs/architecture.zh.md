@@ -306,8 +306,9 @@ deadline。没有脏输出时没有 timer 唤醒。parser、协议应答、worke
 这些已被订阅的 model 原地写入新行，行数变化时也只 reset 同一 model，最后再更新外层 pane 行。
 未变化的 pane/divider 行不会发送父 model 通知，terminal-only 批次也不会重建 SFTP 或无关 workspace
 属性。因此可见 `TerminalGrid` 会直接收到输出 model 通知，不需要等待下一次焦点变化。
-光标基于相同原因使用一个保留 identity、有界单行的 model。每份 snapshot 先通过该 model 更新
-行、列、可见性和显示字符，再发布终端行，因此光标移动不依赖焦点变化触发外层 DTO 刷新。
+光标基于相同原因使用一个保留 identity、有界单行的 model。每份 snapshot 通过该 model 更新
+行、列、可见性、形状、闪烁请求、颜色和显示字符。Slint 从保留的 model 消费全部光标字段，
+因此仅有光标协议状态的变化不依赖焦点变化触发外层 DTO 刷新，也不替换已聚焦的输入代理。
 终端专用批次应用 pane model 更新后，application bridge 还会调用 native winit 窗口的
 `request_redraw()`。这只负责呈现唤醒，不改变 `TerminalSnapshot`、脏行选择、parser 行为、传输时序或有界刷新闸门。
 它覆盖 Windows 和 Linux software surface 可能出现的情况：Slint model 已收到通知，但下一次 native frame 没有被排入，
@@ -514,7 +515,8 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    `NormalizedKeyboardInput`；快捷键格式化、终端直发判断、日志和终端编码不再从独立的文本与修饰键参数重构事件。
    `TerminalSettings.option_as_meta` 默认关闭，因此 Option
    文字和死键走文本路径；开启后 Option 组合键按终端 Meta 编码。`TerminalGrid` 只会在
-   已连接光标可见时显示这份局部 preedit 值；组合文本不会经由它的手势 callback 跨越组件边界。
+   已连接且局部 preedit 非空时显示它，不依赖远端光标可见性或闪烁相位。TUI 隐藏协议光标并自行绘制
+   光标时，本地拼音组合仍可见；只有已提交文本进入终端输入 callback，组合文本不会经由网格的手势 callback 跨越组件边界。
    Windows/Linux 保持 Alt
    终端输入，同时 Ctrl+Alt 的可打印文字可保留为 AltGr 文本。普通 `Ctrl+C` 保留为 PTY
    输入；终端获得焦点时 Ctrl 组合优先。剪贴板操作在 macOS 保留 `Cmd+C/V`，其他平台
@@ -590,7 +592,8 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    `CSI ?2026l`）可以控制呈现事务：parser 持续消费输出，UI 保留最后已发布的有界帧，直到标准结束序列或
    上游同步 deadline 释放；没有旧帧时不发布局部首帧。它不缓存无界输出，也不改变软换行/reflow、mouse reporting、worker 或 SSH transport
    语义。snapshot 保留协议光标形状和闪烁请求，以及隐藏文字和每种已支持的 SGR 下划线样式及颜色，Slint 不再用固定
-   block 光标或本地对齐启发式替代它们。终端局部的 `OSC 4`、`OSC 10`、`OSC 11` 与 `OSC 12`
+   block 光标或本地对齐启发式替代它们。空白 run 压缩会保留反色空格：SGR 7 把前景色交换成可见背景，
+   因此 TUI 隐藏协议光标并用该字符格自行绘制光标时不会丢失色块。终端局部的 `OSC 4`、`OSC 10`、`OSC 11` 与 `OSC 12`
    调色板变更会解析为同一份快照颜色，用于显示和颜色查询应答。`CSI 14 t` 回报实测文本区像素，`CSI 16 t`
    回报实测单元格高宽；两者在布局度量就绪前都经同一个有界协议队列延后。窗口操作查询 `CSI 13 t`、`CSI 15 t`
    和 `CSI 19 t` 因模型不拥有窗口位置或完整屏幕几何而保持不应答，绝不把文本区尺寸冒充这些值。协议 callback

@@ -40,6 +40,7 @@
 | `src/app/input/tests.rs`、`src/app/input/menu_navigation_tests.rs`、`src/app/font_bridge/tests.rs`、`src/app/settings_bridge/tests.rs`、`src/app/terminal_presentation/tests.rs`、`src/app/terminal_render/tests.rs` | 应用 owner 私有回归 | 输入/菜单/字体/设置/呈现/渲染测试 | 大型内联测试移出实现文件；保留 cfg/辅助代码私有边界及行为，三项图标测试归入 settings tests 命名空间 |
 | `src/app/view/tests/shortcut_menus.rs` | 主/独立窗口生成菜单快捷键回归 | `detached_menu_shortcuts_stay_with_their_window_and_respect_modal_state` | 独立适配器中的真实按键菜单入口、单次消费、窗口隔离、前后 Tab、Copy/Select All、模态与 SFTP 禁用；不截图 |
 | `src/app/view/tests/terminal_input.rs` | 终端透明输入代理的编辑历史隔离回归 | `main_terminal_proxy_keeps_local_undo_out_of_cleared_input`、`detached_terminal_proxy_keeps_local_undo_out_of_cleared_input` | 真实普通/IME 文字提交后清空、撤销/重做 fallback、物理 Control 字节与配置 Paste 优先级；无原生窗口或截图 |
+| `src/app/view/tests/terminal_cursor.rs` | 主/独立窗口的光标协议更新和本地预编辑回归 | `cursor_only_protocol_updates_reach_the_grid_without_replacing_models_or_focus`、`local_preedit_stays_visible_with_a_hidden_remote_cursor_and_only_commits_send_text` | 仅改变形状/颜色/闪烁的真实模型更新、焦点和 model identity；隐藏远端光标时的 composition 显示/取消/单次提交；仅断言数值布局和 item 状态，不截图 |
 | `src/app/view/tests/terminal_connection.rs` | 连接等待期几何和焦点回归 | `connecting_terminals_report_real_geometry_in_main_and_detached_windows`、`sidebar_connection_moves_focus_before_login_and_does_not_buffer_enter` | 主/独立窗口在 connected 前上报尺寸；展开/收起侧栏点击后 Enter 不重复建连；等待输入不补发，安全对话框不被抢焦点，主动多连接仍可用 |
 | `src/app/behavior_tests.rs` | 无窗口 callback 到控制器/真实 Telnet worker 回归 | `Harness`、`isolated` | 进程级 Slint proxy 隔离、UI 状态和终端字节链路；不截图 |
 | `src/app/behavior_tests/terminal_wheel.rs` | UI 滚轮到真实 SSH 服务端 data 的接收回归 | `Fixture`、`peer_shutdown_result`、`main_window_wheel_bytes_reach_the_ssh_terminal`、`detached_window_wheel_bytes_reach_the_ssh_terminal` | 主/独立窗口分发、实际编码/worker/SSH、SGR/传统报告、步数/累计、备用屏方向键/Home、本地历史与 Shift；固定测试 host key 和 FIFO 接收屏障；显式收尾接受 reset，Windows 另接受 abort；提前断线和其它错误仍失败，操作系统鼠标入口另验 |
@@ -232,9 +233,9 @@
 ## 刷新规则
 
 - 刷新触发：新增/删除模块、入口、跨层契约、构建/CI 或持久化事实时更新相应路径和定位；功能实现和验证历史追加到月度记录。
-- 最近依据：2026-10-20 提示翻译、会话管理后台事务与 worker 清理 registry；此前全项目整理，复核 Cargo/CI、Rust/Slint 入口和 test 模块；X11 认证前置、六项依赖更新及现有平台边界已核对。
+- 最近依据：2026-10-21 反色空格保留、完整单行光标 model 与远端显隐独立的本地预编辑回归；此前提示翻译、会话管理后台事务与 worker 清理 registry、全项目整理及现有平台边界已核对。
 - 地图只保留当前路由，不继续累积旧任务的“当前/最近”段落。此前地图逐字保存在[历史地图快照](project-map-before-2026-10-20.md)，实施状态见 [current.md](current.md)，历史见 [changes/2026/10.md](changes/2026/10.md)。
 
 ## 最后更新时间
 
-- 2026-10-20 16:44 +0800
+- 2026-10-21 16:00 +0800

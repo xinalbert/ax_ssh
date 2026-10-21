@@ -468,9 +468,10 @@ terminal-only batch does not rebuild SFTP or unrelated workspace properties.
 The visible `TerminalGrid` therefore receives a direct model notification for
 output without waiting for a later focus change.
 The cursor uses a retained, bounded one-row model for the same reason. Each
-snapshot updates its row, column, visibility, and displayed cell through that
-model before publishing terminal rows, so cursor movement does not depend on a
-focus-triggered outer DTO refresh.
+snapshot updates its row, column, visibility, shape, blink request, color, and
+displayed cell through that model. Slint consumes all of those fields from the
+retained model, so cursor-only protocol changes do not depend on a
+focus-triggered outer DTO refresh or replace the focused input proxy.
 After a terminal-only batch applies its pane model updates, the application
 bridge also calls the native winit window's `request_redraw()`. This is a
 presentation wake-up only: it does not alter `TerminalSnapshot`, dirty-row
@@ -819,8 +820,11 @@ tab-local terminal connection notice deliberately remains non-blocking.
    `NormalizedKeyboardInput`; shortcut formatting, direct-terminal routing,
    logging, and terminal encoding do not reconstruct an event from separate
    text and modifier arguments.
-   `TerminalGrid` displays that local preedit value only while the connected
-   cursor is visible; no composition text crosses its gesture callbacks.
+   `TerminalGrid` displays a nonempty local preedit value while connected,
+   independently of the remote cursor's visibility or blink phase. A TUI may
+   hide the protocol cursor and draw its own cursor without hiding the local
+   pinyin composition. Only committed text crosses the terminal input callback;
+   no composition text crosses the grid's gesture callbacks.
    `TerminalSettings.option_as_meta` is disabled by default, so Option text and
    dead keys use the text path; when enabled, Option-modified keys are terminal
    Meta input. Windows/Linux retain Alt terminal input while Ctrl+Alt printable
@@ -952,7 +956,10 @@ tab-local terminal connection notice deliberately remains non-blocking.
    soft-wrap/reflow, mouse-reporting, worker, or SSH transport semantics.
    Snapshots preserve the protocol cursor shape and blink request, plus hidden
    text and each supported SGR underline style and color, so Slint does not replace them
-   with a fixed block cursor or local alignment heuristic. Terminal-local
+   with a fixed block cursor or local alignment heuristic. Blank-run compaction
+   preserves inverse spaces: SGR 7 swaps their foreground into a visible
+   background, including when a TUI uses that cell as its own cursor while
+   hiding the protocol cursor. Terminal-local
    `OSC 4`, `OSC 10`, `OSC 11`, and `OSC 12` palette changes resolve into the
    same snapshot colors used for rendering and color-query replies. `CSI 14 t`
    reports the measured text-area pixels and `CSI 16 t` reports the measured
