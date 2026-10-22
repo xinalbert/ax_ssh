@@ -1,5 +1,7 @@
 [简体中文](README.zh.md)
 
+<img src="assets/ion/terminal_icon_all_formats/terminal_icon_256.png" alt="AxSSH application icon" width="128" height="128">
+
 # AxSSH
 
 [![CI](https://img.shields.io/github/actions/workflow/status/xinalbert/ax_ssh/ci.yml?branch=master&label=CI)](https://github.com/xinalbert/ax_ssh/actions/workflows/ci.yml)
