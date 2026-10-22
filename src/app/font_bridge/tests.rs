@@ -1,6 +1,114 @@
 use super::*;
 
 #[test]
+fn real_parley_shaping_selects_the_explicit_symbol_face_before_emoji_fallback() {
+    use i_slint_core::textlayout::sharedparley::parley;
+    let resources = FontResources {
+        directories: vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/fonts")],
+    };
+    let mut fonts = parley::FontContext {
+        collection: fontique::Collection::new(fontique::CollectionOptions {
+            shared: false,
+            system_fonts: false,
+        }),
+        source_cache: Default::default(),
+    };
+    for family in [BUNDLED_UI_FONT_FAMILY, TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY] {
+        let font = resources.load_bundled_font(family).unwrap().unwrap();
+        register_loaded_font_in_collection(&mut fonts.collection, font).unwrap();
+    }
+    let symbol_bytes = std::fs::read(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/fonts/IosevkaTerm-Regular.ttf"),
+    )
+    .unwrap();
+    let mut layouts = parley::LayoutContext::<()>::new();
+    for text in ["⏺", "⏺\u{fe0e}", "←↑→", "✔"] {
+        let mut builder = layouts.ranged_builder(&mut fonts, text, 1.0, false);
+        builder.push_default(parley::StyleProperty::FontFamily(
+            parley::FontFamily::Single(parley::FontFamilyName::named(
+                TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+            )),
+        ));
+        builder.push_default(parley::StyleProperty::FontSize(14.0));
+        let mut layout = builder.build(text);
+        layout.break_all_lines(None);
+        let runs = layout
+            .lines()
+            .flat_map(|line| line.runs())
+            .collect::<Vec<_>>();
+        assert!(!runs.is_empty());
+        assert!(
+            runs.iter()
+                .all(|run| run.font().data.as_ref() == symbol_bytes.as_slice()),
+            "{text:?} must shape from Iosevka, not merely appear in a candidate list"
+        );
+        assert!(runs.iter().all(|run| {
+            run.clusters()
+                .all(|cluster| cluster.glyphs().all(|glyph| glyph.id != 0))
+        }));
+    }
+}
+
+#[test]
+fn batchable_symbols_have_real_cell_advances_in_all_bundled_symbol_faces() {
+    use i_slint_core::textlayout::sharedparley::parley;
+    let mut fonts = parley::FontContext {
+        collection: fontique::Collection::new(fontique::CollectionOptions {
+            shared: false,
+            system_fonts: false,
+        }),
+        source_cache: Default::default(),
+    };
+    let resources = FontResources {
+        directories: vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/fonts")],
+    };
+    let font = resources
+        .load_bundled_font(TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY)
+        .unwrap()
+        .unwrap();
+    register_loaded_font_in_collection(&mut fonts.collection, font).unwrap();
+    let text = (0..=0x2bff)
+        .filter_map(char::from_u32)
+        .filter(|&ch| super::super::terminal_render::batchable_symbol(ch))
+        .collect::<String>();
+    assert!(text.chars().count() > 800);
+    let mut layouts = parley::LayoutContext::<()>::new();
+    for (weight, italic) in [(400.0, false), (700.0, false), (400.0, true), (700.0, true)] {
+        let mut builder = layouts.ranged_builder(&mut fonts, &text, 1.0, false);
+        builder.push_default(parley::StyleProperty::FontFamily(
+            parley::FontFamily::Single(parley::FontFamilyName::named(
+                TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+            )),
+        ));
+        builder.push_default(parley::StyleProperty::FontSize(14.0));
+        builder.push_default(parley::StyleProperty::FontWeight(parley::FontWeight::new(
+            weight,
+        )));
+        builder.push_default(parley::StyleProperty::FontStyle(if italic {
+            parley::FontStyle::Italic
+        } else {
+            parley::FontStyle::Normal
+        }));
+        let mut layout = builder.build(&text);
+        layout.break_all_lines(None);
+        let mut count = 0;
+        for run in layout.lines().flat_map(|line| line.runs()) {
+            for cluster in run.clusters() {
+                assert!(
+                    (cluster.advance() - 7.0).abs() < 0.01,
+                    "unsafe symbol advance {} at {:?}, weight {weight}, italic {italic}",
+                    cluster.advance(),
+                    cluster.text_range()
+                );
+                assert!(cluster.glyphs().all(|glyph| glyph.id != 0));
+                count += 1;
+            }
+        }
+        assert_eq!(count, text.chars().count());
+    }
+}
+
+#[test]
 fn bundled_fonts_have_unique_valid_family_names() {
     let options = font_options("", &[]);
     assert_eq!(options.len(), BUNDLED_FONTS.len());
@@ -198,6 +306,214 @@ fn first_family_with_glyph(
         });
     }
     selected.and_then(|family| collection.family_name(family).map(str::to_owned))
+}
+
+#[test]
+fn bundled_registration_preserves_existing_script_fallbacks() {
+    let resources = FontResources {
+        directories: vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/fonts")],
+    };
+    let mut collection = fontique::Collection::new(fontique::CollectionOptions {
+        shared: false,
+        system_fonts: false,
+    });
+    let font = resources
+        .load_bundled_font(BUNDLED_UI_FONT_FAMILY)
+        .unwrap()
+        .unwrap();
+    register_loaded_font_in_collection(&mut collection, font).unwrap();
+    let existing = collection.family_id(BUNDLED_UI_FONT_FAMILY).unwrap();
+    for script in [*b"Hani", *b"Zyyy"] {
+        assert!(collection.set_fallbacks(
+            fontique::FallbackKey::new(fontique::Script::from_bytes(script), None),
+            [existing].into_iter(),
+        ));
+    }
+    for family in [
+        TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+        TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+    ] {
+        let font = resources.load_bundled_font(family).unwrap().unwrap();
+        register_loaded_font_in_collection(&mut collection, font).unwrap();
+    }
+    for script in [*b"Hani", *b"Zyyy"] {
+        let fallbacks = collection
+            .fallback_families(fontique::FallbackKey::new(
+                fontique::Script::from_bytes(script),
+                None,
+            ))
+            .collect::<Vec<_>>();
+        assert!(
+            fallbacks.contains(&existing),
+            "must preserve native fallback for {script:?}"
+        );
+    }
+}
+
+#[test]
+fn discovered_fallbacks_resolve_unknown_families_and_survive_later_registration() {
+    use i_slint_core::textlayout::sharedparley::parley;
+    let resources = FontResources {
+        directories: vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/fonts")],
+    };
+    let mut fonts = parley::FontContext {
+        collection: fontique::Collection::new(fontique::CollectionOptions {
+            shared: false,
+            system_fonts: false,
+        }),
+        source_cache: Default::default(),
+    };
+    let primary = resources
+        .load_bundled_font(BUNDLED_UI_FONT_FAMILY)
+        .unwrap()
+        .unwrap();
+    register_loaded_font_in_collection(&mut fonts.collection, primary).unwrap();
+    let bytes = std::fs::read(
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/fonts/IosevkaTerm-Regular.ttf"),
+    )
+    .unwrap();
+    // Simulate a newly installed family that production code has never named.
+    let candidate = "AxSSH Unseen Monospace Fixture";
+    fonts.collection.register_fonts(
+        fontique::Blob::new(Arc::new(bytes.clone())),
+        Some(fontique::FontInfoOverride {
+            family_name: Some(candidate),
+            ..Default::default()
+        }),
+    );
+    let candidate_id = fonts.collection.family_id(candidate).unwrap();
+    assert_eq!(
+        first_family_with_glyph(&mut fonts.collection, BUNDLED_UI_FONT_FAMILY, *b"Zyyy", '↳'),
+        None
+    );
+    let mut over_budget = vec!["Missing family".to_owned(); MAX_FONT_OPTIONS];
+    over_budget.push(candidate.to_owned());
+    configure_terminal_fallbacks(&mut fonts.collection, &over_budget).unwrap();
+    assert_eq!(
+        first_family_with_glyph(&mut fonts.collection, BUNDLED_UI_FONT_FAMILY, *b"Zyyy", '↳'),
+        None
+    );
+    let candidates = [
+        "Missing family".to_owned(),
+        candidate.to_owned(),
+        candidate.to_owned(),
+    ];
+    configure_terminal_fallbacks(&mut fonts.collection, &candidates).unwrap();
+    assert_eq!(
+        first_family_with_glyph(&mut fonts.collection, BUNDLED_UI_FONT_FAMILY, *b"Zyyy", '↳'),
+        Some(candidate.to_owned())
+    );
+
+    let mut layouts = parley::LayoutContext::<()>::new();
+    let mut builder = layouts.ranged_builder(&mut fonts, "↳", 1.0, false);
+    builder.push_default(parley::StyleProperty::FontFamily(
+        parley::FontFamily::Single(parley::FontFamilyName::named(BUNDLED_UI_FONT_FAMILY)),
+    ));
+    let mut layout = builder.build("↳");
+    layout.break_all_lines(None);
+    let runs = layout
+        .lines()
+        .flat_map(|line| line.runs())
+        .collect::<Vec<_>>();
+    assert!(!runs.is_empty());
+    assert!(
+        runs.iter()
+            .all(|run| run.font().data.as_ref() == bytes.as_slice())
+    );
+    assert!(runs.iter().all(|run| {
+        run.clusters()
+            .all(|cluster| cluster.glyphs().all(|glyph| glyph.id != 0))
+    }));
+
+    // A later bundled selection must retain the installed candidate, regardless
+    // of registration order, and repeated configuration must not grow the list.
+    for family in [
+        TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+        TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+    ] {
+        let font = resources.load_bundled_font(family).unwrap().unwrap();
+        register_loaded_font_in_collection(&mut fonts.collection, font).unwrap();
+    }
+    configure_terminal_fallbacks(&mut fonts.collection, &candidates).unwrap();
+    for (script, first) in [
+        (*b"Hani", TERMINAL_CJK_FALLBACK_FONT_FAMILY),
+        (*b"Zyyy", TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY),
+    ] {
+        let key = fontique::FallbackKey::new(fontique::Script::from_bytes(script), None);
+        let before = fonts.collection.fallback_families(key).collect::<Vec<_>>();
+        assert_eq!(before.len(), 3);
+        assert_eq!(fonts.collection.family_name(before[0]), Some(first));
+        assert_eq!(before.iter().filter(|&&id| id == candidate_id).count(), 1);
+        configure_terminal_fallbacks(&mut fonts.collection, &candidates).unwrap();
+        assert_eq!(
+            fonts.collection.fallback_families(key).collect::<Vec<_>>(),
+            before
+        );
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn native_system_fallbacks_shape_reported_symbols_in_all_styles() {
+    use i_slint_core::textlayout::sharedparley::parley;
+    let resources = FontResources {
+        directories: vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/fonts")],
+    };
+    let mut fonts = parley::FontContext {
+        collection: fontique::Collection::new(fontique::CollectionOptions {
+            shared: false,
+            system_fonts: true,
+        }),
+        source_cache: Default::default(),
+    };
+    let key = fontique::FallbackKey::new(fontique::Script::from_bytes(*b"Hani"), None);
+    let native = fonts.collection.fallback_families(key).collect::<Vec<_>>();
+    for family in [
+        BUNDLED_UI_FONT_FAMILY,
+        TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+        TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+    ] {
+        let font = resources.load_bundled_font(family).unwrap().unwrap();
+        register_loaded_font_in_collection(&mut fonts.collection, font).unwrap();
+    }
+    configure_terminal_fallbacks(&mut fonts.collection, &discover_system_monospace_families())
+        .unwrap();
+    let merged = fonts.collection.fallback_families(key).collect::<Vec<_>>();
+    assert!(native.iter().all(|id| merged.contains(id)));
+    let mut layouts = parley::LayoutContext::<()>::new();
+    for text in ["↳⎿", "↳✳✻·✻✽✻✶·", "⏺"] {
+        for (weight, italic) in [(400.0, false), (700.0, false), (400.0, true), (700.0, true)] {
+            let mut builder = layouts.ranged_builder(&mut fonts, text, 1.0, false);
+            builder.push_default(parley::StyleProperty::FontFamily(
+                parley::FontFamily::Single(parley::FontFamilyName::named(
+                    TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+                )),
+            ));
+            builder.push_default(parley::StyleProperty::FontSize(14.0));
+            builder.push_default(parley::StyleProperty::FontWeight(parley::FontWeight::new(
+                weight,
+            )));
+            builder.push_default(parley::StyleProperty::FontStyle(if italic {
+                parley::FontStyle::Italic
+            } else {
+                parley::FontStyle::Normal
+            }));
+            let mut layout = builder.build(text);
+            layout.break_all_lines(None);
+            let runs = layout
+                .lines()
+                .flat_map(|line| line.runs())
+                .collect::<Vec<_>>();
+            assert!(!runs.is_empty());
+            assert!(
+                runs.iter().all(|run| run.advance() > 0.0
+                    && run
+                        .clusters()
+                        .all(|cluster| cluster.glyphs().all(|glyph| glyph.id != 0))),
+                "{text:?}: weight={weight}, italic={italic}"
+            );
+        }
+    }
 }
 
 #[test]

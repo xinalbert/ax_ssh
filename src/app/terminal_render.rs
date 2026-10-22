@@ -10,7 +10,20 @@ use ax_ssh::terminal::{
     TerminalStyledRun, TerminalUnderlineStyle,
 };
 
+mod geometry;
 mod highlighting;
+mod typography;
+
+pub(super) use typography::FontRole;
+
+pub(super) fn text_font_role(text: &str) -> FontRole {
+    typography::font_role(text)
+}
+
+#[cfg(test)]
+pub(super) fn batchable_symbol(character: char) -> bool {
+    typography::fixed_symbol(character)
+}
 
 use self::highlighting::HighlightSpan;
 
@@ -123,6 +136,7 @@ pub(super) struct RenderedTerminalDecorationRun {
     pub(super) strikethrough: bool,
 }
 
+#[derive(Clone)]
 pub(super) struct RenderedTerminalRun {
     pub(super) text: String,
     pub(super) hyperlink: Option<String>,
@@ -136,6 +150,9 @@ pub(super) struct RenderedTerminalRun {
     pub(super) underline: bool,
     pub(super) underline_style: TerminalUnderlineStyle,
     pub(super) strikethrough: bool,
+    pub(super) font_role: FontRole,
+    pub(super) fixed_spacing: bool,
+    pub(super) geometry: geometry::GlyphPaths,
 }
 
 pub(super) struct TerminalRenderer {
@@ -253,6 +270,7 @@ fn render_line(
         .iter()
         .flat_map(|run| render_run(run, palette, settings, semantic_palette))
         .collect::<Vec<_>>();
+    let runs = typography::prepare(runs);
     let backgrounds = merged_background_runs(&runs, palette.background);
     let decorations = compact_decoration_runs(&runs);
     RenderedTerminalLine {
@@ -365,6 +383,9 @@ fn render_run(
             style.underline_style
         },
         strikethrough: style.strikethrough,
+        font_role: FontRole::Primary,
+        fixed_spacing: false,
+        geometry: Default::default(),
     };
     let mut rendered_runs =
         if let Some(semantic_palette) = semantic_palette.filter(|_| !highlights.is_empty()) {
@@ -487,6 +508,9 @@ fn split_semantic_run(
         underline: run.underline,
         underline_style: run.underline_style,
         strikethrough: run.strikethrough,
+        font_role: run.font_role,
+        fixed_spacing: run.fixed_spacing,
+        geometry: run.geometry.clone(),
     };
     let mut runs = Vec::with_capacity(highlights.len() * 2 + 1);
     let mut start = 0;

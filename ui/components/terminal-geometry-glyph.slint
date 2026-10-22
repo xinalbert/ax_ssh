@@ -1,0 +1,45 @@
+// One bounded path group per compatible run, inside the existing row cache.
+export component TerminalGeometryGlyph inherits Rectangle {
+    in property <int> cells: 1;
+    in property <string> fill-path;
+    in property <string> light-path;
+    in property <string> heavy-path;
+    in property <color> glyph-color;
+    private property <length> physical-pixel: 1phx;
+    private property <length> light-width:
+        max(root.physical-pixel, round(
+            min(root.width / max(1, root.cells), root.height) / 10
+                / root.physical-pixel) * root.physical-pixel);
+    background: transparent;
+
+    Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 128 * max(1, root.cells);
+        viewbox-height: 128;
+        commands: root.fill-path;
+        fill: root.glyph-color;
+    }
+    Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 128 * max(1, root.cells);
+        viewbox-height: 128;
+        commands: root.light-path;
+        fill: transparent;
+        stroke: root.glyph-color;
+        stroke-width: root.light-width;
+        stroke-line-cap: square;
+    }
+    Path {
+        width: parent.width;
+        height: parent.height;
+        viewbox-width: 128 * max(1, root.cells);
+        viewbox-height: 128;
+        commands: root.heavy-path;
+        fill: transparent;
+        stroke: root.glyph-color;
+        stroke-width: root.light-width * 2;
+        stroke-line-cap: square;
+    }
+}

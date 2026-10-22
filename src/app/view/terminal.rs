@@ -467,6 +467,7 @@ fn terminal_pane_shallow_eq(current: &TerminalPaneView, updated: &TerminalPaneVi
         && current_terminal.notice == updated_terminal.notice
         && current_terminal.content_columns == updated_terminal.content_columns
         && current_terminal.font_family == updated_terminal.font_family
+        && current_terminal.emoji_font_family == updated_terminal.emoji_font_family
         && current_terminal.font_registry_generation == updated_terminal.font_registry_generation
         && current_terminal.font_size == updated_terminal.font_size
         && current_terminal.line_height_percent == updated_terminal.line_height_percent
@@ -682,6 +683,7 @@ pub(super) fn terminal_view_from_snapshot(
         blinking: snapshot.cursor_blinking,
         color: cursor_color,
         text: cursor_text.clone(),
+        font_role: terminal_font_role(super::super::terminal_render::text_font_role(&cursor_text)),
     };
     TerminalViewState {
         terminal_id: tab_id.to_string().into(),
@@ -703,6 +705,7 @@ pub(super) fn terminal_view_from_snapshot(
         cursor_color,
         cursor_text,
         font_family: ui.get_terminal_font_family(),
+        emoji_font_family: font_bridge::terminal_emoji_font_family().into(),
         font_registry_generation: ui.get_font_registry_generation(),
         font_size: ui.get_terminal_font_size() as f32,
         line_height_percent: ui.get_terminal_line_height_percent(),
@@ -813,6 +816,7 @@ fn terminal_view_from_snapshot_incremental(
         blinking: snapshot.cursor_blinking,
         color: cursor_color,
         text: cursor_text.clone(),
+        font_role: terminal_font_role(super::super::terminal_render::text_font_role(&cursor_text)),
     };
     if !replace_vec_model_rows(&terminal.cursor_state, vec![cursor_state.clone()]) {
         terminal.cursor_state = ModelRc::new(VecModel::from(vec![cursor_state]));
@@ -835,6 +839,7 @@ fn terminal_view_from_snapshot_incremental(
     terminal.cursor_color = cursor_color;
     terminal.cursor_text = cursor_text;
     terminal.font_family = ui.get_terminal_font_family();
+    terminal.emoji_font_family = font_bridge::terminal_emoji_font_family().into();
     terminal.font_registry_generation = ui.get_font_registry_generation();
     terminal.font_size = ui.get_terminal_font_size() as f32;
     terminal.line_height_percent = ui.get_terminal_line_height_percent();

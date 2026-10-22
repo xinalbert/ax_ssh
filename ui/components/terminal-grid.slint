@@ -1,5 +1,6 @@
 import { FlatActionMenu, MenuActions } from "flat-action-menu.slint";
 import { Theme } from "../theme.slint";
+import { TerminalGeometryGlyph } from "terminal-geometry-glyph.slint";
 
 export struct TerminalRenderRun {
     text: string,
@@ -9,6 +10,12 @@ export struct TerminalRenderRun {
     foreground: color,
     bold: bool,
     italic: bool,
+    font_role: int,
+    fixed_spacing: bool,
+    fill_path: string,
+    light_path: string,
+    heavy_path: string,
+    glyph_opacity: float,
 }
 
 export struct TerminalBackgroundRun {
@@ -50,8 +57,10 @@ export struct TerminalGridView {
     cursor_blinking: bool,
     cursor_color: color,
     cursor_text: string,
+    cursor_font_role: int,
     mouse_button_reporting: bool,
     font_family: string,
+    emoji_font_family: string,
     font_registry_generation: int,
     font_size: length,
     foreground: color,
@@ -121,6 +130,24 @@ export component TerminalGrid inherits Rectangle {
     }
 
     private property <int> click-sequence: 0;
+    private property <length> physical-pixel: 1phx;
+    // A separate measured advance keeps batched symbol runs on the terminal
+    // grid even when the selected primary font has different Latin metrics.
+    private property <string> symbol-probe-sample: "MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM";
+    private property <string> symbol-probe-block:
+        root.symbol-probe-sample + root.symbol-probe-sample
+        + root.symbol-probe-sample + root.symbol-probe-sample;
+    symbol-probe := Text {
+        x: -1000px;
+        width: 0px;
+        height: 0px;
+        opacity: 0;
+        text: root.symbol-probe-block + root.symbol-probe-block
+            + root.symbol-probe-block + root.symbol-probe-block;
+        font-family: "Iosevka Term";
+        font-size: root.view.font_size;
+        font-weight: root.terminal-font-weight(false, root.view.font_registry_generation);
+    }
     private property <int> click-timeout-ticks: 0;
     private property <int> click-cell-row: -1;
     private property <int> click-cell-column: -1;
@@ -158,6 +185,24 @@ export component TerminalGrid inherits Rectangle {
                 background: run.background;
             }
 
+            for run in line.runs : TerminalGeometryGlyph {
+                x: round(run.column * root.cell-width / root.physical-pixel) * root.physical-pixel;
+                y: round((root.top-offset + line-index * root.cell-height) / root.physical-pixel)
+                    * root.physical-pixel - (root.top-offset + line-index * root.cell-height);
+                width: round((run.column + run.cells) * root.cell-width / root.physical-pixel)
+                    * root.physical-pixel - self.x;
+                height: round((root.top-offset + (line-index + 1) * root.cell-height)
+                    / root.physical-pixel) * root.physical-pixel
+                    - (root.top-offset + line-index * root.cell-height + self.y);
+                cells: run.cells;
+                fill-path: run.fill_path;
+                light-path: run.light_path;
+                heavy-path: run.heavy_path;
+                glyph-color: run.foreground;
+                opacity: run.glyph_opacity;
+                visible: run.fill_path != "" || run.light_path != "" || run.heavy_path != "";
+            }
+
             // Keep both text-mode subtrees allocated. Switching the compact
             // renderer only changes visibility, so a settings change does not
             // rebuild every row's item tree.
@@ -171,18 +216,24 @@ export component TerminalGrid inherits Rectangle {
                 // directly, so non-compact rendering has no transparent
                 // per-run wrapper node.
                 for run in line.runs : Text {
+                    visible: run.fill_path == "" && run.light_path == "" && run.heavy_path == "";
                     x: run.column * root.cell-width;
                     y: (root.cell-height - root.font-cell-height) / 2;
-                    width: run.cells * root.cell-width;
+                    // Cell coordinates belong to the terminal protocol;
+                    // fallback glyphs may have a larger real shaping advance.
+                    width: min(max(0px, parent.width - self.x),
+                        max(run.cells * root.cell-width, self.preferred-width));
                     height: root.font-cell-height;
                     text: run.text;
                     color: run.foreground;
-                    font-family: root.view.font_family;
+                    font-family: run.font_role == 1 ? "Iosevka Term"
+                        : run.font_role == 2 ? root.view.emoji_font_family : root.view.font_family;
                     font-size: root.view.font_size;
                     font-weight: root.terminal-font-weight(
                         run.bold, root.view.font_registry_generation);
                     font-italic: run.italic;
-                    letter-spacing: 0px;
+                    letter-spacing: run.fixed_spacing
+                        ? root.cell-width - symbol-probe.preferred-width / 1024 : 0px;
                     horizontal-alignment: left;
                     vertical-alignment: center;
                     overflow: clip;
@@ -196,18 +247,22 @@ export component TerminalGrid inherits Rectangle {
                 background: transparent;
 
                 for run in line.runs : Text {
+                    visible: run.fill_path == "" && run.light_path == "" && run.heavy_path == "";
                     x: run.column * root.cell-width;
                     y: (root.cell-height - root.font-cell-height) / 2;
-                    width: run.cells * root.cell-width;
+                    width: min(max(0px, parent.width - self.x),
+                        max(run.cells * root.cell-width, self.preferred-width));
                     height: root.font-cell-height;
                     text: run.text;
                     color: run.foreground;
-                    font-family: root.view.font_family;
+                    font-family: run.font_role == 1 ? "Iosevka Term"
+                        : run.font_role == 2 ? root.view.emoji_font_family : root.view.font_family;
                     font-size: root.view.font_size;
                     font-weight: root.terminal-font-weight(
                         run.bold, root.view.font_registry_generation);
                     font-italic: run.italic;
-                    letter-spacing: 0px;
+                    letter-spacing: run.fixed_spacing
+                        ? root.cell-width - symbol-probe.preferred-width / 1024 : 0px;
                     horizontal-alignment: left;
                     vertical-alignment: center;
                     overflow: clip;
@@ -355,8 +410,10 @@ export component TerminalGrid inherits Rectangle {
             height: root.font-cell-height;
             text: root.view.cursor_text;
             color: root.view.background;
-            font-family: root.view.font_family;
+            font-family: root.view.cursor_font_role == 1 ? "Iosevka Term"
+                : root.view.cursor_font_role == 2 ? root.view.emoji_font_family : root.view.font_family;
             font-size: root.view.font_size;
+            font-weight: root.terminal-font-weight(false, root.view.font_registry_generation);
             letter-spacing: 0px;
             horizontal-alignment: left;
             vertical-alignment: center;

@@ -233,12 +233,15 @@ component TerminalPaneGroup inherits Rectangle {
     callback format-shortcut(KeyboardEvent) -> string;
     callback write-clipboard(string);
     callback read-clipboard() -> string;
-    for pane in root.panes : TerminalPane {
+    for pane[pane-index] in root.panes : TerminalPane {
         x: pane.x * parent.width;
         y: pane.y * parent.height;
         width: pane.width * parent.width;
         height: pane.height * parent.height;
-        view: pane.terminal;
+        // Track the row directly: a settings update can dirty the enclosing
+        // view's model binding before Rust updates this existing pane row.
+        // The nested render models and scalar typography must advance together.
+        view: root.panes[pane-index].terminal;
         focused: pane.focused;
         window-active: root.window-active;
         input-blocked: root.input-blocked;

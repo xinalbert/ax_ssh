@@ -29,6 +29,7 @@ export struct TerminalCursorState {
     blinking: bool,
     color: color,
     text: string,
+    font_role: int,
 }
 
 export enum TerminalNoticeKind { none, clipboard-read, reconnecting, ended, failed }
@@ -91,6 +92,7 @@ export struct TerminalViewState {
     cursor_color: color,
     cursor_text: string,
     font_family: string,
+    emoji_font_family: string,
     font_registry_generation: int,
     font_size: length,
     line_height_percent: int,
@@ -328,7 +330,19 @@ export component TerminalPane inherits Rectangle {
         ? root.view.cursor_state[0].color : root.view.cursor_color;
     private property <string> cursor-text: root.view.cursor_state.length > 0
         ? root.view.cursor_state[0].text : root.view.cursor_text;
-    private property <string> terminal-font-family: root.view.font_family;
+    private property <string> requested-terminal-font-family: root.view.font_family;
+    private property <bool> terminal-font-is-monospace:
+        abs(mono-i.preferred-width - mono-m.preferred-width) <= 1px
+        && abs(mono-w.preferred-width - mono-m.preferred-width) <= 1px
+        && abs(mono-zero.preferred-width - mono-m.preferred-width) <= 1px
+        && abs(mono-space.preferred-width - mono-m.preferred-width) <= 1px;
+    private property <string> terminal-font-family: root.terminal-font-is-monospace
+        ? root.requested-terminal-font-family : "JetBrains Mono";
+
+    function font-probe-text(sample: string) -> string {
+        let block = sample + sample + sample + sample;
+        return block + block + block + block + block + "M";
+    }
     private property <length> terminal-font-size: root.view.font_size;
     private property <int> terminal-line-height-percent: root.view.line_height_percent;
     private property <color> terminal-foreground: root.view.foreground;
@@ -488,7 +502,10 @@ export component TerminalPane inherits Rectangle {
         cursor_blinking: root.cursor-blinking,
         cursor_color: root.cursor-color,
         cursor_text: root.cursor-text,
+        cursor_font_role: root.view.cursor_state.length > 0
+            ? root.view.cursor_state[0].font_role : 0,
         font_family: root.terminal-font-family,
+        emoji_font_family: root.view.emoji_font_family,
         font_registry_generation: root.view.font_registry_generation,
         font_size: root.terminal-font-size,
         foreground: root.terminal-foreground, background: root.terminal-background,
@@ -848,6 +865,66 @@ export component TerminalPane inherits Rectangle {
     accessible-role: text;
     accessible-label: @tr("Terminal");
 
+    mono-m := Text {
+        x: -1000px;
+        width: 0px;
+        height: 0px;
+        opacity: 0;
+        text: root.font-probe-text("MMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMMM");
+        font-family: root.requested-terminal-font-family;
+        font-size: root.terminal-font-size;
+        font-weight: 400 + root.view.font_registry_generation * 0;
+        letter-spacing: 0px;
+    }
+
+    mono-i := Text {
+        x: -1000px;
+        width: 0px;
+        height: 0px;
+        opacity: 0;
+        text: root.font-probe-text("iiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiiii");
+        font-family: root.requested-terminal-font-family;
+        font-size: root.terminal-font-size;
+        font-weight: 400 + root.view.font_registry_generation * 0;
+        letter-spacing: 0px;
+    }
+
+    mono-w := Text {
+        x: -1000px;
+        width: 0px;
+        height: 0px;
+        opacity: 0;
+        text: root.font-probe-text("WWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWWW");
+        font-family: root.requested-terminal-font-family;
+        font-size: root.terminal-font-size;
+        font-weight: 400 + root.view.font_registry_generation * 0;
+        letter-spacing: 0px;
+    }
+
+    mono-zero := Text {
+        x: -1000px;
+        width: 0px;
+        height: 0px;
+        opacity: 0;
+        text: root.font-probe-text("00000000000000000000000000000000000000000000000000");
+        font-family: root.requested-terminal-font-family;
+        font-size: root.terminal-font-size;
+        font-weight: 400 + root.view.font_registry_generation * 0;
+        letter-spacing: 0px;
+    }
+
+    mono-space := Text {
+        x: -1000px;
+        width: 0px;
+        height: 0px;
+        opacity: 0;
+        text: root.font-probe-text("                                                  ");
+        font-family: root.requested-terminal-font-family;
+        font-size: root.terminal-font-size;
+        font-weight: 400 + root.view.font_registry_generation * 0;
+        letter-spacing: 0px;
+    }
+
     cell-probe := Text {
         x: -1000px;
         y: -1000px;
@@ -858,7 +935,7 @@ export component TerminalPane inherits Rectangle {
             + root.cell-probe-block;
         font-family: root.terminal-font-family;
         font-size: root.terminal-font-size;
-        font-weight: 400;
+        font-weight: 400 + root.view.font_registry_generation * 0;
         letter-spacing: 0px;
         opacity: 0;
     }

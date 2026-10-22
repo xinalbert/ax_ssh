@@ -15,6 +15,26 @@ const MAX_BUNDLED_FONT_FILE_BYTES: u64 = 24 * 1024 * 1024;
 const BUNDLED_UI_FONT_FAMILY: &str = "JetBrains Mono";
 const TERMINAL_CJK_FALLBACK_FONT_FAMILY: &str = "Maple Mono NF CN";
 const TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY: &str = "Iosevka Term";
+
+pub(super) fn terminal_emoji_font_family() -> String {
+    // Generic-family resolution is process-local and independent of terminal
+    // content. Keep one name per UI thread, rather than querying per glyph.
+    thread_local! {
+        static FAMILY: std::cell::OnceCell<String> = const { std::cell::OnceCell::new() };
+    }
+    FAMILY.with(|family| {
+        family
+            .get_or_init(|| {
+                let mut collection = slint::fontique_011::shared_collection();
+                let id = collection
+                    .generic_families(fontique::GenericFamily::Emoji)
+                    .next();
+                id.and_then(|id| collection.family_name(id).map(str::to_owned))
+                    .unwrap_or_default()
+            })
+            .clone()
+    })
+}
 const EMBEDDED_UI_FONT_FILES: &[&[u8]] = &[
     include_bytes!("../../assets/fonts/JetBrainsMono-Regular.ttf"),
     include_bytes!("../../assets/fonts/JetBrainsMono-Bold.ttf"),
@@ -93,9 +113,6 @@ pub(super) fn load_terminal_font_on_demand(
                 .into_iter()
                 .filter(|family| !registry.is_registered(family))
                 .collect::<Vec<_>>();
-            if pending.is_empty() {
-                return;
-            }
             (registry.resources(), pending)
         }
         Err(_) => {
@@ -105,11 +122,17 @@ pub(super) fn load_terminal_font_on_demand(
         }
     };
     runtime.spawn(async move {
-        let loaded =
-            tokio::task::spawn_blocking(move || resources.load_bundled_fonts(&pending_families))
-                .await;
-        let fonts = match loaded {
-            Ok(Ok(fonts)) => fonts,
+        let loaded = tokio::task::spawn_blocking(move || {
+            let fonts = resources.load_bundled_fonts(&pending_families)?;
+            let system_families = discover_system_monospace_families()
+                .into_iter()
+                .take(MAX_FONT_OPTIONS)
+                .collect::<Vec<_>>();
+            Ok::<_, anyhow::Error>((fonts, system_families))
+        })
+        .await;
+        let (fonts, system_families) = match loaded {
+            Ok(Ok(loaded)) => loaded,
             Ok(Err(error)) => {
                 tracing::warn!(%error, "failed to read terminal font resources");
                 started.store(false, Ordering::Release);
@@ -134,11 +157,18 @@ pub(super) fn load_terminal_font_on_demand(
                     return;
                 }
             }
-            let generation = match font_registry.lock() {
-                Ok(registry) => registry.generation_as_slint_int(),
-                Err(_) => {
+            let generation = font_registry
+                .lock()
+                .map_err(|_| anyhow::anyhow!("font registry lock poisoned"))
+                .and_then(|mut registry| {
+                    registry.register_system_terminal_fallbacks(&system_families)?;
+                    Ok(registry.generation_as_slint_int())
+                });
+            let generation = match generation {
+                Ok(generation) => generation,
+                Err(error) => {
                     started.store(false, Ordering::Release);
-                    tracing::warn!("font registry lock poisoned after terminal registration");
+                    tracing::warn!(%error, "failed to configure terminal font fallbacks");
                     ui.set_status("Cannot update terminal font state".into());
                     return;
                 }
@@ -255,6 +285,16 @@ impl FontRegistry {
         tracing::info!(family, "bundled font registered from resources");
         Ok(())
     }
+
+    fn register_system_terminal_fallbacks(&mut self, families: &[String]) -> Result<()> {
+        configure_terminal_fallbacks(&mut slint::fontique_011::shared_collection(), families)?;
+        self.generation = self.generation.wrapping_add(1);
+        tracing::info!(
+            candidate_families = families.len(),
+            "terminal font fallbacks configured"
+        );
+        Ok(())
+    }
 }
 
 fn terminal_bundled_font_families(primary_family: &str) -> Vec<String> {
@@ -298,37 +338,54 @@ fn register_loaded_font_in_collection(
         font.family,
         TERMINAL_CJK_FALLBACK_FONT_FAMILY | TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY
     ) {
-        configure_terminal_fallbacks(collection)?;
+        configure_terminal_fallbacks(collection, &[])?;
     }
     Ok(())
 }
 
-fn configure_terminal_fallbacks(collection: &mut fontique::Collection) -> Result<()> {
-    // Preserve Maple's Han priority while allowing a terminal-safe symbol
-    // face to cover missing glyphs such as U+21B4. Fontique also appends its
-    // Han list when shaping neutral characters adjacent to another script.
-    let han_families = [
-        TERMINAL_CJK_FALLBACK_FONT_FAMILY,
-        TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
-    ]
-    .into_iter()
-    .filter_map(|family| collection.family_id(family))
-    .collect::<Vec<_>>();
-    if !han_families.is_empty()
-        && !collection.set_fallbacks(
-            fontique::FallbackKey::new(fontique::Script::from_bytes(*b"Hani"), None),
-            han_families.into_iter(),
-        )
-    {
-        anyhow::bail!("bundled CJK fallback could not be configured");
-    }
-    if let Some(symbol_family) = collection.family_id(TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY)
-        && !collection.set_fallbacks(
-            fontique::FallbackKey::new(fontique::Script::from_bytes(*b"Zyyy"), None),
-            std::iter::once(symbol_family),
-        )
-    {
-        anyhow::bail!("bundled symbol fallback could not be configured");
+fn configure_terminal_fallbacks(
+    collection: &mut fontique::Collection,
+    system_families: &[String],
+) -> Result<()> {
+    // Keep bundled coverage first, then installed monospace faces, then the
+    // original platform fallbacks. Fontique also tries Han fallbacks for
+    // neutral characters, so both chains must retain system coverage.
+    let system_ids = system_families
+        .iter()
+        .take(MAX_FONT_OPTIONS)
+        .filter_map(|family| collection.family_id(family))
+        .collect::<Vec<_>>();
+    for (script, bundled) in [
+        (
+            *b"Hani",
+            [
+                TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+                TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+            ],
+        ),
+        (
+            *b"Zyyy",
+            [
+                TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+                TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+            ],
+        ),
+    ] {
+        let key = fontique::FallbackKey::new(fontique::Script::from_bytes(script), None);
+        // Read before replacing: this materializes the platform default too.
+        let existing = collection.fallback_families(key).collect::<Vec<_>>();
+        let mut families = bundled
+            .into_iter()
+            .filter_map(|family| collection.family_id(family))
+            .collect::<Vec<_>>();
+        for id in system_ids.iter().copied().chain(existing) {
+            if !families.contains(&id) {
+                families.push(id);
+            }
+        }
+        if !families.is_empty() && !collection.set_fallbacks(key, families.into_iter()) {
+            anyhow::bail!("terminal font fallbacks could not be configured for {script:?}");
+        }
     }
     Ok(())
 }

@@ -2,6 +2,149 @@ use std::sync::Arc;
 
 use super::*;
 
+#[test]
+fn terminal_symbols_choose_text_fonts_but_explicit_emoji_keeps_its_presentation() {
+    for (text, role) in [
+        ("⏺", FontRole::Symbol),
+        ("⏺\u{fe0e}", FontRole::Symbol),
+        ("🖥\u{fe0e}", FontRole::Symbol),
+        ("⏺\u{fe0f}", FontRole::Emoji),
+        ("✈\u{fe0f}", FontRole::Emoji),
+        ("😀", FontRole::Emoji),
+        ("⌚", FontRole::Emoji),
+        ("✅", FontRole::Emoji),
+        ("⚡", FontRole::Emoji),
+        ("✅\u{fe0e}", FontRole::Symbol),
+        ("1\u{fe0f}\u{20e3}", FontRole::Emoji),
+        ("👩\u{200d}💻", FontRole::Emoji),
+        ("👩🏽\u{200d}💻", FontRole::Emoji),
+        ("👍🏽", FontRole::Emoji),
+        ("🇨🇳", FontRole::Emoji),
+        ("e\u{301}", FontRole::Primary),
+        ("中\u{301}", FontRole::Primary),
+    ] {
+        let mut terminal = ax_ssh::terminal::TerminalModel::new(80, 3, 10);
+        terminal.process(text.as_bytes());
+        let source = terminal.snapshot();
+        let column = source.cursor_column;
+        let rendered = render_terminal(source, settings());
+        let run = &rendered.lines[0].runs[0];
+        assert_eq!(run.font_role, role, "{text:?}");
+        assert_eq!(
+            run.text, text,
+            "presentation must keep each composition together"
+        );
+        assert!(
+            terminal.contents().starts_with(text),
+            "rendering must not rewrite source Unicode"
+        );
+        assert_eq!(terminal.snapshot().cursor_column, column);
+        if text.chars().count() > 1 {
+            assert!(!run.fixed_spacing);
+        }
+    }
+}
+
+#[test]
+fn compatible_symbol_runs_batch_without_crossing_style_or_combining_boundaries() {
+    let mut terminal = ax_ssh::terminal::TerminalModel::new(80, 3, 10);
+    terminal.process("←↑→\x1b[31m↓\x1b[0me\u{301}中⏺\u{fe0f}".as_bytes());
+    let before = terminal.snapshot();
+    let expected_column = before.cursor_column;
+    let rendered = render_terminal(before, settings());
+    let runs = &rendered.lines[0].runs;
+    assert_eq!(runs[0].text, "←↑→");
+    assert_eq!((runs[0].column, runs[0].cells), (0, 3));
+    assert!(runs[0].fixed_spacing);
+    assert_eq!(runs[1].text, "↓");
+    assert_eq!(runs[1].column, 3);
+    assert_eq!(runs[2].text, "e\u{301}");
+    assert!(!runs[2].fixed_spacing);
+    assert_eq!(runs[3].text, "中");
+    assert_eq!(runs[3].cells, 2);
+    assert_eq!(runs[4].font_role, FontRole::Emoji);
+    assert_eq!(terminal.snapshot().cursor_column, expected_column);
+}
+
+#[test]
+fn text_symbol_fallback_keeps_program_colors_and_original_characters() {
+    let mut terminal = ax_ssh::terminal::TerminalModel::new(80, 3, 10);
+    let text = "↳⎿↳✳✻·✻✽✻✶·";
+    terminal.process(format!("{text}\x1b[38;2;225;40;60m⏺\x1b[38;2;30;210;80m⏺\x1b[0m").as_bytes());
+    let before = terminal.snapshot();
+    let cursor = before.cursor_column;
+    let copied = terminal.selection_text(0, 0, 0, cursor);
+    let rendered = render_terminal(before, settings());
+    let runs = &rendered.lines[0].runs;
+    let circles = runs
+        .iter()
+        .filter(|run| run.text == "⏺")
+        .collect::<Vec<_>>();
+    assert_eq!(circles.len(), 2);
+    assert_eq!(circles[0].foreground, RgbColor::new(225, 40, 60));
+    assert_eq!(circles[1].foreground, RgbColor::new(30, 210, 80));
+    assert!(circles.iter().all(|run| run.font_role == FontRole::Symbol));
+    assert!(runs.iter().all(|run| run.geometry.is_empty()));
+    let joined = runs.iter().map(|run| run.text.as_str()).collect::<String>();
+    assert_eq!(joined.trim_end(), format!("{text}⏺⏺"));
+    assert_eq!(terminal.snapshot().cursor_column, cursor);
+    assert_eq!(terminal.selection_text(0, 0, 0, cursor), copied);
+}
+
+#[test]
+fn terminal_geometry_preserves_text_colors_and_protocol_cell_positions() {
+    let mut terminal = ax_ssh::terminal::TerminalModel::new(80, 3, 10);
+    let text = "┌─┬┐\r\n│▁█▉░▒▓▖\u{e0b0}\u{e0b1}中";
+    terminal.process(text.as_bytes());
+    let copy = terminal.selection_text(0, 0, 1, 12);
+    let before = terminal.snapshot();
+    let position = (before.cursor_row, before.cursor_column);
+    let rendered = render_terminal(before, settings());
+    assert!(!rendered.lines[0].runs[0].geometry.light.is_empty());
+    assert_eq!(rendered.lines[0].runs[0].text, "┌─┬┐");
+    assert!(
+        rendered.lines[1]
+            .runs
+            .iter()
+            .any(|run| run.text.contains('\u{e0b0}') && !run.geometry.fill.is_empty())
+    );
+    let han = rendered.lines[1]
+        .runs
+        .iter()
+        .find(|run| run.text == "中")
+        .unwrap();
+    assert_eq!((han.column, han.cells), (10, 2));
+    assert!(han.geometry.is_empty());
+    assert_eq!(terminal.selection_text(0, 0, 1, 12), copy);
+    let after = terminal.snapshot();
+    assert_eq!((after.cursor_row, after.cursor_column), position);
+
+    terminal.process("\r\x1b[2K\x1b[31;7m█\x1b[0m".as_bytes());
+    let rendered = render_terminal(terminal.snapshot(), settings());
+    let run = &rendered.lines[1].runs[0];
+    assert!(!run.geometry.fill.is_empty());
+    assert_eq!(run.foreground, settings().default_background);
+    assert_ne!(run.background, settings().default_background);
+}
+
+#[test]
+fn geometry_uses_exact_eighths_and_keeps_unimplemented_glyphs_on_the_font_path() {
+    let mut paths = geometry::GlyphPaths::default();
+    assert!(paths.append('▁', 0));
+    assert!(paths.fill.contains("M 0 112 h 128 v 16"));
+    let mut paths = geometry::GlyphPaths::default();
+    assert!(paths.append('▉', 1));
+    assert!(paths.fill.contains("M 128 0 h 112 v 128"));
+    let mut paths = geometry::GlyphPaths::default();
+    assert!(paths.append('┌', 0));
+    assert!(paths.light.contains("L 128 64"));
+    assert!(paths.light.contains("L 64 128"));
+    assert!(!paths.append('╔', 1));
+    assert!(!paths.append('═', 1));
+    assert!(!paths.append('中', 1));
+    assert!(!paths.append('😀', 1));
+}
+
 fn snapshot(style: TerminalStyle) -> TerminalSnapshot {
     TerminalSnapshot {
         lines: vec![Arc::new(TerminalStyledLine {
@@ -210,6 +353,9 @@ fn compact_spans_omit_default_backgrounds_and_merge_adjacent_decorations() {
             TerminalUnderlineStyle::None
         },
         strikethrough,
+        font_role: FontRole::Primary,
+        fixed_spacing: false,
+        geometry: Default::default(),
     };
     let runs = [
         run(0, default_background, false, false),

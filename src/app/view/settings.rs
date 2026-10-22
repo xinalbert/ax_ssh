@@ -500,6 +500,20 @@ pub(in crate::app) fn terminal_render_run(run: RenderedTerminalRun) -> TerminalR
         foreground: to_slint_color(run.foreground),
         bold: run.bold,
         italic: run.italic,
+        font_role: terminal_font_role(run.font_role),
+        fixed_spacing: run.fixed_spacing,
+        fill_path: run.geometry.fill.into(),
+        light_path: run.geometry.light.into(),
+        heavy_path: run.geometry.heavy.into(),
+        glyph_opacity: run.geometry.opacity,
+    }
+}
+
+pub(super) fn terminal_font_role(role: super::super::terminal_render::FontRole) -> i32 {
+    match role {
+        super::super::terminal_render::FontRole::Primary => 0,
+        super::super::terminal_render::FontRole::Symbol => 1,
+        super::super::terminal_render::FontRole::Emoji => 2,
     }
 }
 

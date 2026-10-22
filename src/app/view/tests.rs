@@ -7,6 +7,7 @@ mod terminal_connection;
 mod terminal_cursor;
 mod terminal_input;
 mod terminal_notices;
+mod terminal_typography;
 mod text_editing;
 mod text_overflow;
 
@@ -877,6 +878,7 @@ fn terminal_pane_snapshots_update_existing_model_rows() {
         shape: 0,
         blinking: false,
         text: "b".into(),
+        font_role: 0,
         color: Default::default(),
     }]));
     let panes = ModelRc::new(VecModel::from(vec![
@@ -913,6 +915,7 @@ fn terminal_pane_snapshots_update_existing_model_rows() {
             shape: 0,
             blinking: false,
             text: "a".into(),
+            font_role: 0,
             color: Default::default(),
         }]));
     let updated_dividers = vec![TerminalPaneDividerView {
@@ -1117,6 +1120,7 @@ fn terminal_pane_snapshot_keeps_parent_row_when_only_nested_models_change() {
         shape: 0,
         blinking: false,
         text: "b".into(),
+        font_role: 0,
         color: Default::default(),
     }]));
     let panes = ModelRc::new(VecModel::from(vec![pane]));
@@ -1134,6 +1138,7 @@ fn terminal_pane_snapshot_keeps_parent_row_when_only_nested_models_change() {
         shape: 0,
         blinking: false,
         text: "a".into(),
+        font_role: 0,
         color: Default::default(),
     }]));
     updated.terminal.cursor_row = 3;
