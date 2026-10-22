@@ -73,6 +73,13 @@ pub(super) fn retry_terminal_notice_tab(
 
     match route {
         TerminalRetryRoute::Local => {
+            load_terminal_font_on_demand(
+                runtime,
+                ui.clone(),
+                state.clone(),
+                font_registry.clone(),
+                terminal_font_started.clone(),
+            );
             if let Err(error) =
                 resume_existing_local_shell(runtime, state.clone(), ui.clone(), tab_id)
             {

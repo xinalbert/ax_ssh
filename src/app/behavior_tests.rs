@@ -5,6 +5,7 @@ use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferTyp
 use slint::platform::{EventLoopProxy, Platform, WindowAdapter};
 use tokio::time::timeout;
 
+mod terminal_fonts;
 mod terminal_wheel;
 
 type UiEvent = Box<dyn FnOnce() + Send>;
@@ -67,6 +68,7 @@ struct Harness {
     window: Rc<MinimalSoftwareWindow>,
     state: Arc<Mutex<AppState>>,
     router: WindowRouter,
+    font_registry: Arc<Mutex<FontRegistry>>,
     _runtime: Runtime,
     profile: SessionProfile,
     directory: PathBuf,
@@ -97,12 +99,13 @@ impl Harness {
             .enable_all()
             .build()
             .expect("bounded test runtime");
+        let font_registry = Arc::new(Mutex::new(FontRegistry::new()));
         wire_callbacks(
             &ui,
             WindowCallbackContext {
                 state: state.clone(),
                 runtime: runtime.handle().clone(),
-                font_registry: Arc::new(Mutex::new(FontRegistry::new())),
+                font_registry: font_registry.clone(),
                 log_directory: directory.join("logs"),
                 window_router: router.clone(),
                 window_id: MAIN_WINDOW_ID,
@@ -114,6 +117,7 @@ impl Harness {
             window,
             state,
             router,
+            font_registry,
             _runtime: runtime,
             profile,
             directory,

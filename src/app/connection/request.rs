@@ -37,6 +37,42 @@ impl ConnectionContext {
             terminal_font_started,
         }
     }
+
+    fn load_terminal_fonts(&self) {
+        load_terminal_font_on_demand(
+            &self.runtime,
+            self.ui.clone(),
+            self.state.clone(),
+            self.font_registry.clone(),
+            self.terminal_font_started.clone(),
+        );
+    }
+
+    pub(in crate::app) fn resume_restored_terminals(&self) {
+        let (connections, local_tabs) = match self.state.lock() {
+            Ok(app) => (app.restored_connection_targets(), app.restored_local_tabs()),
+            Err(_) => {
+                set_status(&self.ui, "Cannot read restored terminal state");
+                return;
+            }
+        };
+        if !local_tabs.is_empty() {
+            self.load_terminal_fonts();
+        }
+        for (tab_id, profile_id, target) in connections {
+            resume_existing_connection(self, tab_id, profile_id, target);
+        }
+        for tab_id in local_tabs {
+            if let Err(error) = resume_existing_local_shell(
+                &self.runtime,
+                self.state.clone(),
+                self.ui.clone(),
+                tab_id,
+            ) {
+                warn!(%error, tab_id = %tab_id, "failed to restore local shell");
+            }
+        }
+    }
 }
 
 pub(in crate::app) fn wire_connection_request(
@@ -186,22 +222,12 @@ pub(in crate::app) fn request_profile_connection<F>(
 where
     F: FnOnce(Uuid, &mut AppState) -> bool,
 {
-    let ConnectionContext {
-        ui,
-        state,
-        runtime,
-        font_registry,
-        terminal_font_started,
-    } = context;
     if target == ConnectionTarget::Terminal {
-        load_terminal_font_on_demand(
-            runtime,
-            ui.clone(),
-            state.clone(),
-            font_registry.clone(),
-            terminal_font_started.clone(),
-        );
+        context.load_terminal_fonts();
     }
+    let ConnectionContext {
+        ui, state, runtime, ..
+    } = context;
     let start = {
         let mut app = match state.lock() {
             Ok(app) => app,
@@ -509,6 +535,9 @@ pub(in crate::app) fn resume_existing_connection(
     }) else {
         return;
     };
+    if target == ConnectionTarget::Terminal {
+        context.load_terminal_fonts();
+    }
     match profile.connection {
         ConnectionProfile::Ssh(ref ssh) if ssh.host_key_fingerprint.is_some() => {
             if let Ok(mut app) = context.state.lock()

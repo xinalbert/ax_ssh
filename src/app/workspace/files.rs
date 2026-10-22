@@ -143,29 +143,7 @@ pub(in crate::app) fn wire_workspace_file_actions(
             font_registry_for_apply.clone(),
             Arc::new(AtomicBool::new(false)),
         );
-        for (tab_id, profile_id, target) in state_for_apply
-            .lock()
-            .ok()
-            .map(|app| app.restored_connection_targets())
-            .unwrap_or_default()
-        {
-            resume_existing_connection(&connection, tab_id, profile_id, target);
-        }
-        for tab_id in state_for_apply
-            .lock()
-            .ok()
-            .map(|app| app.restored_local_tabs())
-            .unwrap_or_default()
-        {
-            if let Err(error) = resume_existing_local_shell(
-                &runtime_for_apply,
-                state_for_apply.clone(),
-                ui.as_weak(),
-                tab_id,
-            ) {
-                warn!(%error, tab_id = %tab_id, "failed to restore local shell");
-            }
-        }
+        connection.resume_restored_terminals();
         restore_detached_workspaces(
             &snapshot,
             &state_for_apply,

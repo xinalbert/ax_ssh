@@ -329,29 +329,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
                     restore_font_registry.clone(),
                     restore_terminal_font_started.clone(),
                 );
-                let restored = state
-                    .lock()
-                    .ok()
-                    .map(|app| app.restored_connection_targets())
-                    .unwrap_or_default();
-                for (tab_id, profile_id, target) in restored {
-                    resume_existing_connection(&restore_context, tab_id, profile_id, target);
-                }
-                let local_tabs = state
-                    .lock()
-                    .ok()
-                    .map(|app| app.restored_local_tabs())
-                    .unwrap_or_default();
-                for tab_id in local_tabs {
-                    if let Err(error) = resume_existing_local_shell(
-                        runtime.handle(),
-                        state.clone(),
-                        ui.as_weak(),
-                        tab_id,
-                    ) {
-                        warn!(%error, tab_id = %tab_id, "failed to restore local shell");
-                    }
-                }
+                restore_context.resume_restored_terminals();
                 refresh_workspace(&ui.as_weak(), &state);
             }
             Err(error) => {
