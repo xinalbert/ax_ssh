@@ -1253,28 +1253,51 @@ renderer 环境变量和强制采集的 Rust backtrace。它与有缓冲的滚�
 已选中的其他自带字体，再由 Slint UI 线程把嵌入字节或 Fontique 路径 source 注册到共享 collection；外部
 TTF 不再由应用长期持有完整 `Vec<u8>`。第一个 Terminal 或
 本地 shell Tab 只通过一条应用层加载路径，确保已选的自带主字体（如适用）、Maple Mono NF CN
-和 Iosevka Term 已注册。`FontRegistry::register_loaded_font` 是唯一注册边界：共享 Fontique 的
-`Hani` 回退先用 Maple，再用 Iosevka 补缺失符号，并为 Common script 显式注册 Iosevka；
-不存在渲染器侧字体替换路径。之后在 Settings 即时预览中首次选到的
+和 Iosevka Term 已注册；恢复已有终端也执行相同初始化。启动恢复和打开工作区文件共用
+`ConnectionContext::resume_restored_terminals`，恢复 profile 终端和重试本地终端都会在启动 worker 前
+请求相同字体加载器。只有 SFTP Tab 的工作区不请求终端字体。注册完成后推进字体代次并刷新工作区，
+使已存在文本的测量与绘制边界重新计算。
+`FontRegistry::register_loaded_font` 是唯一自带字体注册边界：共享 Fontique 的
+`Hani` 回退以 Maple 为首，Common script 以 Iosevka 为首，随后使用另一个自带回退字体。
+第一个 Terminal 加载任务还会在 blocking worker 中发现最多 256 个系统等宽字体族名，即使自带字体
+均已注册也会执行。UI 把这些已安装字体合并到自带字体之后、平台原有回退之前；替换列表前先读取平台
+默认值，按字体 ID 去重，并在后续自带字体注册时保留系统候选。排字器通过真实字体覆盖查询解决缺字，
+不增加字符替换规则或硬编码平台字体名；剩余覆盖范围取决于已安装的字体。
+终端呈现层还为文字符号和 emoji run 指定明确字体族，因为锁定排字器可能在 Common 回退前
+优先选择 Emoji generic。之后在 Settings 即时预览中首次选到的
 自带字体也经同一 registry 按需加载。候选设置先立即应用，注册
 完成后再读取当前内存设置重新应用，避免迟到字体读取恢复旧选择。Appearance 只拥有应用字体、显示模式与配色；Terminal
 拥有自己的字体、字号、行高、
 文字亮度、粗体亮色、可选语义高亮及其状态颜色覆盖和终端交互设置。两个字体列表都固定先显示自带字体，随后显示由 `fontdb` 在
 Tokio blocking task 中发现、按大小写无关去重并按字母排序且有数量上限的系统等宽字体。
 `Theme.application-font-family` 统一驱动窗口默认字体和非终端等宽标签，
-`TerminalViewState.font_family` 仍是终端字符格度量与绘制的唯一主字体来源；回退字体只补齐
-主字体缺少的字形。构建和运行时都不会从
+`TerminalViewState.font_family` 是请求的终端主字体。Slint 实测重复 `M`、`i`、`W`、`0` 和空格样本的
+advance，末尾保留非空格哨兵。实测不等宽时，网格、光标和 IME 使用嵌入的 JetBrains Mono，
+不改写已保存的选择。构建和运行时都不会从
 `third_package/axshell` 加载字体；发行包必须把
 `assets/fonts/` 保留在可执行文件旁或平台资源路径中。其中 Maple Mono NF CN 和 Iosevka Term
 分别是确定性显示汉字及缺失符号所必需的，Monaspace Neon 仍是可选主字体，全部字体声明也必须保留。
-Slint 测量配置主字体的
+Slint 测量实际主字体的
 1000 个 Latin cell；其 `Text.preferred-width` 会向上取整到整数逻辑像素，用长样本取平均将单格
 取整误差限制在 0.001 逻辑像素以内，避免长盒线字形与独立竖线逐列累积错位。终端网格使用该主字体的
-Latin 等宽 advance 作为逻辑单元格宽度。已注册 Han fallback
-和盒线字形从其分配的一格或两格 span 左边缘绘制，不扩大所有列。Rust 保留终端逻辑列，
-继续批量绘制 ASCII 文本；普通 fallback cell 发布为独立 render run，但同样式相邻盒线字形保持在同一个
-shaping run 中。grid 不再对每个 run 使用对齐启发式，因此所有 run 都从协议定义的 cell 列开始，
-同时盒线序列不按单个字形逐格光栅化。该共享 cell 宽度和配置的行高百分比统一计算渲染、选区、
+Latin 等宽 advance 作为逻辑单元格宽度。Han fallback 从分配的两格 span 左边缘绘制，不扩大所有列。
+`src/app/terminal_render/typography.rs` 保留原始 Unicode 与协议列，把 `⏺` 等文字符号明确交给
+Iosevka Term。VS15 请求文字呈现；VS16、键帽序列、默认 emoji 及连接的象形字符保持 emoji 呈现，
+字体取平台解析的 Emoji generic，每个 UI 线程只解析缓存一次。相邻同样式的 ZWJ、肤色和旗帜组成部分合并排字，
+保留原始协议总占格；块状光标也沿用源字形的字体角色。分类和几何绘制均不改写复制文本。
+
+ASCII 继续批量排字；只有在自带 Iosevka 的常规、粗体、斜体及粗斜体中均与 Latin cell 等宽的
+单格符号，才允许同样式连续合并。真实 Parley 回归检查覆盖和 advance，Slint 以 letter spacing
+补偿符号字体与主字体的实测宽度差；样式、字体角色、超链接、宽字符和组合字符边界仍保持独立。
+每个普通 Text run 都测量实际不换行排字宽度；绘制框取实测宽度与协议 cell span 中较大者，
+并限制在 pane 剩余宽度内，使宽回退字形可以越出较窄的逻辑 cell 完整绘制。run 原点、后续列、
+光标、选区及复制继续使用终端模型的格坐标；此规则与具体字符和回退字体无关。
+`src/app/terminal_render/geometry.rs` 独立生成有界的 128 单位 cell 路径，覆盖基本轻/重正交盒线、
+块字符和 Powerline U+E0B0–U+E0B7，其它形状保留字体绘制。
+`TerminalGeometryGlyph` 按物理像素对齐的 cell 边界缩放路径，使用解析后的前景色及阴影密度透明度。
+路径与文字共用既有稳定 run model 和可选静态行缓存，选区、光标、目标高亮与预编辑保持在缓存之外。
+`TerminalPaneGroup` 通过追踪 pane 行的读取绑定视图，使 Settings 更新时的标量字体信息与内部 model 同步推进。
+grid 的每个 run 都从协议定义的列开始。该共享 cell 宽度和配置的行高百分比统一计算渲染、选区、
 光标和向下取整的 PTY 尺寸；光标快照会把落在宽字符续格上的位置归一化到首格，并携带一格或两格的光标跨度，
 避免中文 glyph 被单格覆盖层裁剪。选区背景按选中的逻辑列逐个绘制固定单 cell 矩形，不从混合 Unicode
 run 宽度推导一个跨区间背景。`TerminalPane` 只计算一个内容区光标 cell y 坐标，
@@ -1283,8 +1306,9 @@ run 宽度推导一个跨区间背景。`TerminalPane` 只计算一个内容区�
 只有低于三行保底的 pane 才裁切较旧的顶部行。IME 和指针坐标使用同一原点。pane group 会把每个终端 surface 裁剪到分配的 split 矩形，pane 自身再裁剪网格、光标、
 预编辑覆盖层和透明 IME proxy，确保尺寸过小的嵌套分屏不能绘制到相邻 pane 或工作区之外；终端只会在这些度量和布局稳定后合并发送 resize。
 
-首次打开 Settings 时才会在 blocking worker 中发现本地 shell、系统等宽字体和已知 X server
-安装位置；再次激活现有单例 Tab 不会重复扫描。关闭 Settings 会释放发现出的系统字体与 X server
+首次打开 Settings 时会单独在 blocking worker 中发现本地 shell、供选项 model 使用的系统等宽字体和
+已知 X server 安装位置；Terminal 回退发现不会打开 Settings 或创建它的选项 model。
+再次激活现有单例 Tab 不会重复扫描。关闭 Settings 会释放发现出的系统字体与 X server
 选项 model，同时保留自带字体选项和有界的内存 shell 列表。已经注册到 Fontique/Slint 的字体族
 没有可靠卸载 API，会保持进程级可用；平台字体/应用/图标数据库和 allocator 也可能在 AxSSH 丢弃
 引用后继续持有自身缓存，因此不能预期进程 RSS 立即下降。

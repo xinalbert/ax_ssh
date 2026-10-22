@@ -2200,11 +2200,27 @@ collection and registers external families through Fontique's path source, so
 the complete TTF is not retained in an application-owned `Vec<u8>`. The
 first Terminal or local shell Tab uses one application-owned loading path to
 ensure that its selected bundled primary family, when applicable, Maple Mono
-NF CN, and Iosevka Term are registered. `FontRegistry::register_loaded_font`
-is the sole registration boundary: it keeps Maple first in the shared Fontique
-`Hani` fallback list, then Iosevka for missing symbols, and registers Iosevka
-for Common-script fallback. There is no renderer-side
-font substitution path. Later bundled selections are loaded through the same
+NF CN, and Iosevka Term are registered for restored terminals as well as newly
+opened ones. Startup and
+workspace-file restoration share `ConnectionContext::resume_restored_terminals`;
+existing profile-terminal resumes and local-terminal retries request the same
+font loader before starting workers. A workspace containing only SFTP tabs does
+not request terminal fonts. Registration completion advances the font generation
+and refreshes the workspace, invalidating existing text metrics and paint bounds.
+`FontRegistry::register_loaded_font` is the sole bundled registration boundary:
+it keeps Maple first in the shared
+Fontique `Hani` fallback list and Iosevka first for Common-script fallback, with
+the other bundled fallback next. The first Terminal loading task also discovers
+up to 256 system monospace family names on its blocking worker, even when all
+bundled faces are already registered. The UI merges these installed families
+after the bundled choices and before the original platform fallback families.
+It reads the platform defaults before replacing either list and deduplicates
+family IDs, retaining installed coverage across later bundled registrations.
+Missing glyphs are resolved by the shaper's font coverage queries; there are no
+character-specific substitutions or hardcoded platform font names. Installed
+fonts determine the remaining coverage. The terminal presentation layer also assigns an
+explicit family to text-symbol and emoji runs, because the locked shaper can
+prefer its Emoji generic family before Common-script fallback. Later bundled selections are loaded through the same
 registry when a live Settings preview first selects them. All external reads
 remain on Tokio blocking tasks. The UI applies the candidate immediately, then
 reapplies the current in-memory settings after registration so a delayed font
@@ -2215,25 +2231,53 @@ place bundled families first, then a bounded, case-insensitively deduplicated
 alphabetical list of system monospace families discovered by `fontdb` on a
 Tokio blocking task. `Theme.application-font-family` drives the window default
 and explicit non-terminal monospace labels, while `TerminalViewState.font_family`
-remains the only primary family source for terminal cell measurement and
-rendering; fallback fonts only supply glyphs absent from that family. No font is
+is the requested primary family for terminal cell measurement and rendering.
+Slint compares the actual advances of repeated `M`, `i`, `W`, `0`, and space
+samples, retaining a final non-space sentinel. A non-monospace result uses the
+embedded JetBrains Mono for the grid, cursor, and IME without changing the saved
+selection. No font is
 loaded from `third_package/axshell` during build or runtime;
 release packages must retain `assets/fonts/` by the executable or platform
 resource path. Maple Mono NF CN and Iosevka Term are required there for
 deterministic Han and symbol fallback, respectively; Monaspace Neon remains an
 optional primary family, and all font notices remain required.
-Slint measures the configured primary font with 1,000 Latin cells. Its
+Slint measures the effective primary font with 1,000 Latin cells. Its
 `Text.preferred-width` is rounded up to a whole logical pixel, so averaging a
 long probe bounds that rounding error below 0.001 logical pixel per cell;
 short probes can visibly diverge from a long box-drawing glyph run. The terminal
 grid uses that Latin monospace advance as its logical cell width; registered
-Han fallback and box-drawing glyphs draw from the left edge of their allocated
-one- or two-cell spans instead of enlarging every column. Rust preserves the
-terminal's logical columns, keeps ASCII text batched, and publishes fallback
-cells as independent render runs, except that adjacent same-style box-drawing
-glyphs stay together in one shaping run. The grid applies no per-run alignment
-heuristic, so every run starts at its protocol-defined cell column while a
-box-drawing sequence is not rasterized one glyph at a time. This shared cell
+Han fallback draws from the left edge of its allocated two-cell span instead
+of enlarging every column. `src/app/terminal_render/typography.rs` keeps source
+Unicode and protocol columns intact while assigning text symbols such as `⏺`
+to Iosevka Term. VS15 requests text presentation; VS16, keycap sequences,
+default emoji, and joined pictographs retain emoji presentation using the
+platform's resolved Emoji generic family, cached once per UI thread. Adjacent
+same-style ZWJ, skin-tone, and flag components stay together, retaining their original total
+protocol cell span. The block cursor uses the same font role as its source glyph. Neither
+classification nor geometry rewrites copied text.
+
+ASCII remains batched. Same-style one-cell symbols can also share a shaping
+run only when the bundled regular, bold, italic, and bold-italic Iosevka faces
+all have the Latin cell advance for those code points. Real Parley regression
+tests check coverage and advances; Slint compensates the measured difference
+between symbol and primary advances with letter spacing. Style, font role,
+hyperlink, wide-cell, and combining boundaries remain separate.
+Every ordinary Text run measures its actual unwrapped shaping width. Its paint
+box uses the larger of that width and its protocol cell span, capped at the
+remaining pane width. A wide fallback glyph can therefore paint beyond a narrow
+logical cell without being cut in half. Run origins, following columns, cursor,
+selection, and copying continue to use the terminal model's cell coordinates;
+this rule applies independently of the character or fallback font.
+`src/app/terminal_render/geometry.rs` independently generates bounded paths in
+128-unit cell coordinates for basic light/heavy orthogonal box drawing,
+block elements, and Powerline U+E0B0–U+E0B7. Other shapes retain
+font rendering. `TerminalGeometryGlyph` scales these paths to physical-pixel
+aligned cell boundaries, using the resolved foreground and shade opacity.
+Paths and text share the existing stable run models and optional static row
+cache; selection, cursor, target highlighting, and preedit stay outside it.
+`TerminalPaneGroup` binds its view through a tracked pane-row lookup so a
+Settings update advances scalar typography together with those nested models.
+The grid starts every run at its protocol-defined column. This shared cell
 width and the configured
 line-height percentage drive rendering, selection, cursor, and floor-based PTY
 dimensions. Cursor snapshots normalize a cursor that lands on a wide-character
@@ -2253,8 +2297,10 @@ transparent IME proxy so an undersized nested split cannot paint into a
 neighbor or outside the workspace. The terminal batches the resulting resize
 only after those metrics and its layout have settled.
 
-The first Settings opening discovers local shells, system monospace families,
-and known X-server installations on blocking workers. Reactivating the existing
+The first Settings opening separately discovers local shells, system monospace
+families for its option models, and known X-server installations on blocking
+workers. Terminal fallback discovery does not open Settings or create its option
+models. Reactivating the existing
 singleton tab does not repeat those scans. Closing Settings drops discovered
 system font and X-server option models while retaining bundled font choices and
 the bounded in-memory shell list. Registered Fontique/Slint families have no

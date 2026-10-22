@@ -563,9 +563,14 @@ scrollback、鼠标行为以及平台相关的 Option-as-Meta。文字亮度范�
 启用语义高亮后，Success、Information、Warning 与 Error 都可填入不透明
 `#RRGGBB`；留空时跟随当前 Terminal 色表。URL/路径目标不提供颜色设置，因为提示只使用交互时的
 下划线。两个字体列表都先显示软件自带字体，
-再显示自动发现的系统等宽字体。选中的 Terminal 字体始终是主字体；缺少汉字字形时优先尝试
-自带的 Maple Mono NF CN，再由 Iosevka Term 补充 `↴` 等缺失符号。切换 Terminal 字体不会
-改写已保存的选择或改变此回退顺序。
+再显示自动发现的系统等宽字体。AxSSH 实测所选 Terminal 字体的字符格 advance；不等宽时使用
+JetBrains Mono 绘制网格，不改写保存的选择。缺失的汉字优先使用自带 Maple Mono NF CN；
+`⏺`、`↴` 等文字符号明确使用 Iosevka Term，缺字时继续使用自动发现的系统等宽字体及保留的平台回退，
+覆盖范围取决于已安装字体。符号沿用程序输出的 ANSI 前景色，因此文字圆点可以变色；显式 emoji 序列及
+默认 emoji 保持 emoji 呈现。
+恢复已有终端或重试终端时也会自动初始化相同的字体回退。
+基本盒线、块字符和 Powerline 分隔符按字符格几何绘制，使边界相接。普通文字按实际字体的排字宽度
+分配绘制范围，使宽回退字形不被较窄的逻辑格裁掉；终端列位置和复制沿用原始字符格模型。
 
 **Settings > X11** 控制当前平台的本机 X server provider、首个 X11 application 时启动和显式的
 loopback-only no-auth 兼容模式。已知 provider 的检测位置会以只读方式显示；应用路径只在 Custom

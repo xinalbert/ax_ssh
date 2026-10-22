@@ -988,10 +988,20 @@ are not adjusted. When semantic highlighting is enabled, enter an opaque `#RRGGB
 for Success, Information, Warning, or Error; leave a field empty to follow the
 active terminal palette. URL/path target colors are not configurable because the
 target indication is an interaction-only underline. Bundled fonts appear before
-discovered system monospace fonts in both font lists. The selected Terminal font remains the
-primary family. When it lacks a Han glyph, AxSSH tries bundled Maple Mono NF CN
-first; Iosevka Term then supplies missing symbols such as `↴`. Choosing another
-Terminal font does not replace the saved selection or change this fallback order.
+discovered system monospace fonts in both font lists. AxSSH measures the selected
+Terminal font's actual cell advances. If they are not equal, it uses JetBrains
+Mono for the grid without changing the saved choice. Missing Han glyphs use
+bundled Maple Mono NF CN first. Text symbols such as `⏺` and `↴` explicitly use
+Iosevka Term; missing text glyphs then use automatically discovered system
+monospace fonts and preserved platform fallbacks. Coverage depends on installed
+fonts. Symbols retain the program's ANSI foreground color, so a text circle can
+change colors without becoming a color emoji. Explicit emoji sequences and
+default emoji keep emoji presentation. Restored and retried terminals initialize
+the same font fallbacks automatically.
+Basic box lines, block elements, and Powerline separators use cell geometry to
+join at grid boundaries. Ordinary text uses the font's measured shaping width
+for its paint area, so wide fallback glyphs are not clipped to a narrow logical
+cell. Terminal column positions and copying retain the original cell model.
 
 **Settings > X11** controls the platform-local X server provider, first-X11-
 application startup behavior, and the explicit loopback-only no-auth

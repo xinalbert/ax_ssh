@@ -2,17 +2,17 @@
 
 ## 当前目标
 
-- 目标 ID：20261021-terminal-cursor-ime
-- 目标：修复反色空格模拟光标消失、光标样式更新遗漏和隐藏远端光标时本地拼音预编辑不可见。
-- 交付物：终端模型/应用桥接/Slint 修复、确定性回归、双语架构和完整验证记录；用户验收后分组本地提交。
+- 目标 ID：20261021-terminal-font-rendering
+- 目标：实现终端字体等宽检查、文字符号稳定回退、安全连续排字及盒线/块字符/Powerline 几何绘制。
+- 交付物：应用呈现层与 Slint 实现、确定性回归、双语架构/用法、地图和验证记录，以及用户验收后的本地提交。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`src/terminal/render.rs`、终端渲染回归、`src/app/view/terminal.rs`、终端 Slint 组件及无窗口回归、双语架构和实施记录。
-- 不在本轮范围内：依赖/工具链升级、协议显隐语义变更、transport/SSH/凭据、vendor、发布、推送或安装版替换。
-- 所有权：终端模型保留有可见样式的空格；应用桥接发布完整光标状态；Slint 独占本地 IME/preedit 和绘制。
-- 安全：保持主机密钥默认拒绝与短期凭据边界；预编辑不发送到 worker，不记录输入内容，不捕获应用截图。
+- 当前范围：`src/app/font_bridge.rs`、`src/app/connection/request.rs`、工作区恢复/终端重试编排、`src/app/terminal_render/`、终端视图映射/缓存、`ui/terminal-pane.slint`、终端网格组件及相关回归。
+- 不在本轮范围内：替换 Slint、启用预留 Canvas、参考项目源码复用、SSH/凭据/transport、配置 schema 或依赖升级、推送/tag/发布。
+- 所有权：应用层负责字体资源初始化、选择渲染字形及生成有界几何 DTO；Slint 负责实际字体测量、绘制和局部布局；终端模型保留原始 Unicode、复制和协议占格。
+- 安全：字体文件读取留在现有后台加载路径；UI 无逐格磁盘/网络操作；保持主机密钥默认拒绝、短期凭据和有界模型/缓存，不记录真实终端文本。
 
 ## 当前状态
 
@@ -25,37 +25,59 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| P1 | completed | 反色空格保留及光标更新修复 | ANSI 到实际 snapshot/render 的回归；光标独立更新与模型 identity 回归 | 不按 Claude/Codex 程序名特判 |
-| P2 | completed | 隐藏远端光标时仍显示本地拼音预编辑 | 主/独立窗口的真实 composition 事件、可见项和提交路径回归 | 不改变远端 DECTCEM 状态 |
-| P3 | completed | 双语架构、项目地图和本机自动验证 | fmt/check/严格 Clippy/test/build、链接/skill/tracker/diff | GUI 视觉及原生输入法由用户验收 |
-| C1 | completed | 反色空格修复与 ANSI 到绘制回归提交 | 显式暂存、完整 staged diff/check | `42492f1` |
-| C2 | completed | 光标状态更新和本地预编辑修复提交 | 显式暂存、完整 staged diff/check | `04d09d8`；保留焦点及模型 identity |
-| C3 | completed | 双语架构、地图和验收记录提交 | 链接/skill/tracker/diff 与最终干净工作区 | 本记录随第三笔归档；提交后核对工作区 |
+| P1 | completed | 验证锁定排字器并实现等宽检查及符号/emoji 字形选择 | 实际 Slint/Parley 字体选择、比例字体及显式呈现序列回归 | 不把逗号列表当作族名 |
+| P2 | completed | 盒线、块字符和 Powerline 的有界几何绘制 | 连接/比例/颜色/原始文本与占格回归 | 独立实现，不复制参考源码 |
+| P3 | completed | 扩大安全连续排字并整合稳定模型/缓存 | 样式/字体/宽度边界和主/独立窗口回归 | 保留 fallback/组合/emoji 边界 |
+| P4 | completed | 双语文档、地图和完整本机验证 | fmt/check/严格 Clippy/test/build、链接/skill/tracker/diff | GUI 视觉由用户验收 |
+| P5 | completed | 通用实际排字宽度与协议占格分离，修复宽回退字形裁剪 | 🖥/⚠ 与合成未知宽字形的真实布局；两窗口/两模式；全部 Cargo 门禁/build | 不增加单字符例外或占格替换 |
+| P6 | completed | 保留系统默认回退并自动加入有界系统等宽字体 | 原有回退保留/注册顺序/未知字体覆盖；真实 Parley 用户样本与 ANSI 颜色；全部 Cargo 门禁/build | 不硬编码字符或平台字体名；后台扫描 |
+| P7 | completed | 补齐工作区恢复及终端重试的字体初始化入口 | 恢复/重试真实控制器到 UI font context，加载前后测量与排字缓存；全部 Cargo 门禁/build | 自动验证通过，用户确认正常；不新增字符规则 |
+| P8 | completed | 复核 🖥 横向裁剪反馈并收录用户最终验收 | 实际字体排字与原生 ink metrics 诊断；用户明确确认现在正常 | 未追加生产修补，不推断未复现裁剪层的根因 |
+| C1 | completed | 提交字体渲染、几何绘制与系统回退 | 完整源差异、暂存清单和 diff 检查通过；本地提交 `ac8baf4` | 不包含恢复控制器或文档 |
+| C2 | completed | 提交恢复及重试的字体初始化与集成回归 | 完整暂存差异和 diff 检查通过；本地提交 `3ba5159` | 不改变 transport/认证 |
+| C3 | completed | 提交双语文档和最终验收记录 | Markdown/skill/tracker/diff 校验通过，本记录随文档提交归档 | 提交后只读核对；不推送或发布 |
 
 ## 已完成
 
-- 已读取项目技能、地图、架构、CI 与相关生产/测试源码；修改前工作区干净。
-- 用户从只读排查切换为明确修复授权；已检查两张用户提供的截图，候选词面板存在而 Claude 输入区缺少本地预编辑文本。
-- 已确认三个源码缺陷：空白过滤遗漏 inverse；光标 shape/blinking/color 更新未被外层比较及 UI 订阅完整消费；preedit 可见性错误依赖远端 cursor_visible。
-- 环境快扫：Rust 1.99.0，MSRV/依赖声明保持；已装 ARM64 macOS 和 Windows MSVC target，本机验证使用 ARM64 macOS。
-- 三处修复已实现：保留反色空格，所有光标字段订阅保留单行模型，preedit 独立于远端显隐；双语架构及项目地图已同步。
-- 用户已确认“修复了”，本轮视觉/原生输入法修复验收通过，并授权分组本地提交。
-- 实现与回归分为两笔提交 `42492f1`、`04d09d8`；双语架构和实施记录随第三笔归档。七份 src/ui 文件指纹 `be6815fc7189ab5c3ec19469bef8eeebfd9c1b9d3665559d80f6b6b2365b192c` 提交前后一致。
+- 用户明确授权实施前轮评估方案，修改前工作区干净；前轮光标/拼音三笔提交保留。
+- 已读取项目技能、地图、架构及锁定 Slint 1.18.1 / Fontique 0.11.1 / Parley 0.11.1 源码；本机 Rust 1.99.0、ARM64 macOS。
+- 锁定 Parley 的 emoji 路径先查显式字体，再追加 Emoji generic；Slint 为请求族名构造单一 Named 项，现有 Common 回退不足以保证符号在系统 emoji 前命中。
+- 已实现 `FontRole` 与保留组合边界的连续符号排字、128 单位独立几何路径、Slint 实际等宽检查和运行时兜底，以及平台 Emoji generic 缓存。
+- 字体切换回归暴露 pane 标量视图滞后于内部 model：改用追踪 pane 行的读取绑定视图，保持行/run model 和焦点身份；修复前失败、修复后通过。
+- 基本轻/重正交盒线、块字符及 E0B0–E0B7 进入共享行缓存；双线、圆弧和虚线保留字体，未启用 Canvas 或引入参考依赖。
+- 已同步双语架构/用法和地图；本轮未改变配置、依赖、transport、vendor 或 CI。
+- P5 统一以 `max(协议 span, Text.preferred-width)` 定义普通文字绘制框，并限于 pane 剩余宽度；没有新增生产字符特例。修复前 🖥 的实际 advance 为 12px，绘制框仅 7.201px，真实布局回归失败；修复后通过。
+- 宽字形回归还覆盖没有生产规则的合成 Ω 两倍 advance，在两种字号/字体、两种模式和主/分离窗口检查真实宽度、后续列、光标和原始复制。
+- P6 修复字体注册覆盖系统默认回退的问题：首次 Terminal 后台扫描最多 256 个系统等宽族名，UI 将自带字体、系统等宽候选、原有平台回退依次合并并去重；即使自带字体已注册也执行发现，后续字体注册保留候选。生产代码不增加字符规则或平台字体名。
+- 新增确定性未知族名补字、上限/去重/注册顺序与原始回退保留回归；本机真实 Parley 对用户完整符号序列的四种样式均得到非零字形，两个不同真彩色 ANSI 的 ⏺ 保留各自前景色、源字符及占格。
+- P7 统一启动/工作区文件的终端恢复编排；profile 终端 resume 和本地重试请求相同字体加载器，SFTP-only 保持无需终端字体。真实控制器回归修复前证明未触发加载，修复后成功注册字体，并在实际 UI font context 对用户整段符号排出非零字形。
+- 字体延迟注册回归在主/独立窗口及两种文字模式先填充测量/排字缓存，再加载未知宽字形字体并推进代次/刷新；原有文本的 advance 和绘制框重新计算，回归已通过。
+- 用户先确认 P7 符号问题解决，随后补充 🖥 横向缺半反馈；P8 只读诊断后，用户最终明确确认“现在正常了”并授权本地提交。P8 没有新增生产修补或字符规则，不将其诊断数值当作未复现裁剪层的根因。
+- 本地代码提交：`ac8baf4` 归档字体渲染/几何/系统回退及回归，`3ba5159` 归档恢复/重试初始化与控制器回归。
+- 双语说明、地图与完整验收记录随本笔文档提交归档；本轮按三组独立暂存和创建普通本地提交，没有合并无关文件。
 
 ## 验证
 
-- 已完成：修改前三项新增回归均复现缺陷；修复后 14 项光标专项及完整 399 library + 492 binary 共 891 项 Rust 测试通过。fmt、locked/offline check、严格 all-target Clippy、locked/offline build、53 份 Markdown/入口、skill/tracker/diff 检查通过。Slint 已重新编译，产物为 `target/debug/ax_ssh`。
-- 未完成：Windows/Linux/Intel macOS 原生 CI。
+- 已完成：只读预检和所有权核对；Slint 编译、25 项呈现及 16 项字体桥接回归、真实 Parley 字体命中和 877 个符号在四字形中的覆盖/advance 检查；主/独立窗口两种文字模式布局、稳定模型/焦点和比例字体切换回归。原有回退保留测试修复前失败、修复后通过。
+- 最新边界：保留两格汉字加组合符、两格 emoji 加 VS15 的完整序列；默认 BMP emoji、实际测量探针字体订阅和符号块状光标覆盖层回归已通过。双线完整保留字体绘制，避免混合两种双线度量；长盒线拆分不逐格复制整串文本。
+- 全量验证：`cargo fmt --all -- --check`、`cargo check --locked --offline`、`cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（附加 quiet）和 `cargo build --locked --offline` 全部通过，无 warning；399 library + 510 binary 共 909 项测试，Doc tests 0。额外完成 CI 同参数的 `--target aarch64-apple-darwin` check 与严格 all-targets Clippy（附加 offline），均通过。
+- 工程校验：53 份 Markdown/入口、skill、完整 tracker、tracked/new source whitespace 与 `git diff --check` 通过；最后差异复核未发现参考耦合、秘密、无界缓存/队列、UI I/O 或扩大公共 API。
+- 已完成：用户最终明确确认当前显示正常，实际视觉验收已收录；数值布局检查与用户视觉确认分别记录。
+- 未完成：本轮本地实施/验收/提交范围内无；其它平台原生 CI 保持后续平台验证边界，本机结果不替代它们。文档提交后只读核对最终日志和工作区。
+- P8 数值证据：12px 字号时 🖥 协议占一格，JetBrains Mono 单格约 7.2px，Apple Color Emoji 的 Parley advance 为 12px。使用实际 Fontique blob/index 经 Skia 加载，advance 同为 12px，ink x 为 -1..13px；24/36px 时也只有约一像素越界，不能据此解释用户的缺半程度。默认普通 Text 已取较大排字框；光标覆盖层仍是一格，但用户已确认移开光标后仍异常，当前不把它判定为主因。
+- 构建产物：`target/debug/ax_ssh`（2026-10-22 09:10 +0800），用户已确认显示正常；未替换安装版、推送或发布。其它平台的 SDK/linker/原生 CI 未验证，本机结论不替代它们。
 
 ## 风险与阻塞
 
-- 用户已确认本轮修复有效；本机自动验证和用户验收不替代其它平台原生 CI。
-- 无用户实际终端字节捕获，不把源码触发条件等同于已确认 Claude 每个版本的具体画法。
+- Slint 普通 Text 的固定外框不强制每个字形等宽；连续合并必须限制在可验证的字体/字符范围，不能改变后续列位置。
+- 原始 Unicode 与显式 emoji 序列必须保留；仅呈现 DTO 可以选择符号字体或几何，复制/搜索与协议模型不替换字符。
+- 几何图形共享行缓存，按可见终端格上界限制，不建立额外无界缓存；真实 GUI 由用户验收，不自主截图。
+- 系统字体兜底依据已安装字体的真实覆盖，不保证显示系统和自带字体均缺失的字形；内部候选与 Settings 选项扫描独立，均在后台进行。
 
 ## 下一步
 
-- 本记录随第三笔归档后核对三笔提交和最终干净工作区；其它目标由现有原生 CI 验证。本轮只做本地提交。
+- 其它平台沿用原生 CI；新增字号/DPI 或平台视觉反馈再按实际样本继续验证。
 
 ## 最后更新时间
 
-- 2026-10-21 16:03 +0800
+- 2026-10-22 09:47 +0800
