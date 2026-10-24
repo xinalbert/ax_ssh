@@ -102,7 +102,7 @@ impl AppState {
                     media: terminal.media.snapshot(),
                     id: Some(tab.id),
                     profile_id: terminal.profile_id(),
-                    kind: terminal.backend.kind(),
+                    kind: terminal.kind(),
                     title: tab.title.clone(),
                     status: terminal.status.clone(),
                     notice: terminal.notice_snapshot(),
@@ -111,7 +111,7 @@ impl AppState {
                         .then(|| terminal.terminal_snapshot_for_ui())
                         .flatten(),
                     connected: terminal.connected,
-                    selection_revision: terminal.selection_revision,
+                    selection_revision: terminal.selection_revision(),
                     sftp,
                     security_prompt,
                 }
@@ -145,7 +145,7 @@ impl AppState {
                 let (kind, profile_id, terminal_text, sftp_remote_path, sftp_local_path, status) =
                     match &tab.kind {
                         WorkspaceTabKind::Terminal(terminal) => (
-                            terminal.backend.kind().to_owned(),
+                            terminal.kind().to_owned(),
                             terminal.profile_id(),
                             terminal
                                 .terminal
@@ -340,10 +340,7 @@ impl AppState {
                             backend,
                             worker: None,
                             terminal,
-                            pending_terminal_snapshot: None,
-                            output_frame_pending: false,
-                            published_terminal_snapshot: None,
-                            published_terminal_state: None,
+                            viewport: ax_ssh::controller::TerminalViewport::default(),
                             status: if snapshot.status.is_empty() {
                                 "Restored; reconnecting...".to_owned()
                             } else {
@@ -353,15 +350,11 @@ impl AppState {
                             connection_latency: ConnectionLatency::default(),
                             system_release: None,
                             worker_running: false,
-                            selection_revision: 0,
                             sftp,
                             sftp_initial_path: (!snapshot.sftp_remote_path.is_empty())
                                 .then(|| snapshot.sftp_remote_path.clone()),
                             ssh_phase: SshConnectionPhase::Idle,
-                            reconnect_generation: 0,
-                            reconnect_attempt: 0,
-                            reconnecting: false,
-                            reconnect_enabled: true,
+                            reconnect: ReconnectState::new(true),
                             pending_auth_secret: None,
                             pending_clipboard_read: None,
                             next_clipboard_read_token: 0,
@@ -382,23 +375,16 @@ impl AppState {
                             backend: TerminalBackend::Local,
                             worker: None,
                             terminal: Some(terminal),
-                            pending_terminal_snapshot: None,
-                            output_frame_pending: false,
-                            published_terminal_snapshot: None,
-                            published_terminal_state: None,
+                            viewport: ax_ssh::controller::TerminalViewport::default(),
                             status: snapshot.status.clone(),
                             connected: false,
                             connection_latency: ConnectionLatency::default(),
                             system_release: None,
                             worker_running: false,
-                            selection_revision: 0,
                             sftp: SftpBrowserState::default(),
                             sftp_initial_path: None,
                             ssh_phase: SshConnectionPhase::Idle,
-                            reconnect_generation: 0,
-                            reconnect_attempt: 0,
-                            reconnecting: false,
-                            reconnect_enabled: false,
+                            reconnect: ReconnectState::new(false),
                             pending_auth_secret: None,
                             next_clipboard_read_token: 0,
                             pending_clipboard_read: None,

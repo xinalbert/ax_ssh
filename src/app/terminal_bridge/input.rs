@@ -2,56 +2,7 @@
 
 use super::*;
 
-const MAX_MOUSE_WHEEL_REPORTS: i32 = 256;
-
-/// Encode a bounded source event, then apply the optional alternate-scroll
-/// policy to each wheel step. The model remains authoritative about whether
-/// the current terminal modes accept this pointer event.
-pub(super) fn encode_terminal_mouse_input(
-    model: &TerminalModel,
-    event: TerminalMouseEvent,
-    pixel_x: usize,
-    pixel_y: usize,
-    repeat_count: i32,
-    alternate_scroll_to_home: bool,
-) -> Option<Vec<u8>> {
-    let repeat_count = repeat_count.clamp(1, MAX_MOUSE_WHEEL_REPORTS) as usize;
-    let wheel = matches!(
-        event.button,
-        TerminalMouseButton::WheelUp
-            | TerminalMouseButton::WheelDown
-            | TerminalMouseButton::WheelLeft
-            | TerminalMouseButton::WheelRight
-    );
-    if repeat_count > 1 && (event.kind != TerminalMouseEventKind::Press || !wheel) {
-        return None;
-    }
-    let data = model.encode_mouse_event_with_pixels(event, pixel_x, pixel_y)?;
-    // A wheel event accepted without reporting can only be alternate-scroll.
-    // End every Up/Down step with an unmodified Home to act on the destination
-    // line. The receiving application owns the resulting cursor position.
-    if alternate_scroll_to_home
-        && !model.mouse_reporting().enabled()
-        && event.kind == TerminalMouseEventKind::Press
-        && matches!(
-            event.button,
-            TerminalMouseButton::WheelUp | TerminalMouseButton::WheelDown
-        )
-    {
-        let home = encode_key(
-            &TerminalKey::Home,
-            TerminalModifiers::default(),
-            model.application_cursor(),
-        )?;
-        let mut repeated = Vec::with_capacity((home.len() + data.len()) * repeat_count);
-        for _ in 0..repeat_count {
-            repeated.extend_from_slice(&data);
-            repeated.extend_from_slice(&home);
-        }
-        return Some(repeated);
-    }
-    Some(data.repeat(repeat_count))
-}
+use ax_ssh::controller::{MAX_MOUSE_WHEEL_REPORTS, encode_terminal_mouse_input};
 
 pub(super) fn sync_terminal_query_palette(ui: &AppWindow, state: &Arc<Mutex<AppState>>) {
     let palette = crate::app::view::terminal::terminal_query_palette(ui);

@@ -13,6 +13,8 @@ use uuid::Uuid;
 use ax_ssh::config::{
     ConfigStore, SessionProfile, SessionStore, X11ForwardingMode, normalize_group_name,
 };
+pub(super) use ax_ssh::controller::ConnectionIdentity as TerminalBackend;
+use ax_ssh::controller::ReconnectState;
 use ax_ssh::local_shell::LocalShellHandle;
 use ax_ssh::serial::{SerialPortDescriptor, SerialSessionHandle};
 use ax_ssh::sftp::SftpEntry;
@@ -103,7 +105,7 @@ impl WorkspaceTabKind {
 
     fn name(&self) -> &'static str {
         match self {
-            Self::Terminal(terminal) => terminal.backend.kind(),
+            Self::Terminal(terminal) => terminal.kind(),
             Self::Settings => "settings",
             Self::SessionEditor(_) => "session-editor",
         }
@@ -154,23 +156,16 @@ pub(super) struct TerminalTabState {
     pub(super) backend: TerminalBackend,
     pub(super) worker: Option<TerminalWorker>,
     pub(super) terminal: Option<TerminalModel>,
-    output_frame_pending: bool,
-    pending_terminal_snapshot: Option<TerminalSnapshot>,
-    published_terminal_snapshot: Option<TerminalSnapshot>,
-    published_terminal_state: Option<TerminalVisibleState>,
+    viewport: ax_ssh::controller::TerminalViewport,
     pub(super) status: String,
     pub(super) connected: bool,
     pub(super) connection_latency: ConnectionLatency,
     pub(super) system_release: Option<String>,
     pub(super) worker_running: bool,
-    pub(super) selection_revision: i32,
     pub(super) sftp: SftpBrowserState,
     pub(super) sftp_initial_path: Option<String>,
     pub(super) ssh_phase: SshConnectionPhase,
-    pub(super) reconnect_generation: u64,
-    pub(super) reconnect_attempt: u8,
-    pub(super) reconnecting: bool,
-    pub(super) reconnect_enabled: bool,
+    reconnect: ReconnectState,
     pending_auth_secret: Option<zeroize::Zeroizing<String>>,
     pending_clipboard_read: Option<PendingClipboardRead>,
     next_clipboard_read_token: u64,
@@ -180,57 +175,6 @@ struct PendingClipboardRead {
     formatter: ClipboardLoadFormatter,
     token: u64,
     generation: u64,
-}
-
-/// The bounded terminal state that is visible outside the retained row models.
-/// Row mutations are represented by `TerminalSnapshot::dirty_rows`; this value
-/// covers cursor, viewport, and protocol-mode changes that do not necessarily
-/// alter a styled row.
-#[derive(Clone, Debug, PartialEq, Eq)]
-struct TerminalVisibleState {
-    line_count: usize,
-    max_columns: usize,
-    cursor_row: usize,
-    cursor_column: usize,
-    cursor_cells: usize,
-    cursor_visible: bool,
-    cursor_shape: ax_ssh::terminal::TerminalCursorShape,
-    cursor_blinking: bool,
-    foreground_color: ax_ssh::terminal::TerminalColor,
-    background_color: ax_ssh::terminal::TerminalColor,
-    cursor_color: ax_ssh::terminal::TerminalColor,
-    cursor_text: String,
-    display_offset: usize,
-    viewport_mode: ax_ssh::terminal::TerminalViewportMode,
-    mouse_reporting: ax_ssh::terminal::TerminalMouseReporting,
-    mouse_button_reporting_active: bool,
-    mouse_wheel_reporting_active: bool,
-    bell_revision: u64,
-}
-
-impl From<&TerminalSnapshot> for TerminalVisibleState {
-    fn from(snapshot: &TerminalSnapshot) -> Self {
-        Self {
-            line_count: snapshot.lines.len(),
-            max_columns: snapshot.max_columns,
-            cursor_row: snapshot.cursor_row,
-            cursor_column: snapshot.cursor_column,
-            cursor_cells: snapshot.cursor_cells,
-            cursor_visible: snapshot.cursor_visible,
-            cursor_shape: snapshot.cursor_shape,
-            cursor_blinking: snapshot.cursor_blinking,
-            foreground_color: snapshot.foreground_color,
-            background_color: snapshot.background_color,
-            cursor_color: snapshot.cursor_color,
-            cursor_text: snapshot.cursor_text.clone(),
-            display_offset: snapshot.display_offset,
-            viewport_mode: snapshot.viewport_mode,
-            mouse_reporting: snapshot.mouse_reporting,
-            mouse_button_reporting_active: snapshot.mouse_button_reporting_active,
-            mouse_wheel_reporting_active: snapshot.mouse_wheel_reporting_active,
-            bell_revision: snapshot.bell_revision,
-        }
-    }
 }
 
 const SFTP_HISTORY_LIMIT: usize = 128;
@@ -459,26 +403,6 @@ pub(super) struct SftpTransferSnapshot {
     pub(super) status: String,
     pub(super) selected: bool,
     pub(super) has_local_path: bool,
-}
-
-pub(super) enum TerminalBackend {
-    Ssh {
-        profile_id: Uuid,
-        attempt_id: Option<Uuid>,
-    },
-    Sftp {
-        profile_id: Uuid,
-        attempt_id: Option<Uuid>,
-    },
-    Telnet {
-        profile_id: Uuid,
-        attempt_id: Option<Uuid>,
-    },
-    Serial {
-        profile_id: Uuid,
-        attempt_id: Option<Uuid>,
-    },
-    Local,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

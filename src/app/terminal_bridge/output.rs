@@ -6,33 +6,26 @@ pub(in crate::app) fn process_terminal_output(
     terminal: &mut TerminalTabState,
     data: &[u8],
 ) -> Result<TerminalOutputEffects> {
-    let (responses, title_update, bell, clipboard_store, clipboard_formatter) = {
-        let model = terminal
+    let ax_ssh::controller::TerminalOutput {
+        responses,
+        title_update,
+        bell,
+        clipboard_store,
+        clipboard_load,
+        clipboard_permission_generation,
+        presentation_hold,
+    } = ax_ssh::controller::TerminalOutput::process(
+        terminal
             .terminal
             .as_mut()
-            .context("terminal tab has no terminal model")?;
-        (
-            model.process_with_responses(data),
-            model.take_title_update(),
-            model.take_bell(),
-            model.take_clipboard_store(),
-            model.take_clipboard_load(),
-        )
-    };
-    let clipboard_permission_generation = terminal
-        .terminal
-        .as_ref()
-        .map(TerminalModel::osc52_permission_generation)
-        .unwrap_or_default();
-    let clipboard_generation = terminal.reconnect_generation;
+            .context("terminal tab has no terminal model")?,
+        data,
+    );
+    let clipboard_generation = terminal.reconnect_generation();
     if !data.is_empty() {
         terminal.defer_output_presentation();
     }
-    let presentation_hold = terminal
-        .terminal
-        .as_ref()
-        .and_then(TerminalModel::synchronized_output_remaining);
-    let clipboard_read_requested = clipboard_formatter
+    let clipboard_read_requested = clipboard_load
         .and_then(|formatter| terminal.offer_clipboard_read(formatter))
         .is_some();
     if responses.is_empty() {
@@ -101,7 +94,7 @@ pub(in crate::app) fn apply_terminal_output_effects(
             let allowed = state.lock().ok().is_some_and(|app| {
                 app.sessions.settings.terminal.osc52_clipboard
                     && app.terminal(tab_id).is_some_and(|t| {
-                        t.reconnect_generation == generation
+                        t.reconnect_generation() == generation
                             && t.terminal.as_ref().is_some_and(|model| {
                                 model.osc52_clipboard_enabled()
                                     && model.osc52_permission_generation() == permission_generation

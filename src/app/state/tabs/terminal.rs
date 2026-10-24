@@ -68,9 +68,8 @@ impl AppState {
             Vec::new()
         };
         let sent_protocol_response = !responses.is_empty();
-        if characters_changed && model.resize(size.columns() as usize, size.rows() as usize) {
-            terminal.discard_pending_terminal_snapshot();
-            terminal.invalidate_selection();
+        if characters_changed {
+            terminal.viewport.resize(model, size);
         }
         if !responses.is_empty() {
             let worker = terminal
@@ -90,30 +89,20 @@ impl AppState {
         let Some(terminal) = self.terminal_mut(tab_id) else {
             return false;
         };
-        let changed = terminal
+        terminal
             .terminal
             .as_mut()
-            .is_some_and(|model| model.scroll(lines));
-        if changed {
-            terminal.discard_pending_terminal_snapshot();
-            terminal.invalidate_selection();
-        }
-        changed
+            .is_some_and(|model| terminal.viewport.scroll(model, lines))
     }
 
     pub(in crate::app) fn scroll_terminal_to_bottom(&mut self, tab_id: Uuid) -> bool {
         let Some(terminal) = self.terminal_mut(tab_id) else {
             return false;
         };
-        let changed = terminal
+        terminal
             .terminal
             .as_mut()
-            .is_some_and(TerminalModel::scroll_to_bottom);
-        if changed {
-            terminal.discard_pending_terminal_snapshot();
-            terminal.invalidate_selection();
-        }
-        changed
+            .is_some_and(|model| terminal.viewport.scroll_to_bottom(model))
     }
 
     pub(in crate::app) fn pane_session_source(&self, tab_id: Uuid) -> Option<PaneSessionSource> {

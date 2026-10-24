@@ -59,6 +59,12 @@ fn main() {
     languages::generate(PathBuf::from("translations").as_path(), &out_dir)
         .expect("failed to generate bundled language registry");
 
+    #[cfg(feature = "slint-ui")]
+    compile_slint();
+}
+
+#[cfg(feature = "slint-ui")]
+fn compile_slint() {
     let slint_config = slint_build::CompilerConfiguration::new()
         .with_bundled_translations("translations")
         .with_default_translation_context(slint_build::DefaultTranslationContext::None);

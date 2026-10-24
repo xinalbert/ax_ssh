@@ -62,3 +62,31 @@ fn local_upload_discovery_uses_per_file_limit_without_batch_byte_cap() {
     );
     std::fs::remove_file(path).expect("remove sparse fixture");
 }
+
+#[test]
+fn cancellation_and_duplicate_roots_reject_before_upload_publication() {
+    let cancellation = std::sync::atomic::AtomicBool::new(true);
+    assert!(
+        discover_local_uploads_cancellable(
+            vec![PathBuf::from("/fixture/file")],
+            "/remote",
+            &[],
+            1024,
+            &cancellation
+        )
+        .err()
+        .unwrap()
+        .to_string()
+        .contains("cancelled")
+    );
+    assert!(
+        discover_local_uploads(
+            vec![PathBuf::from("/one/file"), PathBuf::from("/two/file")],
+            "/remote",
+            &[],
+            1024
+        )
+        .is_err()
+    );
+    assert!(discover_local_uploads(Vec::new(), "/remote", &[], 1024).is_err());
+}

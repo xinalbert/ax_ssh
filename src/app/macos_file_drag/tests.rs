@@ -292,7 +292,7 @@ async fn ssh_monitor_disconnect_failure_and_eof_release_the_originating_promises
         let terminal = app.terminal_mut(tab_id).expect("SFTP tab");
         terminal.set_ssh_attempt(Some(attempt_id));
         terminal.worker_running = true;
-        terminal.reconnect_enabled = false;
+        terminal.cancel_reconnect();
         let origin = FilePromiseOwner { tab_id, attempt_id };
         let transfer = Uuid::new_v4();
         promised_transfers()

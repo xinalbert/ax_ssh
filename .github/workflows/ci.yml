@@ -78,6 +78,17 @@ jobs:
       - name: Test
         if: matrix.run_tests
         run: cargo test --locked --target ${{ matrix.target }}
+      - name: Check egui frontend
+        run: cargo check --locked --no-default-features --features egui-ui --target ${{ matrix.target }}
+      - name: Clippy egui frontend
+        run: cargo clippy --all-targets --locked --no-default-features --features egui-ui --target ${{ matrix.target }} -- -D warnings
+      - name: Build egui frontend
+        run: cargo build --locked --no-default-features --features egui-ui --target ${{ matrix.target }}
+      - name: Test egui frontend
+        if: matrix.run_tests
+        run: cargo test --locked --no-default-features --features egui-ui --target ${{ matrix.target }}
+      - name: Check combined frontends
+        run: cargo check --locked --all-features --all-targets --target ${{ matrix.target }}
       - name: Test release helper scripts
         run: python -m unittest scripts/test_release_version.py scripts/test_generate_release_highlights.py -v
 
@@ -114,13 +125,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: false
-      - uses: dtolnay/rust-toolchain@1.92.0
+      - uses: dtolnay/rust-toolchain@1.95.0
         with:
           targets: x86_64-unknown-linux-gnu
       - name: Install Linux build dependencies
         run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev libasound2-dev
       - name: Check at the declared MSRV
         run: cargo check --locked --target x86_64-unknown-linux-gnu
+      - name: Check egui at the declared MSRV
+        run: cargo check --locked --no-default-features --features egui-ui --target x86_64-unknown-linux-gnu
 
   security-audit:
     name: RustSec audit

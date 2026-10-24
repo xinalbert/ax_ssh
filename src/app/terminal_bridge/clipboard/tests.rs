@@ -29,7 +29,9 @@ async fn consent_timeout_only_clears_the_matching_token_and_connection_generatio
     // These do not match the original consent lease.
     {
         let mut app = state.lock().unwrap();
-        app.terminal_mut(reconnected).unwrap().reconnect_generation = 1;
+        let terminal = app.terminal_mut(reconnected).unwrap();
+        terminal.prepare_manual_retry();
+        terminal.set_test_pending_clipboard_read(Arc::new(|_| String::new()));
     }
     tokio::task::yield_now().await;
     tokio::time::advance(OSC52_CLIPBOARD_READ_TIMEOUT - Duration::from_millis(1)).await;

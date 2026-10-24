@@ -94,6 +94,27 @@ class RepositoryTests(unittest.TestCase):
             build.write_text('slint_build::compile("ui/other.slint");\n', encoding="utf-8")
             self.assertEqual(len(repository.validate_source_layout(root)), 3)
 
+    def test_experimental_controller_cannot_import_a_ui_framework(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "src/controller").mkdir(parents=True)
+            (root / "src/app.rs").write_text("slint::include_modules!();\n", encoding="utf-8")
+            (root / "src/egui_main.rs").write_text("fn main() {}\n", encoding="utf-8")
+            (root / "build.rs").write_text(
+                '#[cfg(feature = "slint-ui")]\nfn compile_slint() {\n'
+                'slint_build::compile("ui/app.slint");\n}\n', encoding="utf-8"
+            )
+            (root / "Cargo.toml").write_text(
+                '[[bin]]\nname = "ax_ssh"\npath = "src/main.rs"\nrequired-features = ["slint-ui"]\n'
+                '[[bin]]\nname = "ax_ssh_egui"\npath = "src/egui_main.rs"\nrequired-features = ["egui-ui"]\n',
+                encoding="utf-8",
+            )
+            controller = root / "src/controller/local.rs"
+            controller.write_text("use egui::Context;\n", encoding="utf-8")
+            self.assertTrue(any("controller must not import" in error for error in repository.validate_source_layout(root)))
+            controller.write_text("use std::sync::Arc;\n", encoding="utf-8")
+            self.assertEqual(repository.validate_source_layout(root), [])
+
 
 if __name__ == "__main__":
     unittest.main()

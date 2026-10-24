@@ -599,7 +599,7 @@ fn terminal_callbacks_connect_to_a_real_worker_and_forward_keys_paste_focus_and_
             let app = harness.state.lock().expect("state");
             let terminal = app.terminal(tab).expect("disconnect retains terminal tab");
             assert!(
-                !terminal.reconnecting,
+                !terminal.reconnecting(),
                 "explicit disconnect cancels automatic reconnect"
             );
             assert_eq!(terminal.telnet_route(), Some((profile.id, None)));

@@ -18,6 +18,7 @@ const CONTENT: &[u8] = b"worker download preserves every byte\n";
 
 struct RemoteFiles {
     files: Mutex<HashMap<String, Vec<u8>>>,
+    directories: Mutex<std::collections::HashSet<String>>,
     read_started: Notify,
     read_gate: Semaphore,
 }
@@ -101,7 +102,7 @@ struct FilePeer {
 
 fn attributes(path: &str, files: &RemoteFiles) -> Result<FileAttributes, StatusCode> {
     let mut attrs = FileAttributes::empty();
-    if path == "/remote" {
+    if path == "/remote" || files.directories.lock().unwrap().contains(path) {
         attrs.set_dir(true);
     } else {
         let files = files.files.lock().expect("fixture files");
@@ -126,6 +127,15 @@ impl russh_sftp::server::Handler for FilePeer {
     type Error = StatusCode;
     fn unimplemented(&self) -> StatusCode {
         StatusCode::OpUnsupported
+    }
+    async fn mkdir(
+        &mut self,
+        id: u32,
+        path: String,
+        _: FileAttributes,
+    ) -> Result<Status, StatusCode> {
+        self.files.directories.lock().unwrap().insert(path);
+        Ok(success(id))
     }
 
     async fn init(
@@ -300,7 +310,7 @@ impl russh_sftp::server::Handler for FilePeer {
     }
 }
 
-struct Fixture {
+pub(crate) struct Fixture {
     profile: SessionProfile,
     files: Arc<RemoteFiles>,
     server: JoinHandle<Result<(), russh::Error>>,
@@ -308,7 +318,7 @@ struct Fixture {
 }
 
 impl Fixture {
-    async fn new(reject_subsystem: bool) -> Self {
+    pub(crate) async fn new(reject_subsystem: bool) -> Self {
         let mut rng = StdRng::seed_from_u64(601);
         let key = PrivateKey::random(&mut rng, russh::keys::Algorithm::Ed25519)
             .expect("fixture host key");
@@ -326,6 +336,7 @@ impl Fixture {
         );
         ssh.sftp_remote_path = "/remote".into();
         let files = Arc::new(RemoteFiles {
+            directories: Mutex::new(std::collections::HashSet::new()),
             files: Mutex::new(HashMap::from([
                 ("/remote/file.txt".into(), CONTENT.to_vec()),
                 ("/remote/slow.bin".into(), vec![42; 256 * 1024]),
@@ -365,7 +376,32 @@ impl Fixture {
         }
     }
 
-    async fn worker(&self) -> (SshSessionHandle, mpsc::Receiver<SshSessionEvent>) {
+    #[cfg(feature = "egui-ui")]
+    pub(crate) fn contains(&self, path: &str) -> bool {
+        self.files.files.lock().unwrap().contains_key(path)
+    }
+    #[cfg(feature = "egui-ui")]
+    pub(crate) fn contents(&self, path: &str) -> Vec<u8> {
+        self.files.files.lock().unwrap()[path].clone()
+    }
+    #[cfg(feature = "egui-ui")]
+    pub(crate) fn replace(&self, path: &str, data: &[u8]) {
+        self.files
+            .files
+            .lock()
+            .unwrap()
+            .insert(path.into(), data.to_vec());
+    }
+    #[cfg(feature = "egui-ui")]
+    pub(crate) async fn slow_read_started(&self) {
+        self.files.read_started.notified().await;
+    }
+    #[cfg(feature = "egui-ui")]
+    pub(crate) fn release_slow_read(&self) {
+        self.files.read_gate.add_permits(64);
+    }
+
+    pub(crate) async fn worker(&self) -> (SshSessionHandle, mpsc::Receiver<SshSessionEvent>) {
         // Supply a known-hosts snapshot, preserving the real Handler trust check.
         let ssh = self.profile.ssh().expect("SSH profile");
         let socket = TcpStream::connect((ssh.host.as_str(), ssh.port))

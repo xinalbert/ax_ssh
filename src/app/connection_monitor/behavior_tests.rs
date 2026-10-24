@@ -30,7 +30,7 @@ impl Fixture {
         let terminal = app.terminal_mut(tab).expect("terminal state");
         terminal.set_ssh_attempt(Some(attempt));
         terminal.worker_running = true;
-        terminal.reconnect_enabled = false;
+        terminal.cancel_reconnect();
         terminal.sftp.local.path = directory.to_string_lossy().into_owned();
         Self {
             state: Arc::new(Mutex::new(app)),

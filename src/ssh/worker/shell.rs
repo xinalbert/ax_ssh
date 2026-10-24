@@ -16,6 +16,7 @@ pub(super) struct TerminalSessionTask {
     pub(super) x11_mode: Option<crate::config::X11ForwardingMode>,
     pub(super) x11_settings: crate::config::X11Settings,
     pub(super) audio_format: crate::audio::AudioFormat,
+    pub(super) automatic_microphone: bool,
     pub(super) x11_dispatcher: Option<X11Dispatcher>,
     pub(super) x11_requests: Option<mpsc::Receiver<X11ChannelRequest>>,
     pub(super) command_rx: mpsc::Receiver<SshCommand>,
@@ -31,6 +32,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
         x11_mode,
         x11_settings,
         audio_format,
+        automatic_microphone,
         x11_dispatcher,
         mut x11_requests,
         mut command_rx,
@@ -59,26 +61,30 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     let stop_on_shutdown = automatic_stop.clone();
     let mut shutdown = media_shutdown.clone();
     let audio_events = event_tx.clone();
-    media_tasks.spawn(async move {
-        let forwarding = super::media::forward_automatic_microphone(
-            audio_connection,
-            audio_format,
-            automatic_shutdown,
-            audio_ready,
-            audio_events,
-        );
-        tokio::pin!(forwarding);
-        let result = tokio::select! {
-            result = &mut forwarding => result,
-            _ = crate::audio::wait_for_stop(&mut shutdown) => {
-                stop_on_shutdown.send_replace(true);
-                forwarding.await
+    if automatic_microphone {
+        media_tasks.spawn(async move {
+            let forwarding = super::media::forward_automatic_microphone(
+                audio_connection,
+                audio_format,
+                automatic_shutdown,
+                audio_ready,
+                audio_events,
+            );
+            tokio::pin!(forwarding);
+            let result = tokio::select! {
+                result = &mut forwarding => result,
+                _ = crate::audio::wait_for_stop(&mut shutdown) => {
+                    stop_on_shutdown.send_replace(true);
+                    forwarding.await
+                }
+            };
+            if let Err(error) = result {
+                debug!(%error, "standard remote microphone bridge unavailable");
             }
-        };
-        if let Err(error) = result {
-            debug!(%error, "standard remote microphone bridge unavailable");
-        }
-    });
+        });
+    } else {
+        drop(audio_ready);
+    }
     let setup = timeout(Duration::from_secs(5), source_ready);
     tokio::pin!(setup);
     let audio_source = loop {

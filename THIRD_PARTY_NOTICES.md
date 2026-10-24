@@ -26,6 +26,17 @@ macOS CoreGraphics surface use a persistent tiled framebuffer, and releasing
 per-component Skia layer images when a component is destroyed. They do not
 change Slint's UI language or application APIs.
 
+## Experimental egui frontend
+
+The optional frontend uses egui/eframe 0.37.0 and its epaint, egui-winit,
+egui-wgpu and system-font integration crates under `MIT OR Apache-2.0`.
+Their authors and license files remain in the corresponding upstream packages:
+<https://github.com/emilk/egui/tree/0.37.0>. Native AppKit/Win32 menus use muda 0.19.3 under `MIT OR Apache-2.0`
+(<https://github.com/tauri-apps/muda/tree/muda-v0.19.3>); its GTK features are
+disabled and Linux uses the existing egui menu surface. WGPU and the remaining
+transitive dependencies retain their Cargo-declared licenses. This does not change the
+AxSSH GPL-3.0-only license or the independently licensed bundled fonts.
+
 ## Bundled Fonts
 
 The font files under `assets/fonts/` are distributed under the SIL Open Font
@@ -43,6 +54,10 @@ AxSSH obtains file-type icons from operating-system facilities: AppKit and
 Uniform Type Identifiers on macOS, Windows Shell and GDI APIs on Windows, and
 freedesktop icon themes plus MIME mappings on Linux. Operating-system artwork
 is resolved at runtime and is not copied into this repository.
+
+Linux vector icons use `resvg`/`usvg` 0.48.1 and `tiny-skia` under
+`MIT OR Apache-2.0`; upstream notices remain in their crates. Vector decoding
+disables external/embedded images and system-font discovery.
 
 The Rust implementation uses the locked `image`, `freedesktop-icons`,
 `mime_guess`, `objc2` family, and `windows-sys` crates on their applicable

@@ -235,7 +235,7 @@ async fn terminal_and_sftp_workers_start_once_and_shutdown_with_their_owner() {
                 let app = fixture.state.lock().unwrap();
                 let terminal = app.terminal(fixture.tab).unwrap();
                 assert!(
-                    terminal.worker_running && !terminal.connected && terminal.reconnect_enabled
+                    terminal.worker_running && !terminal.connected && terminal.reconnect_enabled()
                 );
                 assert!(matches!(terminal.worker, Some(TerminalWorker::Ssh(_))));
                 assert!(terminal.ssh_route().unwrap().1.is_some());

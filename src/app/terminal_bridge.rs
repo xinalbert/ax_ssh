@@ -44,7 +44,7 @@ use super::*;
 use crate::app::state::PaneSessionSource;
 use crate::app::terminal_targets::{TerminalTarget, terminal_target_match_at_context};
 use ax_ssh::terminal::{
-    TerminalKey, TerminalModel, TerminalModifiers, TerminalMouseButton, TerminalMouseEvent,
+    TerminalModel, TerminalModifiers, TerminalMouseButton, TerminalMouseEvent,
     TerminalMouseEventKind, TerminalMouseModifiers, TerminalSelectionRange, TerminalTargetContext,
     encode_key,
 };

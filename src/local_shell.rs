@@ -217,13 +217,16 @@ impl LocalShellHandle {
         if *requested == size {
             return Ok(());
         }
-        *requested = size;
         *self
             .pending_resize
             .lock()
             .map_err(|_| anyhow::anyhow!("local terminal resize state lock poisoned"))? =
             Some(size);
-        wake_worker(&self.command_tx)
+        // Cache only admitted requests: a failed wake must not turn the next
+        // identical resize into a successful no-op.
+        wake_worker(&self.command_tx)?;
+        *requested = size;
+        Ok(())
     }
 
     pub async fn shutdown(mut self) -> Result<()> {

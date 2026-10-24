@@ -27,7 +27,11 @@ static NEXT_TERMINAL_INPUT_SEQUENCE: std::sync::atomic::AtomicU64 =
     std::sync::atomic::AtomicU64::new(1);
 
 impl TerminalTabState {
-    pub(in crate::app) const MAX_RECONNECT_ATTEMPTS: u8 = 5;
+    pub(in crate::app) const MAX_RECONNECT_ATTEMPTS: u8 = ReconnectState::MAX_ATTEMPTS;
+
+    pub(in crate::app) fn kind(&self) -> &'static str {
+        if self.is_sftp() { "sftp" } else { "terminal" }
+    }
 
     pub(in crate::app) fn offer_clipboard_read(
         &mut self,
@@ -48,7 +52,7 @@ impl TerminalTabState {
             self.next_clipboard_read_token = 1;
         }
         let token = self.next_clipboard_read_token;
-        let generation = self.reconnect_generation;
+        let generation = self.reconnect_generation();
         self.pending_clipboard_read = Some(PendingClipboardRead {
             formatter,
             token,
@@ -63,7 +67,7 @@ impl TerminalTabState {
             .terminal
             .as_ref()
             .is_some_and(TerminalModel::osc52_clipboard_enabled)
-            && pending.generation == self.reconnect_generation
+            && pending.generation == self.reconnect_generation()
             && self.connected
             && self.worker_running
             && self.worker.is_some())
@@ -72,7 +76,7 @@ impl TerminalTabState {
 
     pub(in crate::app) fn take_pending_clipboard_read(&mut self) -> Option<ClipboardLoadFormatter> {
         let (token, generation) = self.clipboard_read_key()?;
-        if generation != self.reconnect_generation
+        if generation != self.reconnect_generation()
             || !self.connected
             || !self.worker_running
             || self.worker.is_none()
@@ -89,7 +93,7 @@ impl TerminalTabState {
         if self.pending_clipboard_read.as_ref().is_some_and(|pending| {
             pending.token == token
                 && pending.generation == generation
-                && generation == self.reconnect_generation
+                && generation == self.reconnect_generation()
         }) {
             self.pending_clipboard_read = None;
             true
@@ -110,252 +114,114 @@ impl TerminalTabState {
         self.pending_clipboard_read = Some(PendingClipboardRead {
             formatter,
             token: 1,
-            generation: self.reconnect_generation,
+            generation: self.reconnect_generation(),
         });
     }
 
     pub(in crate::app) fn defer_output_presentation(&mut self) {
-        self.output_frame_pending = true;
+        self.viewport.defer_output();
     }
 
-    /// Admit one bounded snapshot at the output frame deadline. Later output
-    /// remains private until its own deadline, including during unrelated UI
-    /// refreshes. Control-only writes still do not enter the Slint queue.
     pub(in crate::app) fn prepare_terminal_output_snapshot(&mut self) -> bool {
-        if self.synchronized_output_pending() {
-            return false;
-        }
-        self.output_frame_pending = false;
-        if self.pending_terminal_snapshot.is_some() {
-            return true;
-        }
-        let Some(snapshot) = self.terminal.as_mut().map(TerminalModel::snapshot) else {
-            return false;
-        };
-        let visible_state = TerminalVisibleState::from(&snapshot);
-        if snapshot.dirty_rows.is_empty()
-            && self
-                .published_terminal_state
-                .as_ref()
-                .is_some_and(|current| current == &visible_state)
-        {
-            return false;
-        }
-        self.pending_terminal_snapshot = Some(snapshot);
-        true
+        self.viewport.prepare(self.terminal.as_mut())
     }
 
     pub(in crate::app) fn terminal_snapshot_for_ui(&mut self) -> Option<TerminalSnapshot> {
-        if self.synchronized_output_pending() {
-            return self
-                .published_terminal_snapshot
-                .clone()
-                .or_else(|| self.pending_terminal_snapshot.clone());
-        }
-        let current_snapshot = if self.output_frame_pending {
-            None
-        } else {
-            self.terminal.as_mut().map(TerminalModel::snapshot)
-        };
-        let snapshot = match (self.pending_terminal_snapshot.take(), current_snapshot) {
-            (Some(pending), Some(current)) => merge_terminal_snapshots(pending, current),
-            (Some(pending), None) => pending,
-            (None, Some(current)) => current,
-            (None, None) => return self.published_terminal_snapshot.clone(),
-        };
-        self.published_terminal_state = Some(TerminalVisibleState::from(&snapshot));
-        self.published_terminal_snapshot = Some(snapshot.clone());
-        Some(snapshot)
-    }
-
-    fn synchronized_output_pending(&mut self) -> bool {
-        let Some(model) = self.terminal.as_mut() else {
-            return false;
-        };
-        !model.flush_synchronized_output_if_due() && model.synchronized_output_remaining().is_some()
+        self.viewport.snapshot(self.terminal.as_mut())
     }
 
     pub(in crate::app) fn discard_pending_terminal_snapshot(&mut self) {
-        self.pending_terminal_snapshot = None;
-        self.output_frame_pending = false;
+        self.viewport.discard_pending();
     }
 
-    pub(in crate::app) fn invalidate_selection(&mut self) {
-        self.selection_revision = if self.selection_revision == i32::MAX {
-            1
-        } else {
-            self.selection_revision + 1
-        };
+    pub(in crate::app) fn selection_revision(&self) -> i32 {
+        self.viewport.selection_revision()
     }
 
     pub(in crate::app) fn begin_reconnect(&mut self) -> Option<(u64, u8)> {
-        if !self.reconnect_enabled || self.reconnecting || self.worker.is_some() {
-            return None;
-        }
-        let attempt = self.reconnect_attempt.checked_add(1)?;
-        if attempt > Self::MAX_RECONNECT_ATTEMPTS {
-            return None;
-        }
-        self.reconnect_attempt = attempt;
-        self.reconnecting = true;
-        Some((self.reconnect_generation, attempt))
+        self.reconnect.begin(self.worker.is_some())
     }
 
     pub(in crate::app) fn reconnect_current(&self, generation: u64) -> bool {
-        self.reconnect_enabled && self.reconnect_generation == generation && self.reconnecting
+        self.reconnect.current(generation)
     }
 
     pub(in crate::app) fn finish_reconnect_attempt(&mut self, generation: u64) -> bool {
-        if self.reconnect_generation != generation {
-            return false;
-        }
-        self.reconnecting = false;
-        true
+        self.reconnect.finish_attempt(generation)
     }
 
     pub(in crate::app) fn mark_reconnect_connected(&mut self, generation: u64) -> bool {
-        if self.reconnect_generation != generation {
-            return false;
-        }
-        self.reconnect_attempt = 0;
-        self.reconnecting = false;
-        self.reconnect_enabled = true;
-        true
+        self.reconnect.mark_connected(generation)
     }
 
     pub(in crate::app) fn cancel_reconnect(&mut self) {
-        self.reconnect_generation = self.reconnect_generation.wrapping_add(1);
-        self.reconnecting = false;
-        self.reconnect_enabled = false;
+        self.reconnect.cancel();
         self.clear_pending_clipboard_read();
         self.media.cancel();
     }
 
     pub(in crate::app) fn prepare_manual_retry(&mut self) {
-        self.reconnect_generation = self.reconnect_generation.wrapping_add(1);
-        self.reconnect_attempt = 0;
-        self.reconnecting = false;
-        self.reconnect_enabled = !self.is_local();
+        let enabled = !self.is_local();
+        self.reconnect.prepare_manual_retry(enabled);
         self.clear_pending_clipboard_read();
         self.media.cancel();
     }
 
     pub(in crate::app) fn enable_reconnect(&mut self) {
-        self.reconnect_enabled = true;
+        self.reconnect.enable();
     }
 
     pub(in crate::app) fn reconnect_generation(&self) -> u64 {
-        self.reconnect_generation
+        self.reconnect.generation()
+    }
+
+    pub(in crate::app) fn reconnect_attempt(&self) -> u8 {
+        self.reconnect.attempt()
+    }
+
+    pub(in crate::app) fn reconnecting(&self) -> bool {
+        self.reconnect.reconnecting()
+    }
+
+    pub(in crate::app) fn reconnect_enabled(&self) -> bool {
+        self.reconnect.enabled()
     }
 
     pub(in crate::app) fn profile_id(&self) -> Option<Uuid> {
-        match self.backend {
-            TerminalBackend::Ssh { profile_id, .. }
-            | TerminalBackend::Sftp { profile_id, .. }
-            | TerminalBackend::Telnet { profile_id, .. }
-            | TerminalBackend::Serial { profile_id, .. } => Some(profile_id),
-            TerminalBackend::Local => None,
-        }
+        self.backend.profile_id()
     }
 
     pub(in crate::app) fn ssh_route(&self) -> Option<(Uuid, Option<Uuid>)> {
-        match self.backend {
-            TerminalBackend::Ssh {
-                profile_id,
-                attempt_id,
-            }
-            | TerminalBackend::Sftp {
-                profile_id,
-                attempt_id,
-            } => Some((profile_id, attempt_id)),
-            TerminalBackend::Telnet { .. }
-            | TerminalBackend::Serial { .. }
-            | TerminalBackend::Local => None,
-        }
+        self.backend.ssh_route()
     }
 
     pub(in crate::app) fn telnet_route(&self) -> Option<(Uuid, Option<Uuid>)> {
-        match self.backend {
-            TerminalBackend::Telnet {
-                profile_id,
-                attempt_id,
-            } => Some((profile_id, attempt_id)),
-            TerminalBackend::Ssh { .. }
-            | TerminalBackend::Sftp { .. }
-            | TerminalBackend::Serial { .. }
-            | TerminalBackend::Local => None,
-        }
+        self.backend.telnet_route()
     }
 
     pub(in crate::app) fn serial_route(&self) -> Option<(Uuid, Option<Uuid>)> {
-        match self.backend {
-            TerminalBackend::Serial {
-                profile_id,
-                attempt_id,
-            } => Some((profile_id, attempt_id)),
-            TerminalBackend::Ssh { .. }
-            | TerminalBackend::Sftp { .. }
-            | TerminalBackend::Telnet { .. }
-            | TerminalBackend::Local => None,
-        }
+        self.backend.serial_route()
     }
 
     pub(in crate::app) fn set_ssh_attempt(&mut self, attempt_id: Option<Uuid>) -> bool {
-        match &mut self.backend {
-            TerminalBackend::Ssh {
-                attempt_id: current,
-                ..
-            }
-            | TerminalBackend::Sftp {
-                attempt_id: current,
-                ..
-            } => {
-                if *current != attempt_id {
-                    self.connection_latency = super::ConnectionLatency::default();
-                }
-                *current = attempt_id;
-                true
-            }
-            TerminalBackend::Telnet { .. }
-            | TerminalBackend::Serial { .. }
-            | TerminalBackend::Local => false,
+        let previous = self.backend.ssh_route();
+        let accepted = self.backend.set_ssh_attempt(attempt_id);
+        if accepted && previous != self.backend.ssh_route() {
+            self.connection_latency = super::ConnectionLatency::default();
         }
+        accepted
     }
 
     pub(in crate::app) fn set_telnet_attempt(&mut self, attempt_id: Option<Uuid>) -> bool {
-        match &mut self.backend {
-            TerminalBackend::Telnet {
-                attempt_id: current,
-                ..
-            } => {
-                *current = attempt_id;
-                true
-            }
-            TerminalBackend::Ssh { .. }
-            | TerminalBackend::Sftp { .. }
-            | TerminalBackend::Serial { .. }
-            | TerminalBackend::Local => false,
-        }
+        self.backend.set_telnet_attempt(attempt_id)
     }
 
     pub(in crate::app) fn set_serial_attempt(&mut self, attempt_id: Option<Uuid>) -> bool {
-        match &mut self.backend {
-            TerminalBackend::Serial {
-                attempt_id: current,
-                ..
-            } => {
-                *current = attempt_id;
-                true
-            }
-            TerminalBackend::Ssh { .. }
-            | TerminalBackend::Sftp { .. }
-            | TerminalBackend::Telnet { .. }
-            | TerminalBackend::Local => false,
-        }
+        self.backend.set_serial_attempt(attempt_id)
     }
 
     pub(in crate::app) fn is_local(&self) -> bool {
-        matches!(self.backend, TerminalBackend::Local)
+        self.backend.is_local()
     }
 
     pub(in crate::app) fn ssh_phase(&self) -> Option<&SshConnectionPhase> {
@@ -424,7 +290,7 @@ impl TerminalTabState {
     }
 
     pub(in crate::app) fn connection_target(&self) -> ConnectionTarget {
-        if matches!(self.backend, TerminalBackend::Sftp { .. }) {
+        if self.backend.is_sftp() {
             ConnectionTarget::Sftp
         } else {
             ConnectionTarget::Terminal
@@ -432,7 +298,7 @@ impl TerminalTabState {
     }
 
     pub(in crate::app) fn is_sftp(&self) -> bool {
-        matches!(self.backend, TerminalBackend::Sftp { .. })
+        self.backend.is_sftp()
     }
 
     pub(in crate::app) fn notice_snapshot(&self) -> TerminalNoticeSnapshot {
@@ -449,7 +315,7 @@ impl TerminalTabState {
             return TerminalNoticeSnapshot::default();
         }
 
-        if self.reconnecting || status.starts_with("Connection lost; reconnecting") {
+        if self.reconnecting() || status.starts_with("Connection lost; reconnecting") {
             return TerminalNoticeSnapshot::reconnecting(status);
         }
 
@@ -476,7 +342,7 @@ impl TerminalTabState {
     }
 
     fn user_requested_disconnect_status(&self, status: &str) -> bool {
-        !self.reconnect_enabled
+        !self.reconnect_enabled()
             && (status == "Disconnected"
                 || status == "Disconnecting..."
                 || status.ends_with(" worker stopped"))
@@ -496,37 +362,6 @@ impl TerminalTabState {
             || status.ends_with("disconnected")
             || status.ends_with("worker stopped")
             || status.starts_with("Local shell exited:")
-    }
-}
-
-fn merge_terminal_snapshots(
-    pending: TerminalSnapshot,
-    mut current: TerminalSnapshot,
-) -> TerminalSnapshot {
-    if pending.full_refresh
-        || current.full_refresh
-        || pending.lines.len() != current.lines.len()
-        || pending.max_columns != current.max_columns
-    {
-        current.full_refresh = true;
-        current.dirty_rows = (0..current.lines.len()).collect();
-        return current;
-    }
-
-    current.dirty_rows.extend(pending.dirty_rows);
-    current.dirty_rows.sort_unstable();
-    current.dirty_rows.dedup();
-    current
-}
-
-impl TerminalBackend {
-    pub(super) fn kind(&self) -> &'static str {
-        match self {
-            Self::Sftp { .. } => "sftp",
-            Self::Ssh { .. } | Self::Telnet { .. } | Self::Serial { .. } | Self::Local => {
-                "terminal"
-            }
-        }
     }
 }
 

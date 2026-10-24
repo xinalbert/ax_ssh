@@ -51,6 +51,8 @@ mod known_hosts;
 mod private_keys;
 mod system_release;
 mod worker;
+#[cfg(all(test, feature = "egui-ui"))]
+pub(crate) use worker::behavior_tests::Fixture as SftpTestFixture;
 mod x11;
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(15);

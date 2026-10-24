@@ -85,7 +85,7 @@ def validate_markdown(root: Path, paths: list[Path]) -> list[str]:
 
 
 def validate_source_layout(root: Path) -> list[str]:
-    """Check modern module filenames and the unique Slint build/type entry."""
+    """Check modern modules, Slint entries, and independent frontend ownership."""
     errors: list[str] = []
     include_sites: list[str] = []
     for path in sorted((root / "src").rglob("*.rs")):
@@ -105,6 +105,24 @@ def validate_source_layout(root: Path) -> list[str]:
     )
     if entries != ["ui/app.slint"]:
         errors.append("build.rs must compile only ui/app.slint")
+    egui_entry = root / "src/egui_main.rs"
+    if egui_entry.exists():
+        if '#[cfg(feature = "slint-ui")]\nfn compile_slint()' not in build:
+            errors.append("Slint compilation must be gated by slint-ui")
+        controller_paths = [root / "src/controller.rs", *(root / "src/controller").rglob("*.rs")]
+        for path in controller_paths:
+            if not path.exists():
+                continue
+            source = path.read_text(encoding="utf-8")
+            if re.search(r"\b(?:slint|i_slint_core|egui|eframe)::", source):
+                errors.append(f"{path.relative_to(root)}: controller must not import UI frameworks")
+        manifest = (root / "Cargo.toml").read_text(encoding="utf-8")
+        for frontend, feature in (("ax_ssh", "slint-ui"), ("ax_ssh_egui", "egui-ui")):
+            if not re.search(
+                rf'\[\[bin\]\]\s+name = "{frontend}"\s+path = "[^"\n]+"\s+required-features = \["{feature}"\]',
+                manifest,
+            ):
+                errors.append(f"{frontend}: binary must require {feature}")
     return errors
 
 
@@ -121,7 +139,7 @@ def main() -> int:
         print(error, file=sys.stderr)
     if errors:
         return 1
-    print(f"Checked {len(paths)} Markdown files and Rust/Slint entry boundaries")
+    print(f"Checked {len(paths)} Markdown files and Rust/UI entry boundaries")
     return 0
 
 

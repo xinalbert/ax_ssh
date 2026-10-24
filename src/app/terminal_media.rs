@@ -337,7 +337,7 @@ fn paste_clipboard_with(
             }
             terminal.media.image_token = Some(token);
             terminal.media.status = "Preparing clipboard image…".into();
-            terminal.reconnect_generation
+            terminal.reconnect_generation()
         }
         Err(_) => return false,
     };
@@ -353,7 +353,7 @@ fn paste_clipboard_with(
                     let Some(terminal) = app.terminal_mut(tab_id) else {
                         return false;
                     };
-                    if terminal.reconnect_generation != generation
+                    if terminal.reconnect_generation() != generation
                         || terminal.media.image_token != Some(token)
                         || !terminal.connected
                     {
@@ -424,7 +424,7 @@ async fn prepare_image(
             .map_err(|_| anyhow::anyhow!("state unavailable"))?;
         let terminal = app.terminal(tab_id).context("terminal closed")?;
         ensure!(
-            terminal.reconnect_generation == generation
+            terminal.reconnect_generation() == generation
                 && terminal.media.image_token == Some(token)
                 && terminal.connected,
             "image operation cancelled"

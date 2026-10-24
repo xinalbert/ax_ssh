@@ -328,7 +328,10 @@ fn open_workspace_file(
                 let (workers, probes) = app.drain_runtime_resources();
                 let completions = workers
                     .into_iter()
-                    .map(|worker| app.worker_shutdowns.start(&Handle::current(), worker))
+                    .map(|worker| {
+                        app.worker_shutdowns
+                            .start(&Handle::current(), worker.shutdown())
+                    })
                     .collect::<Vec<_>>();
                 (completions, probes)
             }

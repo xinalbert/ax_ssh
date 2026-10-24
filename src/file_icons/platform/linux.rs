@@ -9,7 +9,7 @@ const THEME_QUERY_TIMEOUT: Duration = Duration::from_millis(300);
 const THEME_OUTPUT_LIMIT: u64 = 256;
 const THEME_NAME_LIMIT: usize = 64;
 
-pub(in crate::app::file_icons) struct Resolver {
+pub(in crate::file_icons) struct Resolver {
     theme: Mutex<String>,
 }
 
@@ -94,32 +94,9 @@ fn read_icon_file(path: &std::path::Path) -> Option<FileIcon> {
         .and_then(|extension| extension.to_str())
         .is_some_and(|extension| extension.eq_ignore_ascii_case("svg"))
     {
-        return decode_svg_icon(&encoded);
+        return super::super::svg::decode(&encoded);
     }
     decode_encoded_icon(&encoded)
-}
-
-fn decode_svg_icon(encoded: &[u8]) -> Option<FileIcon> {
-    let image = slint::Image::load_from_svg_data(encoded).ok()?;
-    let size = image.size();
-    if size.width == 0
-        || size.height == 0
-        || size.width > MAX_SOURCE_ICON_EDGE
-        || size.height > MAX_SOURCE_ICON_EDGE
-    {
-        return None;
-    }
-    let source = image.to_rgba8()?;
-    let source =
-        image::RgbaImage::from_raw(source.width(), source.height(), source.as_bytes().to_vec())?;
-    let rgba = image::imageops::resize(
-        &source,
-        FILE_ICON_EDGE,
-        FILE_ICON_EDGE,
-        image::imageops::FilterType::Triangle,
-    )
-    .into_raw();
-    FileIcon::from_rgba(FILE_ICON_EDGE, FILE_ICON_EDGE, rgba)
 }
 
 fn detect_icon_theme() -> Option<String> {

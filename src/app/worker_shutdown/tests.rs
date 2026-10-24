@@ -1,50 +1,7 @@
-use super::*;
+use crate::app::state::TerminalWorker;
 use std::sync::{Arc, Mutex};
-use tokio::sync::oneshot;
-
-#[tokio::test]
-async fn immediate_exit_waits_for_already_started_cleanup() {
-    let mut shutdowns = WorkerShutdowns::default();
-    let (release, wait) = oneshot::channel();
-    let (finished, observed) = oneshot::channel();
-    shutdowns.tasks.spawn(async move {
-        wait.await.unwrap();
-        finished.send(()).unwrap();
-        Ok(())
-    });
-    let finish = tokio::spawn(shutdowns.finish(Duration::from_secs(5)));
-    tokio::task::yield_now().await;
-    assert!(!finish.is_finished());
-    release.send(()).unwrap();
-    assert!(finish.await.unwrap());
-    observed.await.unwrap();
-}
-
-#[tokio::test(start_paused = true)]
-async fn deadline_aborts_and_joins_remaining_cleanup_even_after_another_task_fails() {
-    struct Lease(Arc<std::sync::atomic::AtomicBool>);
-    impl Drop for Lease {
-        fn drop(&mut self) {
-            self.0.store(true, std::sync::atomic::Ordering::Release);
-        }
-    }
-    let dropped = Arc::new(std::sync::atomic::AtomicBool::new(false));
-    let lease = Lease(dropped.clone());
-    let mut shutdowns = WorkerShutdowns::default();
-    shutdowns
-        .tasks
-        .spawn(async { anyhow::bail!("injected shutdown failure") });
-    shutdowns.tasks.spawn(async move {
-        let _lease = lease;
-        std::future::pending::<()>().await;
-        Ok(())
-    });
-    let finish = tokio::spawn(shutdowns.finish(Duration::from_secs(25)));
-    tokio::task::yield_now().await;
-    tokio::time::advance(Duration::from_secs(25)).await;
-    assert!(!finish.await.unwrap());
-    assert!(dropped.load(std::sync::atomic::Ordering::Acquire));
-}
+use tokio::runtime::Handle;
+use tokio::time::{Duration, timeout};
 
 #[tokio::test]
 async fn closed_tab_worker_is_drained_on_exit_and_disconnect_reaches_peer() {
@@ -94,7 +51,7 @@ async fn closed_tab_worker_is_drained_on_exit_and_disconnect_reaches_peer() {
             "worker has already left tab state"
         );
         assert!(
-            !app.worker_shutdowns.tasks.is_empty(),
+            !app.worker_shutdowns.is_empty(),
             "tab cleanup must still have an owner"
         );
         std::mem::take(&mut app.worker_shutdowns)

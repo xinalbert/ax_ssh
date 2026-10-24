@@ -1,7 +1,7 @@
 //! Bounded command/event worker for one authenticated SSH transport.
 
 #[cfg(test)]
-mod behavior_tests;
+pub(crate) mod behavior_tests;
 mod latency;
 mod media;
 mod sftp;
@@ -102,6 +102,8 @@ pub enum SshSessionEvent {
 pub struct SshTerminalSettings {
     pub x11: X11Settings,
     pub audio_format: crate::audio::AudioFormat,
+    /// Whether this terminal may prepare the standard remote microphone bridge.
+    pub automatic_microphone: bool,
 }
 
 impl Default for SshTerminalSettings {
@@ -112,6 +114,7 @@ impl Default for SshTerminalSettings {
                 ..X11Settings::default()
             },
             audio_format: crate::config::AudioSettings::default().format(),
+            automatic_microphone: true,
         }
     }
 }
@@ -179,6 +182,7 @@ struct SshSessionLaunch {
     mode: SshSessionMode,
     x11_settings: X11Settings,
     audio_format: crate::audio::AudioFormat,
+    automatic_microphone: bool,
     sftp_policy: crate::config::SftpTransferPolicy,
 }
 
@@ -189,6 +193,7 @@ struct SshSessionTask {
     mode: SshSessionMode,
     x11_settings: X11Settings,
     audio_format: crate::audio::AudioFormat,
+    automatic_microphone: bool,
     sftp_policy: crate::config::SftpTransferPolicy,
     command_rx: mpsc::Receiver<SshCommand>,
     resize_rx: watch::Receiver<TerminalSize>,
@@ -313,6 +318,7 @@ impl SshSessionHandle {
                 mode: SshSessionMode::Terminal,
                 x11_settings: settings.x11,
                 audio_format: settings.audio_format,
+                automatic_microphone: settings.automatic_microphone,
                 sftp_policy: crate::config::SftpTransferSettings::default().policy(None),
             },
         )
@@ -335,6 +341,7 @@ impl SshSessionHandle {
                 mode: SshSessionMode::Sftp,
                 x11_settings: X11Settings::default(),
                 audio_format: SshTerminalSettings::default().audio_format,
+                automatic_microphone: false,
                 sftp_policy,
             },
         )
@@ -352,6 +359,7 @@ impl SshSessionHandle {
             mode,
             x11_settings,
             audio_format,
+            automatic_microphone,
             sftp_policy,
         } = launch;
         let (command_tx, command_rx) = mpsc::channel(COMMAND_CAPACITY);
@@ -365,6 +373,7 @@ impl SshSessionHandle {
             mode,
             x11_settings,
             audio_format,
+            automatic_microphone,
             sftp_policy,
             command_rx,
             resize_rx,
@@ -608,6 +617,24 @@ impl SshSessionHandle {
                 SftpUploadRequest::from_local_file(id, batch_id, path, local, size, directories)
             })
             .collect::<Result<Vec<_>>>()?;
+        self.request_prepared_sftp_uploads(requests)
+    }
+
+    /// Prepared on a blocking application worker, including local identity checks.
+    pub(crate) fn request_prepared_sftp_uploads(
+        &self,
+        requests: Vec<SftpUploadRequest>,
+    ) -> Result<()> {
+        anyhow::ensure!(
+            requests.len() <= crate::sftp::MAX_RECURSIVE_DOWNLOAD_FILES,
+            "SFTP upload batch exceeds the file-count limit"
+        );
+        anyhow::ensure!(
+            requests
+                .iter()
+                .all(|request| request.total_bytes() <= self.sftp_max_file_bytes),
+            "SFTP upload exceeds the configured file size limit"
+        );
         self.command_tx
             .try_send(SshCommand::OpenSftpUploads { requests })
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP upload batch: {error}"))
@@ -709,6 +736,7 @@ async fn run_session(task: SshSessionTask) {
         mode,
         x11_settings,
         audio_format,
+        automatic_microphone,
         sftp_policy,
         mut command_rx,
         resize_rx,
@@ -846,6 +874,7 @@ async fn run_session(task: SshSessionTask) {
         x11_mode,
         x11_settings,
         audio_format,
+        automatic_microphone,
         x11_dispatcher,
         x11_requests,
         command_rx,

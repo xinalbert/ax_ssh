@@ -37,6 +37,14 @@ impl LoggingGuard {
         Self::init_in(directory)
     }
 
+    /// Initializes isolated logging for the optional egui experiment.
+    #[cfg(feature = "egui-ui")]
+    pub fn init_experimental() -> Result<Self> {
+        let dirs = ProjectDirs::from("com", "axsoft", "ax_ssh_egui")
+            .context("cannot determine the experimental log directory")?;
+        Self::init_in(dirs.data_local_dir().join("logs"))
+    }
+
     fn init_in(directory: PathBuf) -> Result<Self> {
         prepare_log_directory(&directory)?;
 

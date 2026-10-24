@@ -11,7 +11,7 @@ use objc2_uniform_type_identifiers::UTType;
 use super::*;
 
 #[derive(Default)]
-pub(in crate::app::file_icons) struct Resolver {
+pub(in crate::file_icons) struct Resolver {
     _private: (),
 }
 

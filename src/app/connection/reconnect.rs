@@ -29,7 +29,7 @@ pub(in crate::app) fn schedule_reconnect(
             return;
         };
         let Some((generation, attempt)) = terminal.begin_reconnect() else {
-            if terminal.reconnect_attempt >= MAX_RECONNECT_ATTEMPTS {
+            if terminal.reconnect_attempt() >= MAX_RECONNECT_ATTEMPTS {
                 terminal.status = format!(
                     "Reconnect failed after {MAX_RECONNECT_ATTEMPTS} attempts; retry manually"
                 );

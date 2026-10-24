@@ -24,7 +24,7 @@ async fn direct_monitors_parse_output_and_finish_both_protocol_attempts() {
                 DirectProtocol::Telnet => terminal.set_telnet_attempt(Some(attempt_id)),
                 DirectProtocol::Serial => terminal.set_serial_attempt(Some(attempt_id)),
             };
-            terminal.reconnect_enabled = false;
+            terminal.cancel_reconnect();
             let state = Arc::new(Mutex::new(app));
             let (sender, receiver) = mpsc::channel(8);
             let task = spawn_direct_monitor(
@@ -81,8 +81,8 @@ async fn direct_monitors_parse_output_and_finish_both_protocol_attempts() {
             );
             // Connected re-arms the production reconnect policy. Both transport
             // errors and clean disconnects retire this attempt and schedule one retry.
-            assert!(terminal.reconnecting);
-            assert_eq!(terminal.reconnect_attempt, 1);
+            assert!(terminal.reconnecting());
+            assert_eq!(terminal.reconnect_attempt(), 1);
             assert_eq!(terminal.status, "Connection lost; reconnecting in 1s (1/5)");
             let text = terminal
                 .terminal
@@ -113,7 +113,7 @@ async fn direct_monitor_stream_end_retires_attempt_and_stale_events_do_not_retir
         let replacement = Uuid::new_v4();
         let terminal = app.terminal_mut(tab_id).expect("terminal");
         terminal.set_telnet_attempt(Some(if stale { replacement } else { attempt_id }));
-        terminal.reconnect_enabled = false;
+        terminal.cancel_reconnect();
         terminal.status = "replacement".into();
         let state = Arc::new(Mutex::new(app));
         let (sender, receiver) = mpsc::channel(8);

@@ -314,7 +314,7 @@ fn retain_closed_worker(app: &mut AppState, closed: &mut ClosedTab, runtime: &Ha
     // Called under the same lock that removes the worker from its tab. Exit
     // cannot drain application resources between removal and registration.
     if let Some(worker) = closed.worker.take() {
-        drop(app.worker_shutdowns.start(runtime, worker));
+        drop(app.worker_shutdowns.start(runtime, worker.shutdown()));
     }
 }
 

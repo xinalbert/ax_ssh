@@ -73,6 +73,7 @@ pub(super) fn start_session_worker(
                 ax_ssh::ssh::SshTerminalSettings {
                     x11: x11_settings,
                     audio_format: app.sessions.settings.audio.format(),
+                    automatic_microphone: true,
                 },
             ),
             ConnectionTarget::Sftp => {

@@ -241,7 +241,8 @@ pub(super) fn finish_local_terminal(
             terminal.status = status.to_owned();
             // Move cleanup to the registry before releasing the state lock,
             // so concurrent process exit cannot miss this worker.
-            let completion = worker.map(|worker| app.worker_shutdowns.start(runtime, worker));
+            let completion =
+                worker.map(|worker| app.worker_shutdowns.start(runtime, worker.shutdown()));
             Some(FinishedLocalTerminal { completion })
         }
         Ok(_) | Err(_) => None,

@@ -2,12 +2,28 @@
 name = "ax_ssh"
 version = "2026.10.22"
 edition = "2024"
-rust-version = "1.92.0"
+rust-version = "1.95.0"
+default-run = "ax_ssh"
 description = "A Slint desktop terminal workspace for SSH, Telnet, and serial sessions"
 license = "GPL-3.0-only"
 publish = false
 readme = "README.md"
 repository = "https://github.com/xinalbert/ax_ssh"
+
+[features]
+default = ["slint-ui"]
+slint-ui = ["dep:slint", "dep:i-slint-core", "dep:slint-build", "dep:softbuffer"]
+egui-ui = ["dep:eframe", "dep:muda"]
+
+[[bin]]
+name = "ax_ssh"
+path = "src/main.rs"
+required-features = ["slint-ui"]
+
+[[bin]]
+name = "ax_ssh_egui"
+path = "src/egui_main.rs"
+required-features = ["egui-ui"]
 
 [dependencies]
 argon2 = "0.6.0"
@@ -19,16 +35,18 @@ chacha20poly1305 = { version = "0.11.0", features = ["rand_core"] }
 chrono = "0.4"
 cpal = "=0.17.3"
 directories = "6"
+eframe = { version = "=0.37.0", optional = true, default-features = false, features = ["accesskit", "clipboard", "default_fonts", "system_fonts", "wgpu", "wayland", "x11"] }
 fontdb = "0.24.0"
 hmac = "0.13.0"
 hound = "3.5.1"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "tiff"] }
-i-slint-core = "=1.18.1"
+i-slint-core = { version = "=1.18.1", optional = true }
 keyring = "4.1.5"
 libmudtelnet-rs = "2.0.10"
 notify = "=8.2.0"
 portable-pty = "0.9.0"
 rand = "0.10"
+raw-window-handle = "0.6.2"
 regex = "1.13.1"
 rubato = "5.0.1"
 # RSA is enabled for compatibility with existing SSH servers. The pinned RSA
@@ -40,7 +58,7 @@ sha1 = "0.11.0"
 open = "5.3.6"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.154"
-slint = { version = "1.18.1", default-features = false, features = ["backend-winit", "compat-1-2", "raw-window-handle-06", "renderer-skia", "renderer-software", "std", "unstable-fontique-011", "unstable-winit-030"] }
+slint = { version = "1.18.1", optional = true, default-features = false, features = ["backend-winit", "compat-1-2", "raw-window-handle-06", "renderer-skia", "renderer-software", "std", "unstable-fontique-011", "unstable-winit-030"] }
 sys-locale = "0.3.2"
 tokio = { version = "1.53.3", features = ["io-util", "macros", "net", "process", "rt-multi-thread", "sync", "time"] }
 tokio-serial = "5.5.0"
@@ -51,6 +69,10 @@ url = "2.5.8"
 uuid = { version = "1.28.0", features = ["serde", "v4"] }
 zeroize = "1"
 
+# Native menu adapter only; Linux uses egui menus on the existing winit window.
+[target.'cfg(any(target_os = "macos", target_os = "windows"))'.dependencies]
+muda = { version = "=0.19.3", optional = true, default-features = false }
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphics_Gdi", "Win32_Storage_FileSystem", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
 
@@ -58,12 +80,13 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Graphic
 libc = "0.2.186"
 
 [target.'cfg(target_os = "linux")'.dependencies]
+resvg = { version = "=0.48.1", default-features = false }
 freedesktop-icons = "0.4.0"
 mime_guess = { version = "2.0.5", default-features = false }
 x11-dl = "2.21.0"
 
 [target.'cfg(target_os = "macos")'.dependencies]
-softbuffer = { path = "vendor/softbuffer" }
+softbuffer = { path = "vendor/softbuffer", optional = true }
 objc2 = "0.6.4"
 objc2-av-foundation = { version = "0.3.2", default-features = false, features = ["AVCaptureDevice", "AVMediaFormat", "block2", "std"] }
 block2 = "0.6.2"
@@ -71,13 +94,12 @@ objc2-app-kit = { version = "0.3.2", default-features = false, features = ["NSAp
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["NSArray", "NSData", "NSError", "NSObject", "NSOperation", "NSString", "NSURL", "std"] }
 objc2-metal = { version = "0.3.2", default-features = false, features = ["MTLDevice", "std"] }
 objc2-uniform-type-identifiers = { version = "0.3.2", default-features = false, features = ["UTType", "std"] }
-raw-window-handle = "0.6.2"
 
 [build-dependencies]
 embed-resource = "3.0.9"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0.154"
-slint-build = "1.18.1"
+slint-build = { version = "1.18.1", optional = true }
 
 [patch.crates-io]
 # Keep the application on Slint 1.18.1's public contracts while carrying the
@@ -90,6 +112,7 @@ i-slint-renderer-skia = { path = "vendor/i-slint-renderer-skia" }
 softbuffer = { path = "vendor/softbuffer" }
 
 [dev-dependencies]
+resvg = { version = "=0.48.1", default-features = false }
 tokio = { version = "1.53.3", features = ["test-util"] }
 
 [package.metadata.deb]

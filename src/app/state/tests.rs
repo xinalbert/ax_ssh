@@ -267,7 +267,7 @@ fn osc52_clipboard_read_rejects_stale_token_and_generation() {
     assert!(!terminal.clear_clipboard_read(token.wrapping_add(1), generation));
     assert!(terminal.pending_clipboard_read.is_some());
 
-    terminal.reconnect_generation = generation.wrapping_add(1);
+    terminal.reconnect.cancel();
     assert!(!terminal.clear_clipboard_read(token, generation));
     assert!(terminal.pending_clipboard_read.is_some());
 }
@@ -2521,8 +2521,6 @@ fn reconnect_state_is_bounded_and_generation_cancellable() {
         assert!(terminal.finish_reconnect_attempt(generation));
     }
     assert_eq!(terminal.begin_reconnect(), None);
-    terminal.reconnect_attempt = 0;
-    terminal.reconnecting = false;
     terminal.cancel_reconnect();
     assert!(!terminal.reconnect_current(generation));
 }

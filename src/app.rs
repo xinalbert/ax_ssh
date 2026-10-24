@@ -442,7 +442,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         }
     }
     for worker in workers {
-        drop(shutdowns.start(runtime.handle(), worker));
+        drop(shutdowns.start(runtime.handle(), worker.shutdown()));
     }
     let workers_timed_out = !runtime.block_on(shutdowns.finish(Duration::from_secs(25)));
     if workers_timed_out {

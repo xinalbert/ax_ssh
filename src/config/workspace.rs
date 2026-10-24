@@ -26,7 +26,8 @@ pub struct WorkspaceSnapshot {
 pub struct WorkspaceTabSnapshot {
     pub id: Uuid,
     pub title: String,
-    /// `terminal`, `sftp`, `settings`, or `session-editor`.
+    /// `terminal`, `sftp`, `settings`, `session-editor`, or the experimental
+    /// `local-terminal` marker (restored idle until explicit resume).
     pub kind: String,
     #[serde(default)]
     pub profile_id: Option<Uuid>,
