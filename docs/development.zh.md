@@ -4,7 +4,7 @@
 
 ## 环境要求
 
-- Rust `1.92.0` 或更高版本
+- Rust `1.95.0` 或更高版本
 - Cargo
 - Slint winit 后端支持的桌面环境
 - 实机 Serial 测试所需的目标平台驱动和设备权限
@@ -66,6 +66,64 @@ CI 的 coverage job 在 Ubuntu 上运行插桩测试，并使用 `cargo-llvm-cov
 variables > Actions 中添加名为 `CODECOV_TOKEN` 的 Codecov repository token。fork 发起的 PR
 拿不到该 secret，因此会跳过上传，但仍会生成覆盖率报告。该 job 与跨平台构建矩阵分开，每次 CI
 只上传一份覆盖率报告。
+
+## 实验 egui 前端
+
+默认 `slint-ui` feature 和 `ax_ssh` binary 继续提供完整应用；独立的 `egui-ui` 构建
+`ax_ssh_egui`，目前为 egui/eframe 0.37.0 + WGPU 的支持保存会话和 Local/SSH/Telnet/Serial 的工作区。
+两个前端最低要求 Rust 1.95.0，MSRV CI 分别检查。仅 egui 构建不编译 Slint 或 softbuffer。
+
+```bash
+cargo run --locked --no-default-features --features egui-ui --bin ax_ssh_egui
+cargo check --locked --offline --no-default-features --features egui-ui
+cargo clippy --all-targets --locked --offline --no-default-features --features egui-ui -- -D warnings
+cargo test --locked --offline --no-default-features --features egui-ui
+cargo build --locked --offline --no-default-features --features egui-ui
+cargo check --locked --offline --all-features --all-targets
+```
+
+首次工作区启动已配置的本地 shell，保留 10,000 行历史。会话/布局存于独立 `ax_ssh_egui`
+配置目录，不访问默认前端的文件或凭据存储。
+日志使用独立 `ax_ssh_egui` 平台数据目录。字体在 event loop 前由 blocking task 查找/读取，
+使用已有字体资源并保留原生系统回退。controller 持有 parser/PTY 和有界命令队列，UI
+读取完整可见快照并按行 revision/几何缓存。窗口 event loop 返回后完成取消与 worker join。
+目前 WGPU 没有等价 CPU/damage 回退，图形环境不支持时继续使用默认 Slint 应用。
+
+已实现鼠标拖选/复制、粘贴、滚动、终端按键编码、基础 IME preedit/commit 和 resize。
+macOS 使用 Command+C/V，其它平台使用 Ctrl+C/V；无选择时 Ctrl+C 发送终端中断。
+Shift 优先本地历史/选择而非远端鼠标报告。这是初始原型：原生 IME/keypad/AltGr、
+完整排字、鼠标协议、可访问性、GUI 视觉、功耗/延迟及其它平台仍需验证。
+SFTP、Settings 和分离窗口属于后续阶段。
+
+连接草稿属于前端，`controller/terminal_session.rs` 串行处理 transport 替换、解析/输入、
+prompt token 和有界重连期限。SSH 认证前先 probe，并为当前连接固定确认的密钥；
+known_hosts 中变更/撤销的密钥，以及 probe 后再次变更的密钥继续阻断。
+未知密钥确认时须重新输入凭据。密码/口令使用最多 16 KiB 的 Zeroizing 意图负载，
+快照只含公开提示信息；密码编辑器按 pane 清除 undo 历史。连接尝试不写 profile 或信任密钥；
+工作区事务另行保存连接详情和布局，不保存凭据或终端输出。
+transport 按既有信任策略读取系统 known_hosts，仅本次信任不写入文件。
+临时 SSH 关闭 X11 和麦克风初始化，默认 Slint 的麦克风行为保留。
+
+可选自动重连共用五次预算，延迟为 1/2/4/8/16 秒；SSH 密码/私钥口令重新索取，
+agent 与直连协议可在不保留秘密的情况下重试。主动断开/替换撤销期限，先 join 旧 transport
+再启用新连接；连接代次拒绝过期输入、提示响应及复制/选择结果。
+loopback 覆盖未知密钥拒绝、认证重试、probe/worker 换钥、取消 probe、字节/协议响应、
+resize 和重连；串口失败测试不访问真实硬件。原生 GUI、SSH-agent、服务器及串口设备
+仍需验收，见 [迁移计划](egui-migration.zh.md)。
+
+E5 把既有 pane 树提取至 `controller/panes.rs`，两个前端共用，默认前端保留薄适配器。
+`controller/workspace.rs` 持有 Tab、终端路由、版本化会话事务、有界完成回执、checkpoint/导入/导出
+及 join 清理；GUI 只持有草稿、稳定 UUID 控件 ID、逐 pane 文本缓存和键盘焦点。
+命令上限 64，活动与关闭中的终端合计上限 32，每 Tab 最多八 pane。
+会话写入在 blocking task 完成后才发布，旧编辑版本被拒绝，精确请求回执不被布局更新覆盖。
+复用原有配置 schema/原子写入，保留无关设置。
+
+每两秒比较布局元数据，未变化不写，退出排空已接纳事务。`.axssh` 导出复用用户文件 writer，
+不改变父目录权限。导入先校验再清理旧工作区，join 完成后恢复 idle model。
+所有恢复终端均需明确启动，不保存临时目标、输出/历史、秘密草稿或仅本次信任的密钥。
+不支持的功能/窗口快照和损坏启动文件被保留，不自动覆盖。
+测试使用隔离存储和确定 worker，包括真实 PTY 焦点隔离与 egui 重复布局 pass。
+原生布局/输入验收和默认应用完整功能对照仍开放。
 
 ## 界面翻译
 
@@ -183,8 +241,8 @@ Software presentation 选择器和 pane layout hint 仍只属于 macOS。
 - SSH profile 的 `sftp_remote_path` 与 `sftp_local_path` 只是非敏感初始化输入，不得进入凭据、日志或运行中
   Tab 的 mutation；持久化前校验有界文本，远端值交给 worker-owned browser，本地值只用于初始化
   application snapshot。旧 profile 的空值必须继续使用 `~`/平台 home 默认值。
-- 文件图标平台 API、主题检测、文件读取和图片解码都必须留在 `src/app/file_icons.rs` 的 blocking
-  工作中；Slint 只能接收进程内缓存里的有界自有 RGBA 图片。远端名称只作为扩展名/类型提示，绝不
+- 文件图标平台 API、主题检测、文件读取和图片解码都必须留在 `src/file_icons.rs` 的 blocking
+  工作中；两套前端只能接收进程内缓存里的有界自有 RGBA 图片。远端名称只作为扩展名/类型提示，绝不
   当成本机路径；每个平台 resolver 都必须保留内建 fallback 并确定性释放 native handle。
 - Telnet 必须明确标记为明文；IAC 协商必须在进入终端前解析和过滤，拒绝不支持的选项，
   只有对端接受后才发送 NAWS。Telnet profile 不得新增凭据持久化。

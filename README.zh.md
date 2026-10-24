@@ -8,7 +8,7 @@
 [![codecov](https://codecov.io/gh/xinalbert/ax_ssh/branch/master/graph/badge.svg)](https://app.codecov.io/gh/xinalbert/ax_ssh)
 [![Latest release](https://img.shields.io/github/v/release/xinalbert/ax_ssh)](https://github.com/xinalbert/ax_ssh/releases/latest)
 [![License](https://img.shields.io/github/license/xinalbert/ax_ssh)](LICENSE)
-[![MSRV](https://img.shields.io/badge/MSRV-1.92.0%2B-dea584?logo=rust)](https://www.rust-lang.org/)
+[![MSRV](https://img.shields.io/badge/MSRV-1.95.0%2B-dea584?logo=rust)](https://www.rust-lang.org/)
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-1f6feb)](https://github.com/xinalbert/ax_ssh/releases/latest)
 [![English](https://img.shields.io/badge/English-Click-1f6feb)](docs/usage.md)
 [![简体中文](https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-%E7%82%B9%E5%87%BB-dea584)](docs/usage.zh.md)
@@ -41,11 +41,15 @@ AxSSH 是一个由 Rust、Slint 和 Tokio 构建的跨平台桌面终端工作�
 
 ## 快速开始
 
-安装 Rust `1.92.0` 或更高版本，并使用 Slint winit 后端支持的桌面环境，然后运行：
+安装 Rust `1.95.0` 或更高版本，并使用 Slint winit 后端支持的桌面环境，然后运行：
 
 ```bash
 cargo run --locked
 ```
+
+实验 egui 工作区支持保存会话、Local/SSH/Telnet/Serial 终端和每 Tab 最多八 pane，可单独运行：
+`cargo run --locked --no-default-features --features egui-ui --bin ax_ssh_egui`。
+会话/工作区文件与默认应用隔离；SFTP、Settings 和分离窗口仍使用默认应用，进度见 [迁移计划](docs/egui-migration.zh.md)。
 
 未知或发生变化的 SSH 主机密钥会被拒绝；核对并明确确认服务器的 SHA-256 指纹后才能继续。
 会话创建、终端操作、SFTP 和设置说明见[使用指南](docs/usage.zh.md)。

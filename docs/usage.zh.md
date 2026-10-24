@@ -4,12 +4,61 @@
 
 ## 启动应用
 
-AxSSH 需要 Rust `1.92.0` 或更高版本，以及 Slint winit 后端支持的桌面环境。
+AxSSH 需要 Rust `1.95.0` 或更高版本，以及 Slint winit 后端支持的桌面环境。
 在仓库根目录运行：
 
 ```bash
 cargo run --locked
 ```
+
+## 实验 egui 工作区
+
+运行 `cargo run --locked --no-default-features --features egui-ui --bin ax_ssh_egui`。
+首次创建工作区时启动本地 shell。会话和布局使用独立 `ax_ssh_egui` 配置文件，
+不打开默认应用的文件或凭据存储。Local/SSH/Telnet/Serial 共用 Tab，每个 Tab 最多八 pane，
+整个工作区最多 32 个活动或关闭中的终端。
+
+**New session** 保存连接信息和可选分组，密码/私钥口令在连接时输入。
+**Groups** 可新增/重命名分组或移除分组并保留会话。双击会话或选择 **Open** 创建终端 Tab，
+再按 **Connect** 使用新凭据连接。右键菜单支持编辑、复制和删除，删除保存会话不关闭现有终端。
+编辑另一会话前先关闭当前编辑器；**Close / discard draft** 丢弃未保存字段。
+
+**+ Local** 和 **+ Connection** 增加 Tab，pane 内 **Connection** 可选择 Local、SSH、Telnet
+或 Serial。SSH 支持密码、私钥路径和 SSH agent；Serial 提供设备路径/波特率，编辑时保留
+其它已保存参数，新 profile 默认 8N1、无流控。可按列/行分屏、拖动分隔条、点击 pane 或
+方向控件切换焦点，并关闭 pane/Tab。Tab 右键菜单可左右排序。
+Ctrl+Tab / Ctrl+Shift+Tab 切换 Tab；Cmd+N（其它平台 Ctrl+N）打开编辑器；
+Cmd+D / Cmd+Shift+D（其它平台 Ctrl+D / Ctrl+Shift+D）按列/行分屏。
+
+每两秒检查变化并原子保存布局、Tab 顺序和已保存会话引用，退出前排空写入。
+**Save workspace** 立即保存；**Workspace file…** 提供路径输入，可打开或导出文件（导出后缀 `.axssh`）。
+导入先校验完整布局，再替换并 join 旧 worker。恢复的终端，包括本地 shell，都等待明确按
+**Connect**。不保存终端输出/历史、凭据、未保存连接/编辑草稿或仅本次信任的密钥。
+临时远端目标须重新输入；先保存会话才能恢复连接信息。不支持的 SFTP/Settings/分离窗口工作区
+会被拒绝，启动文件损坏时保留原文件。
+
+未知 SSH 密钥须与服务器管理者核对所显示的目标和指纹，按需输入新凭据，再选择
+**Trust once and connect**。信任只覆盖当前连接及重试，不写入 known_hosts。
+known_hosts 中变更/撤销的密钥和 probe 后换钥继续阻断；**Cancel / disconnect** 取消提示和重试。
+可选 **Automatically retry** 最多五次（1/2/4/8/16 秒），SSH 密码/私钥口令重试重新索取，不保存。
+
+保存的 SSH pane 提供独立 **SFTP companion**，使用新凭据单独连接，再浏览远端/本地目录并传输。
+正规远端文件的 **Edit externally** 创建私有副本并打开系统关联程序；默认自动回传保存，
+关闭 **Upload saved changes automatically** 后使用 **Upload changes** 手动回传。
+**Reopen editor** 复用副本；**Stop editing**、断开和关闭会停止观察，但保留显示的副本路径供恢复。
+实验界面每 companion 最多八个文件，每文件上限 4 MiB。远端 size/mtime 冲突会拒绝回传并保留
+两侧内容；编辑流程不提供强制覆盖或三方合并。实验副本使用独立 `ax_ssh_egui` 缓存，正文不进入
+工作区快照。已启动的外部应用保持自身生命周期；停止编辑禁止后续观察/上传，已由服务器接纳的回传可能完成。
+
+实验 SFTP 面板中，将本地行拖到 **Remote files** 上传，远端行拖到 **Local files**
+下载到已加载的本地目录。系统文件管理器的文件/目录只在指针命中 **Remote files** 时上传。
+这些操作是复制，源文件保留；拖放下载前须加载本地目录。目录上传保留相对路径，跳过链接和
+默认过滤名，每批最多 64 个根/文件。**Cancel upload preparation** 取消扫描；入队后逐项取消。
+准备期间导航或重连会丢弃该批。Wayland 需要当前指针事件，无坐标拒绝。egui 原生拖出到
+文件管理器和选择批次尚未实现。
+
+X11、麦克风转发、Settings、翻译和分离窗口仍属后续阶段；原生 GUI/设备/性能尚待验收，
+见 [迁移计划](egui-migration.zh.md)。
 
 ## 创建并连接会话
 

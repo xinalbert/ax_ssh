@@ -10,6 +10,8 @@ and migration notes are updated together.
 ## Files And Exports
 
 - Compile only `ui/app.slint` in `build.rs` with `slint_build::compile`.
+- Gate the compilation helper with `#[cfg(feature = "slint-ui")]` so an
+  egui-only build never resolves or compiles Slint. Slint remains the default.
 - Split cohesive reusable views into sibling `.slint` files and import them by
   relative path from the entry graph. Avoid a file per trivial element.
 - Export only the top-level component, DTO structs/enums, globals, and reusable

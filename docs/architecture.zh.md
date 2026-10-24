@@ -8,6 +8,97 @@ AxSSH 是一个独立的 Rust 二进制项目。`third_package/axshell` 仅用�
 故意排除在构建图之外；可以参考它的产品行为和评审问题，但不得导入其中的
 源码、类型或依赖。
 
+`codex/egui-ui-migration` 分支开始实施 [egui 迁移计划](egui-migration.zh.md) 的 D1。
+默认 `slint-ui` 保留完整应用，可选 `egui-ui` 独立运行支持 Local/SSH/Telnet/Serial 的工作区；两者最低 Rust 1.95.0。
+egui/eframe 0.37.0 使用 WGPU，目前没有等价 Slint 软件/damage 回退。
+实验程序不访问默认前端的文件或凭据存储，自有会话/布局和日志均隔离。
+
+`src/egui_main.rs` 负责启动，`src/egui_app.rs` 及子模块负责 egui 组合、字体、输入和 Painter 缓存；
+`src/controller.rs` 与 `controller/terminal_session.rs` 持有单个有界 transport/parser task。
+UI 只接收带行 revision 的可见快照并通过有界 facade 提交意图，不接收 PTY 句柄或 Tokio receiver。
+每个输出字节按序解析，只合并展示状态；event loop 返回后 await 清理，再停止 runtime。
+
+E3 首切片已由两个前端共用 `controller/input.rs`、`output.rs`、`presentation.rs` 和
+`shutdown.rs`：有界鼠标事务、owned 解析效果、准入终端帧和保留的清理任务。
+`TerminalFrames` 在同步输出期间保留上一准入帧，并在消费前合并脏行。
+展示期限、标题策略、OSC 52 权限/连接代次校验和协议响应路由仍由应用层负责；
+实验前端继续禁用标题和 OSC 52 操作。
+
+E3 第二切片新增 `controller/viewport.rs`。两个前端统一通过 `TerminalViewport` 执行
+字符尺寸调整、历史滚动和返回实时输出；视口变化同时丢弃待消费帧并推进一次非负选区代次，
+从 `i32::MAX` 回绕到 1。普通输出和单纯展示失效保留代次，`TerminalFrames` 收为 controller
+私有。Local PTY 和实验 controller 只在请求接纳后缓存 resize；失败请求可重试，且不改变
+模型几何或选区身份。工作区、连接和设置编排仍在 Slint 应用中，后续 E3 提取及 E4–E9 迁移待实施。
+
+E3 第三切片把 `ConnectionIdentity` 和 `ReconnectState` 移入 `controller/connection.rs`
+及 `connection/reconnect.rs`，拥有协议、profile/attempt UUID、五次重连预算及取消代次，
+不持有 worker、timer、UI 值、秘密或信任决定。应用层仍先定位精确 Tab，再核对 profile/attempt，
+SSH attempt 改变时重置延迟；取消或手动重试时继续撤销媒体和剪贴板意图。
+旧代次不能结束或重新启用替换后的重连。安全提示、probe 取消、认证和 worker 启动保留原 owner，
+E4 的临时连接流程使用下述 controller owner。
+
+E4 将实验 owner 泛化为 `controller/terminal_session.rs`，其私有子模块负责 actions、
+transport 适配和重连期限。先 join 旧 transport 再替换，丢弃旧事件接收器，重置帧/选区，
+并为输入携带连接代次。快照只含公开提示信息，不含凭据。未知密钥需要精确 prompt token
+和重新输入的 Zeroizing 凭据；known_hosts 中变更/撤销的密钥不能被覆盖。
+认证 transport 再次核对 probe 固定的密钥，拒绝期间换钥；只有当前提示能授权重试。
+共用五次重连预算，控制器持有 1/2/4/8/16 秒的可取消期限，SSH 密码/私钥口令重新索取。
+系统 known_hosts 仅读取，不写入。临时连接关闭 X11 和远端麦克风初始化，默认 Slint
+设置保留原行为。其余工作区/安全/设置编排随对应功能提取（E3R），不提前搬无关应用模块。
+
+E5 新增 `controller/workspace.rs` 及 catalog/layout/persistence 私有子模块，由单个运行时任务
+持有终端路由、Tab 顺序、pane 树与 blocking 持久化任务。共享 `controller/panes.rs` 持有既有
+八 pane 几何/焦点规则，`app/panes.rs` 成为默认前端薄适配器。UI 接收 owned 元数据和有界
+terminal facade，不接收 worker/receiver。编辑带所加载版本和精确请求 UUID，原子写入成功后
+才发布内存；有界完成回执不被布局刷新覆盖。删除保存会话不会改写或关闭已有终端。
+带凭据引用的 profile 修改须等待凭据管理迁移。
+
+工作区命令和未消费会话回执分别最多 64，活动和关闭中终端合计最多 32，每 Tab 最多八 pane。
+关闭在路由移除前取消，并把 join 所有权交给独立于 GUI 的清理登记。导入先校验 ID、kind 和
+完整树，再清理旧任务并恢复 idle model；损坏或不支持的启动布局保留原文件。
+config 继续拥有 schema、校验、文件上限和原子写入。实验 `local-terminal` kind 区分本地恢复
+和未保存的远端目标。每两秒比较布局元数据，仅变化时保存；退出排空已接纳事务/checkpoint。
+`.axssh` 导出复用用户文件 writer。不保存终端历史、秘密草稿、临时目标或仅本次信任的密钥，
+恢复后明确连接。原生工作区验收和完整功能/配置兼容仍为切换门禁。
+
+E6 外部编辑在两套前端间共用 `src/remote_edit.rs` 和 `src/file_identity.rs`。
+共享服务负责最多八个编辑、保存/回执状态机、私有副本、有界 handle 读取和平台可观察文件身份。
+默认适配保留原监听器与动态 Settings 流程；实验 companion 持有单个本地任务，GUI 外检查
+元数据，仅在文件变化且稳定或明确上传时读取。独立缓存保留停止/断开后的副本，未发布副本清理。
+E7 设置迁移前使用默认 4 MiB 编辑上限。快照只传元数据，任务带连接代次/编辑 UUID；停止、
+断开和退出撤销 editor launch permit，已接纳的本地任务在退出前 join。既有 SFTP 写入仍执行
+size/mtime 冲突检查和原子 rename，失败后明确重试。轮询/可观察 fingerprint 无法检测任意同元数据
+内容改写，不提供三方合并。
+
+E6 拖放共用 `src/local_upload.rs` 的有界递归发现，默认前端只保留 re-export 适配。
+egui 源 payload 带 pane UUID、连接代次和目录 revision；同 pane 本地到远端、远端到本地
+都是复制。系统文件拖入必须命中裁切后的可见远端文件区域，AppKit/Win32/Xlib 查询实际指针，
+Wayland 只接受当前帧 PointerMoved；不使用活动 Tab 或旧 hover 猜测目标。UI 不读取文件正文。
+
+每 companion 只持有一个可取消 blocking 上传准备任务，包含本地 identity 复验。扫描前后都
+检查目标连接/request/目录和本地来源快照，导航、断开、取消或关闭不发布旧结果，退出 join。
+拖入根最多 64；共享发现保持扫描 4096 项、512 文件、256 目录、16 层和 512 KiB 路径预算，
+实验界面另限制最多 64 个准备文件/传输历史行。沿用默认过滤和 worker 文件大小上限。
+原生拖出 file promise、选择批次、完整 SFTP 交互对照及原生 GUI 验收仍为 E6 待办，
+其它前端的既有原生拖放路径保留。
+
+下文 Slint 专属所有权继续描述默认应用。
+
+E6 为实验前端增加 `controller/sftp_session.rs`。每个远程 workspace pane
+拥有独立的 SFTP companion 和 `SshSessionHandle::spawn_sftp` worker；终端 worker
+与 SFTP worker 不共享 russh handle。companion 在认证前先执行 host-key probe，
+凭据仅以新的 zeroizing 输入留在 worker 命令路径，按 request ID 丢弃过期目录页，
+并只发布有界目录/传输快照。下载和取消仍由 worker 持有；关闭 pane 或替换工作区时，
+终端与 SFTP companion 分别取消并 join。
+egui 表面还可提交有界的正规文件上传，并在冲突时明确选择 Skip 或 Overwrite；
+既有 worker 在报告完成前继续校验源文件 identity、限制和原子发布。
+本地目录发现也属于 companion 的 blocking worker，只返回有界条目 DTO，
+两套前端共用 `src/file_icons.rs` 的有界类型 key、24×24 自有 RGBA、128 项缓存与
+64-key blocking 预热批次。companion 保留并 join 单个预热任务，发布最多 64 个图标，
+完成后按当前目录重新取 key。egui 每 pane 最多 64 个纹理，像素 allocation 不变时复用，
+隐藏、关闭或最小化时释放。Linux SVG 使用固定版本 resvg，禁止外部/内嵌 image 解析，
+服务不接触 Slint 类型。host-key receiver 在其他事件唤醒间持续借用，替换/关闭时取消并 join task。
+
 终端输入/输出在应用边界使用统一的脱敏契约：Local PTY、SSH、Telnet 和
 Serial 都发送有界的 `TerminalOutputChunk`，其中包含输出字节和 transport
 接收时间；应用 monitor 统一记录字节数、来源和 worker 到 monitor 的等待时间，
@@ -49,12 +140,19 @@ Slint UI（.slint）
                          滚动 writer + flush guard
 ```
 
+E7/E8 基础增加 `egui_app/menus.rs`（共用 action 表）、AppKit/Win32 原生适配、
+`settings.rs`（草稿/预览/关闭决策）和 `theme.rs`（共享调色板映射）。Linux 保留
+winit 事件循环及 egui 菜单。Workspace 持有单例 Settings Tab、保存身份/顺序、
+拒绝 Settings 进入分屏，并发布 owned AppSettings。设置保存复用有界 catalog
+版本/请求事务；config 仍独占 schema/原子文件。草稿不进入工作区快照，Settings
+Tab 不分配 transport。支持控件及平台验收边界见 [迁移计划](egui-migration.zh.md)。
+
 ## 共同应用流程
 
 - 会话复制、导入和分组变更共用串行 blocking 事务：短时间持应用状态锁取得 profiles/groups，
   释放锁后读取已提交设置并通过 `ConfigStore` 写盘，成功后只合并 profiles/groups。owned 持久化
   gate 随 blocking 操作保留，即使异步调用者取消也不会提前放行；Settings 预览既不随之写盘，也不被完成结果覆盖。
-- `src/app/worker_shutdown.rs` 独立于可见 Tab 持有清理任务。关闭 Tab 先取消重连/媒体/剪贴板意图与
+- `src/controller/shutdown.rs` 经 `src/app/worker_shutdown.rs` 适配，独立于可见 Tab 持有清理任务。关闭 Tab 先取消重连/媒体/剪贴板意图与
   probe，并请求断开，再删除 Tab 路由。registry 回收已完成任务，进程退出在既有 25 秒期限内统一等待
   先前关闭的 Tab 与剩余 worker；工作区替换和本地 shell 收尾可等待 completion receipt，任务所有权仍属 registry。
   worker 从 Tab 状态移出与清理登记在同一次状态锁内完成，并发退出排空不会漏掉正在转交的 worker。
@@ -90,13 +188,19 @@ Slint UI（.slint）
 | `src/app/platform_support.rs` | 剪贴板、仅构建元数据诊断、外部打开器和 macOS application menu 接线 | 秘密、session 持久化或 SSH/worker 状态 |
 | `src/app/window_state.rs` | UI 线程普通窗口几何采集、屏幕/DPI 适配和最大化恢复 | 文件系统、worker、凭据或生成组件声明 |
 | `src/app/workspace_autosave.rs` | 防抖快照、单槽最新待写状态、后台串行写盘与退出排空 | 原生窗口所有权、凭据或 SSH 状态 |
-| `src/app/worker_shutdown.rs` | worker 清理任务所有权、完成通知和有总期限的退出 drain | Slint 类型、可见 Tab 状态、transport 实现或持久化 |
+| `src/controller.rs`、`src/controller/{input,output,presentation,viewport,shutdown}.rs` | 共享鼠标编码、owned 解析效果、视口/选区状态转换、有界帧准入与清理 registry/完成通知/期限 drain | UI 类型、平台副作用、凭据、持久化状态或 transport 实现 |
+| `src/controller/connection.rs`、`src/controller/connection/reconnect.rs` | 协议/profile/attempt 身份和有界重连预算/代次 | worker、timer、UI 映射、安全提示、凭据或信任决定 |
+| `src/controller/panes.rs` | 共用有界 pane 几何、分隔比例、方向焦点和快照转换 | UI、transport、凭据或文件系统 |
+| `src/controller/workspace.rs`、`workspace/` | 实验终端路由/生命周期、目录版本/回执闸门、工作区恢复和串行配置任务 | UI 值、持久化 schema 或元数据中的凭据 |
+| `src/egui_app/workspace.rs`、`workspace/` | 侧栏/编辑器/Tab/pane 组合、草稿、控件身份和焦点 | worker、文件系统、协议解析或持久状态所有权 |
+| `src/controller/terminal_session.rs` | 实验临时 transport/model owner、有界意图/快照、信任/认证提示、重连和 join 清理 | UI 类型、持久化 profile 或快照中的凭据 |
+| `src/app/worker_shutdown.rs` | 到共享清理 registry 的私有 Slint 适配 | 重复任务所有权、Slint 类型、可见 Tab 状态、transport 实现或持久化 |
 | `src/app/window_router.rs` | 私有多窗口路由、detached transfer 与 pane tree 所有权 | 生成类型声明、功能实现、SSH 协议细节或 JSON schema 细节 |
 | `src/app/macos_window.rs` | 主线程 AppKit 标题栏、运行中应用图标和标准应用菜单 action 绑定 | 生成的 Slint 类型、持久化设置、SSH 或 worker 状态 |
 | `src/app/native_file_drop.rs` | Windows 与 Linux 系统文件管理器拖入时的原生光标查询、逻辑坐标转换和安全回退边界 | 文件系统访问、SFTP 状态、transfer queue 或目标选择 |
 | `src/app/workspace.rs` 与 `src/app/workspace/` | 私有 workspace facade，以及按职责拆分的 Tab 生命周期、Session Editor 事务和 profile/group 管理接线 | 生成类型声明、传输实现、持久化 schema 或更宽的公共 API |
 | `src/app/{connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs`、`src/app/{connection,view,sftp_bridge,terminal_bridge}/` | 私有 application bridge 功能接线与内聚的 snapshot/Slint 映射模块，包括协议分发、SSH 信任/认证、直连 worker、串口发现、SFTP 意图、detached opener 调度、pane model 和 settings/options 映射 | 生成类型声明、传输实现或持久化 schema |
-| `src/app/file_icons.rs` 与 `src/app/file_icons/platform/` | 有界的进程内文件图标 key/cache 和自有 RGBA fallback；受 cfg 限定的平台 resolver | Slint model、SFTP session、任意路径检查或持久化缓存状态 |
+| `src/file_icons.rs` 与 `src/file_icons/platform/` | 有界的进程内文件图标 key/cache 和自有 RGBA fallback；受 cfg 限定的平台 resolver | Slint model、SFTP session、任意路径检查或持久化缓存状态 |
 | `src/app/local_files.rs` | 无 UI 状态的有界本地目录元数据、上传树发现和 regular file 重验 | Slint 类型、文件修改、持久化或 SSH handle |
 | `src/app/state.rs` 与 `src/app/state/` | 与 UI 无关的工作区 Tab、逐 Tab 终端/worker 状态、attempt 转换及测试 | Slint component/model 类型或 russh 协议细节 |
 | `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | 可测试的输入/分组/渲染映射、主题化终端默认色和阻塞式凭据 task 边界 | 窗口所有权、传输 handle 或可变 UI 状态 |
@@ -1091,7 +1195,7 @@ SFTP worker。
 名称进入应用快照前也会校验并限制。只要还有条目，**More** 会释放下一页本地条目或请求下一页远端条目。
 `russh-sftp` 内部仍使用 unbounded packet sender，因此 AxSSH 把浏览器暴露范围限制为一个 session 和一个在途请求。
 
-每行从 `src/app/file_icons.rs` 接收 24x24 的自有 RGBA 图标。UI 只读取内存结果或内建的目录、
+每行从 `src/file_icons.rs` 接收 24x24 的自有 RGBA 图标。UI 只读取内存结果或内建的目录、
 链接、通用文件 fallback；平台查询与图片解码都在 blocking worker 中运行，每批最多预热 64 个
 唯一 key，进程内最多保留 128 项。macOS 通过 NSWorkspace 查询 UTType 图标，Windows 使用
 合成文件属性调用 Shell API，Linux 将扩展名映射为 MIME 与 freedesktop 图标主题。远端名称不会
@@ -1188,7 +1292,7 @@ SFTP 会话重置保留本地目录和选择，同时使尚未完成的本地读
 
 ### 外部文件编辑
 
-`src/app/remote_edit.rs` 持有每 SFTP Tab 最多 8 个编辑上下文、私有本地副本、系统关联打开和父目录监听。下载和回传复用有界、有序的 SFTP 写 worker；`ReadEditFile`/`WriteEditFile` 与 `src/sftp/edit.rs` 保持任意编码/二进制字节，采用 `settings.sftp_transfers.remote_edit_max_file_mib`（schema v36，默认 4 MiB，规范化范围 1–64 MiB，旧配置缺失时默认 4）。主窗/独立窗口 Settings 的预览和保存传递该值；每个编辑网络操作携带自己的字节上限，SFTP 在文件访问前复核。本地副本创建、打开、有界读取和回传入队读取当前设置；设置变化时监听器强制重新检查，即使文件元数据未变化。已排队网络操作保留当时的上限；超限本地副本保留，已有更大的远端原文件可以回传符合新上限的缩小版本。下载前后核对路径和 handle 的 size/mtime，要求预期 EOF，并复用 16 请求窗口。回传独占创建私有远端临时文件，保留普通权限位，发布前复核原文件 size/mtime 和权限，再使用 `posix-rename@openssh.com` 原子替换。扩展缺失、冲突或写失败保留原文件；断线后无法保证远端临时文件清理。远端 inode 替换不保留 hard-link identity 或 ACL。
+`src/remote_edit.rs` 共用编辑状态机和副本 I/O，`src/app/remote_edit.rs` 适配每 SFTP Tab 最多 8 个编辑上下文、私有本地副本、系统关联打开和父目录监听。下载和回传复用有界、有序的 SFTP 写 worker；`ReadEditFile`/`WriteEditFile` 与 `src/sftp/edit.rs` 保持任意编码/二进制字节，采用 `settings.sftp_transfers.remote_edit_max_file_mib`（schema v36，默认 4 MiB，规范化范围 1–64 MiB，旧配置缺失时默认 4）。主窗/独立窗口 Settings 的预览和保存传递该值；每个编辑网络操作携带自己的字节上限，SFTP 在文件访问前复核。本地副本创建、打开、有界读取和回传入队读取当前设置；设置变化时监听器强制重新检查，即使文件元数据未变化。已排队网络操作保留当时的上限；超限本地副本保留，已有更大的远端原文件可以回传符合新上限的缩小版本。下载前后核对路径和 handle 的 size/mtime，要求预期 EOF，并复用 16 请求窗口。回传独占创建私有远端临时文件，保留普通权限位，发布前复核原文件 size/mtime 和权限，再使用 `posix-rename@openssh.com` 原子替换。扩展缺失、冲突或写失败保留原文件；断线后无法保证远端临时文件清理。远端 inode 替换不保留 hard-link identity 或 ACL。
 
 Slint 只接收路径、状态和动作标记；内置文本框、文本草稿、Save As 和文本变化回调全部移除。本地副本创建、读取和 opener 均在线程池执行。Windows 等待系统 launcher 的启动结果，其他平台使用 detached 系统打开；编辑器进程退出不代表文件关闭。监听使用单槽合并信号、500 ms 防抖和 5 秒元数据兜底，未变化的兜底检查不读内容；监听父目录兼容原子替换保存。每个文件最多一个回传在途，仅匹配的 operation ID 更新远端基线后才能回传下一次保存。内容摘要只去重本地保存，不承担信任校验。自动上传默认开启，可关闭。
 

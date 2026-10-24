@@ -3,7 +3,7 @@
 ## Toolchain Baseline
 
 - Use Rust edition 2024.
-- Preserve `rust-version = "1.92.0"` until dependency and CI evidence supports
+- Preserve `rust-version = "1.95.0"` until dependency and CI evidence supports
   a deliberate MSRV change. A newer local stable compiler does not raise MSRV.
 - Treat `Cargo.toml` as direct dependency intent and `Cargo.lock` as the
   reproducible application resolution. Keep CI and validation locked.
@@ -14,10 +14,13 @@
 
 ```text
 Cargo.toml           package, dependencies, profiles, MSRV
-build.rs             Slint compile entry only
+build.rs             common resources and feature-gated single Slint entry
 src/main.rs          thin process/binary entry
 src/lib.rs           reusable and testable crate boundary
 src/app.rs           private binary-side Slint bridge
+src/egui_main.rs     thin optional egui binary entry
+src/egui_app.rs      private egui UI adapter
+src/controller.rs    experimental UI-independent PTY/model control
 src/config.rs        session domain and persistence
 src/ssh.rs           russh transport and trust boundary
 ui/app.slint         single Slint build entry

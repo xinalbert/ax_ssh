@@ -29,6 +29,7 @@
 - [架构说明](architecture.zh.md)：所有权边界、事件流、传输安全契约和分阶段范围
 - [开发说明](development.zh.md)：工具链、常用命令、修改规则和验证边界
 - [行为覆盖率](coverage.zh.md)：可重复的 LCOV 测量及控制器/worker 测试边界
+- [egui 迁移计划](egui-migration.zh.md)：前端边界、终端原型、FigCraft 参考与切换门禁
 
 ## 项目记录
 

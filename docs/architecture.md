@@ -9,6 +9,144 @@ AxSSH is an independent Rust binary. The reference checkout at
 product behavior and review questions, but no source file, type, or dependency
 is imported from it.
 
+The `codex/egui-ui-migration` branch implements decision D1 from the
+[egui migration plan](egui-migration.md). The default `slint-ui` frontend retains
+the full application; optional `egui-ui` runs an independent workspace with Local/SSH/Telnet/Serial terminals.
+Both require Rust 1.95.0. egui/eframe 0.37.0 uses WGPU and has no equivalent
+of the existing Slint software/damage fallback yet. It does not access saved
+default-frontend files or credential stores. Its own saved sessions/layout and logs are isolated.
+
+`src/egui_main.rs` owns experimental startup, `src/egui_app.rs` and children own
+egui composition, fonts, input and Painter caches, and `src/controller.rs` plus
+`controller/terminal_session.rs` own one bounded transport/parser task. UI receives owned
+visible snapshots with row revisions and uses a bounded intent facade; it never
+receives the PTY handle or Tokio receiver. Every output byte is parsed in order;
+only presentation state is coalesced. Cleanup is awaited after the event loop
+returns and before the runtime stops.
+
+The first E3 slice shares `controller/input.rs`, `output.rs`, `presentation.rs`
+and `shutdown.rs` across both frontends: bounded mouse transactions, owned parser
+effects, admitted terminal frames, and retained cleanup tasks. `TerminalFrames`
+keeps the last admitted frame during synchronized output and merges dirty rows
+before consumption. The application still owns presentation deadlines, title
+policy, OSC 52 permission/connection checks, and protocol-response routing.
+The experimental frontend leaves title/OSC 52 actions disabled.
+
+The second E3 slice adds `controller/viewport.rs`. Both frontends use
+`TerminalViewport` to apply cell resize, history scroll and return-to-live-output
+transitions. A changed viewport discards its pending frame and advances one
+nonnegative selection revision, wrapping from `i32::MAX` to 1. Ordinary output
+and presentation-only invalidation keep the revision. `TerminalFrames` is now
+private to the controller. The local PTY and experimental controller cache a
+resize only after its request is admitted; failed requests remain retryable and
+do not change model geometry or selection identity. Workspace, connection, and
+settings orchestration remain in the Slint application; further E3 extraction
+and E4–E9 migration are pending.
+
+The third E3 slice moves `ConnectionIdentity` and `ReconnectState` to
+`controller/connection.rs` and `connection/reconnect.rs`. They own protocol,
+profile/attempt UUIDs, the five-attempt retry budget and cancellation generation;
+they contain no workers, timers, UI values, secrets or trust decisions.
+The application still looks up the exact tab before checking its profile and
+attempt, resets SSH latency when that attempt changes, and revokes media and
+clipboard intents when cancelling or manually retrying. Old generations cannot
+finish or re-enable a replacement retry. Security prompts, probe cancellation,
+authentication and worker startup remain with their existing owners. E4's temporary connection flow uses the controller owner described below.
+
+E4 generalizes the experimental owner to `controller/terminal_session.rs` with
+private actions, transport adapters and reconnect deadlines. It joins the old
+transport before replacement, drops old event receivers, resets frames/selection,
+and tags intents with a connection generation. Snapshots contain public prompt
+metadata, never credentials. Unknown keys require an exact prompt token and fresh
+zeroizing credentials; changed/revoked known-hosts keys cannot be overridden.
+The authenticated transport rechecks the pinned probe key, rejecting a race.
+Only the current prompt can authorize a retry. The shared five-attempt reconnect
+budget owns policy; this controller owns its 1/2/4/8/16s cancellable deadline and
+requests fresh SSH passwords/passphrases. System known_hosts is read, never written.
+The quick-connect adapter disables X11 and remote microphone preparation; default
+Slint settings keep existing behavior. Remaining workspace/security/settings
+orchestration is extracted with its corresponding feature (E3R), rather than
+moving unrelated application modules in advance.
+
+E5 adds `controller/workspace.rs` and its private catalog/layout/persistence modules.
+One runtime task owns terminal routes, Tab order, pane trees and blocking persistence
+jobs. Shared `controller/panes.rs` now owns the existing eight-pane geometry/focus
+rules; `app/panes.rs` is the default frontend adapter. UI receives owned metadata
+and bounded terminal facades, never workers or receivers. Catalog edits carry the
+loaded revision and an exact request UUID. Atomic writes precede memory publication;
+bounded completion receipts survive intervening layout refreshes. Profile deletion
+does not retarget or close existing terminals. Credential-backed profile mutation
+is unavailable until credential management migrates.
+
+Workspace commands and unconsumed catalog results are each bounded at 64. Active
+plus closing terminals are capped at 32, with eight panes per Tab. Close cancels
+before route removal and registers join ownership independently of the GUI. Import
+validates all IDs, kinds and trees before teardown, waits for previous cleanup,
+then restores idle models. Startup corruption/unsupported layouts are preserved.
+The config layer still owns schemas, validation, file limits and atomic writes.
+The experimental `local-terminal` kind distinguishes local restore from an unsaved
+remote target. Layout checkpoints run every two seconds only when metadata changes,
+and accepted transactions/checkpoints drain before exit. Export uses `.axssh` and
+the user-file writer. No terminal history, draft secret, temporary target or trust-once
+pin is persisted; recovered terminals require explicit connection. Remaining native
+workspace acceptance and complete feature/config compatibility remain cutover gates.
+
+E6 adds `controller/sftp_session.rs` for the experimental frontend. Each remote
+workspace pane owns a separate SFTP companion and `SshSessionHandle::spawn_sftp`
+worker; the terminal worker and SFTP worker never share a russh handle. The
+companion probes the host key before authentication, keeps fresh zeroizing
+credentials only in the worker command path, rejects stale directory pages by
+request ID, and exposes bounded directory/transfer snapshots. Download and
+cancel commands remain worker-owned. Closing a pane or replacing a workspace
+cancels and joins the terminal and SFTP companions independently. The egui
+surface also submits bounded regular-file uploads and exposes explicit Skip or
+Overwrite conflict decisions; the existing worker validates source identity,
+limits and atomic publication before reporting completion. Local directory
+discovery also belongs to the companion's blocking worker and returns bounded
+entry DTOs. Both frontends share `src/file_icons.rs`: bounded type keys,
+24×24 owned RGBA, a 128-entry cache and 64-key blocking prewarm batches.
+The companion retains and joins one icon task, publishes at most 64 images,
+and rechecks the current directory keys after completion. egui owns at most
+64 textures per pane, reuses unchanged pixel allocations and releases them on
+hide, close or minimize. Linux SVG uses the pinned resvg decoder with external
+and embedded image resolution disabled; no Slint type enters this service.
+The host-key receiver stays borrowed across other wakeups and its task is
+cancelled and joined on replacement/shutdown.
+
+E6 external editing shares `src/remote_edit.rs` and `src/file_identity.rs` between
+frontends. The shared service owns the eight-edit bound, save/ack state machine,
+private copy creation, bounded handle reads and platform-observable file identity.
+The default adapter retains its existing watcher and settings flow. The experimental
+companion owns one local job, polls metadata off the GUI thread and reads only
+changed, stable files (or an explicit upload). Its isolated cache retains copies
+on stop/disconnect, while unpublished copies are removed. The experiment uses the
+default 4 MiB edit limit until settings migrate in E7. Snapshots carry metadata
+only. Every job carries generation/edit UUID; editor launch permits are revoked
+on stop, lost connection and shutdown. All accepted local jobs are joined before
+exit. Existing SFTP writes retain size/mtime conflict checks and atomic rename;
+failed uploads need an explicit retry. Polling and observable fingerprints cannot
+detect arbitrary same-metadata content changes or implement three-way merging.
+
+E6 drag/drop reuses `src/local_upload.rs` for bounded recursive discovery; the
+default frontend retains a thin re-export adapter. egui source payloads carry
+pane UUID, connection generation and directory revision. Same-pane local-to-remote
+and remote-to-local drops are copy operations. Native file-manager drops require
+a hit in the visible remote-file rectangle after clipping, with an AppKit/Win32/Xlib
+cursor query or a current-frame PointerMoved fallback on Wayland. No active-tab
+or stale-hover routing is used. The UI never reads dropped file bytes.
+
+One retained, cancellable blocking job prepares each upload batch, including local
+identity checks. Both before and after scanning, the companion verifies the target
+connection/request/directory and any local source snapshot. Navigation, disconnect,
+cancel or shutdown cannot publish an old preparation; exit joins its task. Roots
+are capped at 64; shared discovery keeps its 4096-entry/512-file/256-directory/16-depth/
+512 KiB limits, while the experiment admits at most 64 prepared files/history rows.
+Default transfer filters and per-worker limits still apply. Native drag-out promises,
+selection batches, remaining SFTP behavior parity and native GUI acceptance remain
+open E6 work. Other frontends keep their existing native drag handling.
+
+The remaining Slint-specific ownership describes the default application.
+
 Terminal input and output use one redacted application-boundary contract across
 Local PTY, SSH, Telnet, and Serial. Each transport emits a bounded
 `TerminalOutputChunk` containing bytes and the transport receive timestamp. The
@@ -55,6 +193,16 @@ Process startup (src/main.rs)
                          rolling writer + flush guard
 ```
 
+The E7/E8 foundation adds `egui_app/menus.rs` (shared action table), its native
+AppKit/Win32 adapter, `settings.rs` (draft/preview/close decisions) and `theme.rs`
+(shared palette mapping). Linux keeps the existing winit event loop and egui menu.
+Workspace owns the singleton settings Tab, persists its identity/order, rejects
+settings inside pane splits, and publishes owned AppSettings. Settings saves share
+the bounded catalog revision/request transaction; config remains the only schema
+and atomic-file owner. Drafts never enter workspace snapshots, and no settings
+Tab allocates a transport. See the [menu/settings slice](egui-migration.md#e7e8-menus-tabs-and-settings-foundation)
+for supported controls and platform acceptance boundaries.
+
 ## Shared application flows
 
 - Session duplication, import and group changes share a serialized blocking
@@ -63,7 +211,8 @@ Process startup (src/main.rs)
   lock, then publishes only profiles/groups after success. An owned persistence
   gate remains with the blocking operation even if its async caller is cancelled;
   Settings previews remain independent of both the disk candidate and completion.
-- `src/app/worker_shutdown.rs` owns cleanup tasks independently of visible tabs.
+- `src/controller/shutdown.rs`, adapted by `src/app/worker_shutdown.rs`, owns
+  cleanup tasks independently of visible tabs.
   Tab close cancels reconnect/media/clipboard intents and probes and requests
   disconnect before removing the tab route. The registry reaps completed tasks
   and process exit drains both earlier tab closes and remaining live workers under
@@ -115,13 +264,19 @@ Process startup (src/main.rs)
 | `src/app/platform_support.rs` | Clipboard access, build-only diagnostics, external opener calls, and macOS application-menu wiring | Secrets, session state persistence, or SSH/worker state |
 | `src/app/window_state.rs` | UI-thread normal window geometry capture, monitor/DPI fitting and maximized restoration | Filesystem, workers, credentials or generated component declarations |
 | `src/app/workspace_autosave.rs` | Debounced checkpoints, one latest pending snapshot and serialized background writes with shutdown drain | Native window ownership, credentials or SSH state |
-| `src/app/worker_shutdown.rs` | Worker cleanup task ownership, completion receipts and deadline-based exit drain | Slint types, visible Tab state, transport implementation or persistence |
+| `src/controller.rs`, `src/controller/{input,output,presentation,viewport,shutdown}.rs` | Shared mouse encoding, owned parser effects, viewport/selection transitions, bounded frame admission and cleanup registry/receipts/deadline drain | UI types, platform side effects, credentials, persistent state or transport implementation |
+| `src/controller/connection.rs`, `src/controller/connection/reconnect.rs` | Protocol/profile/attempt identity and bounded reconnect budget/generation | Workers, timers, UI mapping, security prompts, credentials or trust decisions |
+| `src/controller/panes.rs` | Shared bounded pane geometry, divider ratios, directional focus and snapshot conversion | UI, transports, credentials or filesystem |
+| `src/controller/workspace.rs`, `workspace/` | Experimental terminal routes/lifetimes, catalog revision/receipt gates, workspace restore and serialized config jobs | UI values, persistence schema or credentials in metadata |
+| `src/egui_app/workspace.rs`, `workspace/` | Sidebar/editor/Tab/pane composition, drafts, widget identities and focus | Workers, filesystem, protocol parsing or persistent state ownership |
+| `src/controller/terminal_session.rs` | Experimental temporary transport/model owner, bounded intents/snapshots, trust/auth prompts, reconnect and joined cleanup | UI types, persistent profiles or credentials in snapshots |
+| `src/app/worker_shutdown.rs` | Private Slint adapter to the shared cleanup registry | Duplicate task ownership, Slint types, visible Tab state, transport implementation or persistence |
 | `src/app/window_router.rs` | Private multi-window route, detached-transfer and pane-tree ownership | Generated type declaration, feature implementations, SSH protocol details, or JSON schema details |
 | `src/app/macos_window.rs` | Main-thread AppKit title-bar setup, running-application icon, and standard application-menu action binding | Generated Slint types, persisted settings, SSH or worker state |
 | `src/app/native_file_drop.rs` | Windows and Linux native cursor lookup for external file-manager drops, with logical-coordinate conversion and safe fallback boundaries | Filesystem access, SFTP state, transfer queue, or target selection |
 | `src/app/workspace.rs` and `src/app/workspace/` | Private workspace facade plus focused Tab lifecycle, Session Editor transaction, and profile/group management wiring | Generated type declaration, transport implementation, persistence schema, or broader public API |
 | `src/app/{connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs`, `src/app/{connection,view,sftp_bridge,terminal_bridge}/` | Private application-bridge feature wiring and cohesive snapshot/Slint mapping modules, including protocol dispatch, SSH trust/authentication, direct workers, serial discovery, SFTP intents, detached opener dispatch, pane models and settings/options mapping | Generated type declaration, transport implementation, or persistence schema |
-| `src/app/file_icons.rs` and `src/app/file_icons/platform/` | Bounded process-local file-icon keys/cache and owned RGBA fallbacks; cfg-scoped platform resolvers | Slint models, SFTP sessions, arbitrary path inspection, or persistent cache state |
+| `src/file_icons.rs` and `src/file_icons/platform/` | Bounded process-local file-icon keys/cache and owned RGBA fallbacks; cfg-scoped platform resolvers | Slint models, SFTP sessions, arbitrary path inspection, or persistent cache state |
 | `src/app/local_files.rs` | Bounded local directory metadata, upload-tree discovery and regular-file revalidation without UI state | Slint types, file mutation, persistence, or SSH handles |
 | `src/app/state.rs` and `src/app/state/` | UI-independent workspace tabs, per-tab terminal/worker state, attempt transitions, and their tests | Slint component/model types or russh protocol details |
 | `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | Testable input/group/render mapping, theme-aware terminal defaults, and blocking credential task boundary | Window ownership, transport handles, or mutable UI state |
@@ -1759,7 +1914,7 @@ another remote page while one is available. `russh-sftp` still has an internal
 unbounded packet sender, so AxSSH limits the browser exposure to one session
 with one request in flight.
 
-Each row receives a 24x24 owned RGBA icon from `src/app/file_icons.rs`. The UI
+Each row receives a 24x24 owned RGBA icon from `src/file_icons.rs`. The UI
 only reads an in-memory result or a built-in folder, symlink, or generic-file
 fallback. Platform lookups and image decoding run on a blocking worker, prewarm
 at most 64 unique keys per batch, and retain at most 128 process-local entries.
@@ -1994,7 +2149,8 @@ normal local writer still refuses to overwrite an existing destination.
 
 ### External file editing
 
-`src/app/remote_edit.rs` owns up to eight edit contexts per SFTP tab, private local
+`src/remote_edit.rs` shares the edit state machine and private-copy I/O;
+`src/app/remote_edit.rs` adapts up to eight edit contexts per SFTP tab, private local
 copies, system-associated opening and parent-directory watches. Download and
 upload use the bounded ordered SFTP write worker; `ReadEditFile`/`WriteEditFile`
 and `src/sftp/edit.rs` preserve arbitrary bytes within

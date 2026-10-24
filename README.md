@@ -8,7 +8,7 @@
 [![codecov](https://codecov.io/gh/xinalbert/ax_ssh/branch/master/graph/badge.svg)](https://app.codecov.io/gh/xinalbert/ax_ssh)
 [![Latest release](https://img.shields.io/github/v/release/xinalbert/ax_ssh)](https://github.com/xinalbert/ax_ssh/releases/latest)
 [![License](https://img.shields.io/github/license/xinalbert/ax_ssh)](LICENSE)
-[![MSRV](https://img.shields.io/badge/MSRV-1.92.0%2B-dea584?logo=rust)](https://www.rust-lang.org/)
+[![MSRV](https://img.shields.io/badge/MSRV-1.95.0%2B-dea584?logo=rust)](https://www.rust-lang.org/)
 [![Platforms](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-1f6feb)](https://github.com/xinalbert/ax_ssh/releases/latest)
 [![English](https://img.shields.io/badge/English-Click-1f6feb)](docs/usage.md)
 [![简体中文](https://img.shields.io/badge/%E7%AE%80%E4%BD%93%E4%B8%AD%E6%96%87-%E7%82%B9%E5%87%BB-dea584)](docs/usage.zh.md)
@@ -47,12 +47,17 @@ together with independent Terminal and SFTP Tabs in one native application.
 
 ## Quick Start
 
-Install Rust `1.92.0` or newer and use a desktop environment supported by
+Install Rust `1.95.0` or newer and use a desktop environment supported by
 Slint's winit backend, then run:
 
 ```bash
 cargo run --locked
 ```
+
+An experimental egui workspace with saved Local/SSH/Telnet/Serial terminals runs separately with
+`cargo run --locked --no-default-features --features egui-ui --bin ax_ssh_egui`.
+It uses isolated session/workspace files, tabs and up to eight panes per tab.
+SFTP, settings and detached windows still use the default application; see the [migration status](docs/egui-migration.md).
 
 Unknown and changed SSH host keys are rejected until you verify and explicitly
 confirm their SHA-256 fingerprint. Session setup, terminal controls, SFTP, and

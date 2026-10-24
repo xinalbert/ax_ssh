@@ -1,6 +1,6 @@
 ---
 name: ax-ssh-rust-slint
-description: Implement and review AxSSH changes using the repository's Rust 2024 module layout, Slint UI architecture, Tokio task boundary, and russh security contract. Use for work on Cargo/build files, Rust modules under src/, Slint files under ui/, UI-to-worker data flow, SSH sessions, architecture docs, or reviews of those changes.
+description: Implement and review AxSSH Rust, default Slint and experimental egui UI changes using the repository's module, task, and SSH security boundaries. Use for Cargo/build, src/, ui/, UI-to-worker flow, SSH, and architecture work.
 ---
 
 # AxSSH Rust And Slint
@@ -18,6 +18,7 @@ project to its reference checkout.
    `.slint`, `build.rs`, `src/app.rs`, UI models, callbacks, or event-loop work.
 4. Read both references for changes that cross the UI/application/worker
    boundary. Read `docs/architecture*.md` before changing ownership or flow.
+   For egui/controller work also read [egui-guidelines.md](references/egui-guidelines.md).
 5. Define the layer that owns the new state, operation, and lifetime. Keep the
    smallest public contract that allows the adjacent layer to use it.
 6. Implement a focused change and preserve the deny-by-default SSH trust
@@ -33,6 +34,8 @@ project to its reference checkout.
 - Keep process setup in `src/main.rs` and reusable domain/transport code behind
   `src/lib.rs`.
 - Keep generated Slint types and callback wiring in `src/app.rs`.
+- Keep egui types in `src/egui_app.rs` and its children. Keep its PTY/model
+  owner behind `src/controller.rs`; follow the migration's staged scope.
 - Keep filesystem/schema behavior in `src/config.rs` or modern child modules.
 - Keep russh types and protocol state in `src/ssh.rs` or modern child modules.
 - Pass owned DTOs and commands between layers. Keep live handles, receivers,

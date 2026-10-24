@@ -1267,3 +1267,11 @@
 - 环境事实：Rust 2024/MSRV 1.92.0、锁定 Slint 1.18.1/russh 0.64.1 和升级后的媒体依赖；本机 rustc/Cargo 1.99.0、Python 3.14.6，ARM64 macOS/Windows MSVC Rust targets；本轮未安装工具链/SDK/包或调整依赖。
 - 验证：布局移动后的 880 项 Rust 回归已通过；基线 fmt/check/严格 Clippy、665 × 11 翻译、生成图标和本地链接已通过，最终源码及新增校验脚本收尾见实施记录。
 - 剩余边界：无 Windows/Linux 原生环境，不执行非原生 Intel 程序；真实设备/keyring/GUI/远端仍由对应平台验收，不启动应用或自主截图。
+
+## 2026-10-22 12:05 +0800 egui 独立前端与最低工具链
+
+- 触发原因：用户授权开始实施 egui 迁移，需要验证新增依赖和调整后的 MSRV。
+- 执行内容：加入可选 egui/eframe 0.37.0 + WGPU，Slint/build/softbuffer 改为默认 feature；新增实验 binary；安装 Rust 1.95.0 最低工具链并保持默认 1.99，更新 CI 的五目标双前端和最低工具链检查。
+- 影响文件：`Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`src/egui_main.rs`、`src/egui_app/`、`src/controller/`、相关规范、双语文档和环境记录。
+- 环境事实：egui-only 图不含 Slint/softbuffer；1.95 两前端 check 通过，默认 909 项测试通过；27 项 Python 回归、675 × 11 翻译和生成资源校验通过。新 egui 完整验证和目标命令收尾见实施记录。
+- 剩余边界：本机 ARM64 macOS；其它平台交原生 CI；原生 GUI/IME/字体/性能未验收，实验 WGPU 无等价软件回退，默认 Slint 保留。没有运行 GUI、外部账号或真实 SSH/凭据操作。

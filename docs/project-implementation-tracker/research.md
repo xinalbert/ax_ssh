@@ -1,5 +1,35 @@
 # 项目研究记录
 
+## 2026-10-23 E6 无 Slint 的 SVG 文件图标解码
+
+- 时间：2026-10-23 15:30 +0800
+- 检索问题：如何复用锁定 resvg 的矢量解码而不引入 Slint、任意本机文件读取或错误 alpha？
+- 检索原因：Linux 图标解析在 `slint::Image` 下，阻挡 egui-only 共用现有 provider；直接使用 usvg 默认资源 resolver 会读取本机路径。
+- 来源列表：[resvg v0.48.1 渲染源码](https://github.com/linebender/resvg/blob/v0.48.1/crates/resvg/src/lib.rs)、[usvg v0.48.1 image resolver 源码](https://github.com/linebender/resvg/blob/v0.48.1/crates/usvg/src/parser/image.rs)；锁定 Cargo registry 的 manifest/options/pixmap 源码。web 工具不可用后，经只读 HTTPS 获取官方固定版本原文。
+- 关键结论：resvg 返回 premultiplied sRGB 像素，UI RGBA 入口需要 demultiply；usvg 默认 string resolver 读取文件路径，可用自定义 resolver 拒绝。0.48.1 edition 2024、声明 Rust 1.85，项目仍为 Rust 1.95。禁用默认 features 和 image resolver 可避免图标触发字体发现、外部图片或嵌套 SVG 解析。
+- 对实施计划的影响：两前端共用 `file_icons`，Linux runtime 与各平台 test 使用固定 0.48.1/default-features=false；解码 UTF-8 SVG、2 MiB 输入、512px 源边、24px 输出，禁用外部及内嵌 images。macOS/Windows resolver 仅迁移路径，不改变平台逻辑。
+- 未解决问题：Linux 实际主题/Windows Shell 原生显示、其它 SDK 链接与视觉仍交原生 CI/用户，不以 macOS SVG 单测代替。
+
+## 2026-10-22 egui 终端 IME 标准输入链路
+
+- 时间：2026-10-22 14:14 +0800
+- 检索问题：用户截图中中文提交重复时，egui/winit 和标准终端应如何区分候选态、提交文本与普通键盘文本？
+- 检索原因：实验 egui 本地终端显示 `深度发掘深度发掘`；需要用标准输入链路定位，不能把用户的连续提示符截图直接归因为 PTY 或 shell 重复执行。
+- 来源列表：锁定本机 `egui-winit 0.37.0` 的 `State::on_ime`、键盘文字事件和 `handle_platform_output`；锁定本机 `winit 0.30.13` 的 `Ime`/`Window::set_ime_allowed` 文档；[Alacritty 窗口事件处理](https://github.com/alacritty/alacritty/blob/master/alacritty/src/event.rs) 和 [IME 窗口设置](https://github.com/alacritty/alacritty/blob/master/alacritty/src/display/window.rs)。
+- 关键结论：winit 要求编辑器在期待文本时启用 IME，`Preedit` 表示候选内容，`Commit` 表示应插入编辑器的文本；egui-winit 会把 commit 映射为 `Event::Ime(Commit)`，同时可为可打印键产生 `Event::Text`。其源码还记录 macOS 中文双拼选择候选会直接产生 `Commit`。Alacritty 同样仅显示 preedit，而把 commit 交给 terminal paste；它将 window IME purpose 标注为 Terminal，并以光标位置更新候选窗。eframe 会处理 AxSSH 写出的 `PlatformOutput.ime`，据此启用 IME、设置 Terminal purpose 和候选窗位置。
+- 对实施计划的影响：终端控件保留 preedit 于 UI 层且不发 PTY；commit 立即写入一次，吞掉同帧或下一帧的相同 `Event::Text`，不影响后续独立文本。新增无窗口事件回归和真实 PTY 回归，后者验证 `Text("深度发掘") + Commit("深度发掘") + Enter` 只使 shell 收到一行中文。未把连续提示符定性为程序缺陷，仍需原生输入体验确认。
+- 未解决问题：不同 macOS 输入法、AltGr/keypad、Windows/Linux 原生 IME 事件顺序及候选窗视觉位置需各平台验收；不以无窗口测试或一次截图代表这些行为已验收。
+
+## 2026-10-22 egui 迁移版本、线程与参考实现
+
+- 时间：2026-10-22 11:39 +0800
+- 检索问题：egui/eframe 的最低 Rust、绘制/唤醒、字体回退和多窗口能否承接 AxSSH；用户指定 FigCraft 哪些实现可参考？
+- 检索原因：用户要求独立分支迁移计划，并补充本地 FigCraft 为实现参考；版本、软件渲染和工具链会直接改变实施顺序。
+- 来源列表：[egui 0.37 manifest](https://github.com/emilk/egui/blob/0.37.0/Cargo.toml)；[0.35 manifest](https://github.com/emilk/egui/blob/0.35.0/Cargo.toml)；[eframe features](https://github.com/emilk/egui/blob/0.37.0/crates/eframe/Cargo.toml)；[0.37 发布说明](https://github.com/emilk/egui/releases/tag/0.37.0)；[Context 唤醒/viewport 源码](https://github.com/emilk/egui/blob/0.37.0/crates/egui/src/context.rs)；用户指定 FigCraft checkout（只读，版本 `a86897dc919b8ae7fb0142fe7e0034c10715f7d9`）的 `apps/figcraft/src/{main,graphics}.rs`、`crates/ui-egui/src/{lib,theme,widgets,windows,render_worker,canvas,i18n}.rs`，对应[固定源码](https://github.com/storytold/figcraft/tree/a86897dc919b8ae7fb0142fe7e0034c10715f7d9)。联网搜索工具不可用，改用只读 HTTPS 获取官方固定版本原文。
+- 关键结论：0.37 要求 Rust 1.95，0.35 声明 1.92；0.37 改善系统字体与彩色 Emoji，但不等于终端网格正确性已验证。eframe 标准 WGPU/OpenGL 不继承现有 Slint CPU/damage 策略。FigCraft 实际使用 0.36/Rust 1.95，薄 UI、theme token、定向重绘和 deferred viewport 可借鉴；其 tiny-skia 画布纹理与无界 render channel 不直接适用于终端字节流，其 macOS process exit 不能代替 AxSSH cleanup。版本/API 仍以最终锁定依赖为准。
+- 对实施计划的影响：E1 先作版本/MSRV、renderer 支持策略和隔离构建决策；E2 以 Painter 终端原型验证字体/IME/性能，再提取控制层；仅合并已解析快照并正确处理跨快照变化行。E9 前迁移 Slint 翻译提取/入口校验。参考实现定位写入双语 `docs/egui-migration.md` 和 `docs/egui-migration.zh.md`，不引入参考项目依赖或资产。
+- 未解决问题：候选版本实际最低工具链依赖闭包、原生 IME/字体/多窗口、软件渲染替代与性能；后续阶段实测，不在规划轮宣称通过。
+
 历史时间字段说明：2026-10-20 整理时，缺失的精确时刻优先依据原始标题补齐；否则使用可追溯的 Git 入库时间并逐条标明依据。原始事件日期/时区保留，入库时间不等同事件发生时间，实施内容与结论未改写。允许缺少时间字段的旧月份条目保持原样。
 
 ## 2026-10-13 标准光标显隐与有界重绘
@@ -750,3 +780,13 @@
 - 关键结论：X11 转发不是广播；进程连接当前会话的服务器 DISPLAY 代理端口后，sshd 转为所属 SSH 的 X11 channel，再由客户端校验 cookie。来源 IP/port 不能证明 UID/PID，loopback 不等于按用户隔离。OpenSSH 也先连接本机 display 再校验 cookie，RFC 未强制这一先后；launchd socket 连接可启动 XQuartz，因此只关闭显式 launch 不足以阻止副作用。Untrusted 需要在请求前生成本机受限授权，不能照搬 trusted 的全部惰性准备。
 - 对实施计划的影响：XI2 在 SSH channel 确认后先限时/限长读取并核验当前连接 cookie，通过前不做任何本机准备；拒绝只关闭该 relay。XI3 用假本机 peer 和注入准备步骤验证顺序、流完整性及取消；保留 untrusted 预授权与到期检查。
 - 未解决问题：无法从现有日志识别触发者，也不能保证阻止持有正确 cookie 的合法后台程序；真实 XQuartz 启动行为与 Windows/Linux 原生链路需用户/CI 验收，服务器 UID 级隔离需要管理员边界。
+
+## 2026-10-24 11:18 +0800 egui 原生菜单与 Linux 宿主边界
+
+- 时间：2026-10-24 11:18 +0800
+- 检索问题：eframe/winit 下如何实现 macOS、Windows、Linux 菜单，且不破坏现有事件循环？
+- 检索原因：用户要求先实现原生菜单栏并兼顾 Linux/Windows；Slint 已有 File/Edit/View/Pane/Window/Help 菜单，需要跨前端保持 action 语义。
+- 来源列表：[muda 0.19.3 README](https://github.com/tauri-apps/muda/tree/muda-v0.19.3)、[muda Menu API](https://docs.rs/muda/0.19.3/muda/struct.Menu.html)、[muda MenuEvent API](https://docs.rs/muda/0.19.3/muda/struct.MenuEvent.html)、[egui 0.37 MenuBar source](https://github.com/emilk/egui/blob/0.37.0/crates/egui/src/containers/menu.rs)、[eframe 0.37 CreationContext source](https://github.com/emilk/egui/blob/0.37.0/src/epi.rs)。
+- 关键结论：muda 0.19.3 的 AppKit/Win32 后端可直接绑定 NSApp/HWND；Windows accelerator 依赖消息循环 TranslateAcceleratorW，而 eframe 的 winit loop 不暴露该路由，因此本实现让 egui 处理 Windows 快捷键并用 muda 显示菜单。muda 的 Linux 后端要求 GTK 3/4 窗口及开发库；当前 eframe 是 winit X11/Wayland 窗口，接入 GTK 会引入第二套宿主运行时，所以 Linux 使用 egui MenuBar。MenuEvent 通过 bounded sync channel 转发到 UI。
+- 对实施计划的影响：新增 `muda` 仅在 macOS/Windows target dependency 且 default-features=false；Linux 不解析 muda/GTK。Settings/Tab 菜单共用 action 表，保留原生窗口边框；Windows/Linux 快捷键采用精确非重复消费，macOS accelerator 由 AppKit 处理。菜单与设置的 GUI、DPI、可访问性仍需各平台原生验收。
+- 未解决问题：当前机器只有 macOS SDK；Windows 完整 crate 构建需 Windows SDK/windows.h，Linux GTK 原生菜单未实现且不属于当前 winit 宿主边界。

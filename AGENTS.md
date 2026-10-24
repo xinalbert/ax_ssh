@@ -12,8 +12,10 @@
 
 ## Project Boundary
 
-- AxSSH is an independent Rust desktop application: Slint owns UI composition,
-  Tokio owns asynchronous task execution, and russh owns SSH transport.
+- AxSSH is an independent Rust desktop application: Slint is the default UI;
+  the optional egui frontend implements the staged migration in
+  `docs/egui-migration.md`. Tokio owns async execution and russh owns SSH.
+  Frontends run in separate executables, never concurrent GUI loops in one process.
 - `third_package/axshell` is reference material only. Never make it a workspace
   member, dependency, path dependency, source import, generated-code input, or
   documentation link target. Do not copy its source into this project.
@@ -29,6 +31,9 @@
 | `src/config.rs` | session domain types, validation, private persistence | Slint types, network handles, plaintext credentials |
 | `src/ssh.rs` | russh handler, trust policy, authentication, channels | UI state, visual formatting, persistent profile mutation |
 | `ui/` | layout, visual state, gestures, UI contracts | filesystem, Tokio, russh, blocking work |
+| `src/egui_main.rs` | experimental logging and startup | feature logic |
+| `src/egui_app.rs`, `src/egui_app/` | egui composition, Painter/input/fonts and native adaptation | transport ownership, terminal parsing, persistence schema |
+| `src/controller.rs`, `src/controller/` | UI-independent experimental PTY/model task, bounded intents/snapshots and cleanup | Slint/egui types, rendering, credentials in snapshots |
 
 Keep domain and transport code usable without constructing a Slint component.
 Pass small, owned domain values across boundaries; never expose russh handles,
@@ -148,7 +153,7 @@ Tokio receivers, locks, or unbounded terminal buffers to Slint.
 
 ## Verification
 
-For Rust or Slint changes, run:
+For Rust or UI changes, run the default frontend checks:
 
 ```bash
 cargo fmt --all -- --check
@@ -157,6 +162,13 @@ cargo clippy --all-targets --locked --offline -- -D warnings
 cargo test --locked --offline
 git diff --check
 ```
+
+For egui/controller or build-feature changes, also run check, strict all-targets
+Clippy, tests and build with `--no-default-features --features egui-ui`, and check
+the combined `--all-features` build. CI keeps all five native target surfaces.
+The declared Rust 1.95.0 MSRV applies to both frontends and has its own CI check.
+Only the `slint-ui` feature compiles `ui/app.slint` and declares generated types;
+an egui-only build must not depend on Slint or the Slint vendor patches.
 
 - A `.slint` change is not validated until Cargo recompiles `ui/app.slint`.
 - Run focused tests first when available, then the repository commands above.

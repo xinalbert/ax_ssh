@@ -32,6 +32,7 @@ languages have quick guides matching the README language badges.
 - [Development](development.md): toolchain, commands, change rules, and
   verification boundaries
 - [Behavior coverage](coverage.md): reproducible LCOV reports and controller/worker test boundaries
+- [egui migration plan](egui-migration.md): proposed frontend boundaries, terminal prototype, FigCraft references, and cutover gates
 
 ## Project records
 

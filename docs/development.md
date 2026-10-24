@@ -4,7 +4,7 @@
 
 ## Requirements
 
-- Rust `1.92.0` or newer
+- Rust `1.95.0` or newer
 - Cargo
 - A desktop backend supported by Slint's winit backend
 - Target-platform serial drivers and device permissions for real Serial tests
@@ -77,6 +77,81 @@ GitHub Actions secret under Settings > Secrets and variables > Actions. Upload
 is skipped when the secret is unavailable, as on pull requests from forks; the
 coverage report is still generated. This job is separate from the cross-platform
 build matrix and creates one coverage upload.
+
+## Experimental egui frontend
+
+The default `slint-ui` feature and `ax_ssh` binary retain the complete application.
+The separate `egui-ui` feature builds `ax_ssh_egui`, a workspace with saved sessions and Local/SSH/Telnet/Serial terminals
+using egui/eframe 0.37.0 and WGPU. Both frontends require Rust 1.95.0; the MSRV CI
+checks each independently. An egui-only build does not compile Slint or softbuffer.
+
+```bash
+cargo run --locked --no-default-features --features egui-ui --bin ax_ssh_egui
+cargo check --locked --offline --no-default-features --features egui-ui
+cargo clippy --all-targets --locked --offline --no-default-features --features egui-ui -- -D warnings
+cargo test --locked --offline --no-default-features --features egui-ui
+cargo build --locked --offline --no-default-features --features egui-ui
+cargo check --locked --offline --all-features --all-targets
+```
+
+A fresh experiment starts the configured local shell with a 10,000-line history.
+Its saved sessions/layout use a separate `ax_ssh_egui` configuration directory; it
+does not access default-frontend files or credential stores. Logs use the independent
+`ax_ssh_egui` platform data directory. Bundled font discovery happens before the
+event loop on a blocking task, with existing resources and native system fallback.
+The controller owns the parser/PTY and bounded command queue; UI reads complete
+visible snapshots and caches rows by revision/geometry. Cancellation and worker join
+finish after the event loop returns. WGPU has no equivalent CPU/damage fallback
+in this experiment; continue using the Slint application on unsupported graphics.
+
+Mouse drag selection and copy, paste, scrolling, terminal key encoding, basic
+IME preedit/commit and resize are implemented. macOS uses Command+C/V, other
+platforms use Ctrl+C/V; Ctrl+C without a selection sends the terminal interrupt.
+Shift overrides terminal mouse reporting for local history/selection. This is an
+initial prototype: native IME/keypad/AltGr, full typography, mouse protocols,
+accessibility, GUI appearance, power/latency and cross-platform acceptance still
+need verification. SFTP, settings and detached windows are later stages.
+The connection draft is frontend state; `controller/terminal_session.rs` serializes
+transport replacement, parser/input, prompt tokens and bounded reconnect deadlines.
+SSH probes before authentication and pins the confirmed key for this connection;
+changed/revoked known-hosts entries and a key change after probing remain blocked.
+Unknown-key confirmation requires fresh credentials. Passwords/passphrases are
+zeroizing payloads capped at 16 KiB; snapshots contain only public prompt metadata.
+The password editor clears pane-scoped undo history. Connection attempts do not
+write profiles or trust pins. Workspace transactions separately persist saved
+profile details and layout, excluding credentials and terminal output. Existing system known_hosts is read under the transport trust policy;
+trust once does not write it. Quick SSH disables X11 and microphone setup; the
+Slint default retains its microphone behavior.
+
+Optional automatic reconnect uses the shared five-attempt budget with 1/2/4/8/16s
+delays. SSH passwords/passphrases are requested again; agent and direct transports
+can retry without retaining a secret. Explicit disconnect/replacement cancels the
+deadline and joins the previous transport before exposing a replacement.
+Connection generations reject stale input, prompt responses and copy/selection
+results. Loopback tests cover unknown-key refusal, authentication retry, probe/worker
+key changes, cancelled probes, byte/protocol replies, resize and reconnect; serial
+open failures are covered without opening real hardware. Native GUI, SSH-agent,
+server and serial-device acceptance remain open. See [migration plan](egui-migration.md).
+
+E5 extracts the existing pane tree into `controller/panes.rs`, consumed by both
+frontends through the default adapter. `controller/workspace.rs` owns tabs,
+terminal routes, versioned catalog transactions, bounded completion receipts,
+checkpoint/import/export and joined cleanup. The GUI owns drafts, stable UUID
+widget IDs, per-pane text caches and keyboard focus. Commands are bounded at 64;
+active plus closing terminals are capped at 32, with eight panes per tab.
+Catalog writes run on blocking tasks and publish only after success; stale editor
+revisions are rejected and exact request results cannot be overwritten by layout
+updates. Existing config schemas/atomic writers preserve unrelated settings.
+
+Layout checkpoints compare metadata every two seconds, skip unchanged content,
+and drain on exit. `.axssh` export uses the user-file writer without changing the
+parent directory's permissions. Import validates before teardown and joins the
+old workspace before restoring idle models. Every recovered terminal needs an
+explicit resume; temporary targets, output/history, draft secrets and trust-once
+pins are omitted. Unsupported feature/window snapshots and invalid startup files
+are preserved rather than overwritten. Tests use isolated stores and fixed
+workers, including real PTY focus isolation and repeated egui layout passes.
+Native layout/input acceptance and old-application feature parity remain open.
 
 ## Interface translations
 
@@ -246,7 +321,7 @@ development output with `cargo clean --profile dev --package ax_ssh`.
   application snapshot. Empty legacy values must retain the `~`/platform-home
   defaults.
 - Keep file-icon platform APIs, theme detection, file reads, and image decoding
-  in `src/app/file_icons.rs` blocking work. Slint may consume only bounded owned
+  in `src/file_icons.rs` blocking work. Both frontends consume bounded owned
   RGBA images from the process-local cache. Remote names are extension/type
   hints, never local paths, and every platform resolver must retain a built-in
   fallback and release native handles deterministically.

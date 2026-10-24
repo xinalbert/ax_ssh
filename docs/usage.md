@@ -4,12 +4,86 @@
 
 ## Start the application
 
-AxSSH requires Rust `1.92.0` or newer and a desktop environment supported by
+AxSSH requires Rust `1.95.0` or newer and a desktop environment supported by
 Slint's winit backend. From the repository root, run:
 
 ```bash
 cargo run --locked
 ```
+
+## Experimental egui workspace
+
+Run `cargo run --locked --no-default-features --features egui-ui --bin ax_ssh_egui`.
+A fresh workspace starts a local shell. Saved sessions and layout use separate
+`ax_ssh_egui` configuration files; the default application's files and credential
+stores are not opened. Local/SSH/Telnet/Serial terminals share tabs and up to eight
+panes per tab, with at most 32 active or closing terminals in the workspace.
+
+Use **New session** to save connection details and an optional group. Passwords
+and passphrases are entered only when connecting. **Groups** adds/renames groups
+or removes a group while keeping its sessions. Double-click a session or choose
+**Open** to create a terminal tab, then **Connect** with fresh credentials. The
+context menu supports editing, duplication and deletion; deleting a saved session
+keeps existing terminals open. Close the current editor before editing another
+session. Its **Close / discard draft** button discards unsaved fields.
+
+**+ Local** and **+ Connection** add tabs. **Connection** chooses Local, SSH,
+Telnet or Serial for the current pane. SSH supports password, private-key path and
+SSH agent; Serial exposes path/baud and preserves existing saved parameters
+(new profiles use 8N1/no flow control). Split by columns or rows, drag dividers,
+focus a pane by clicking it or using the arrow controls, and close panes or tabs.
+Tab context menus move tabs left/right. Ctrl+Tab / Ctrl+Shift+Tab cycle tabs;
+Cmd+N (Ctrl+N elsewhere) opens the editor, and Cmd+D / Cmd+Shift+D
+(Ctrl+D / Ctrl+Shift+D elsewhere) split columns/rows.
+
+Layout, tab order and saved profile references are saved atomically when changed,
+checked every two seconds and drained on exit. **Save workspace** checkpoints now;
+**Workspace file…** opens a path entry for import or export (`.axssh` for export).
+Import validates the complete layout before replacing it and joins old workers.
+Recovered terminals, including local shells, wait for explicit **Connect**.
+Terminal output/history, credentials, unsaved connection/editor drafts and
+trust-once pins are omitted. Temporary remote targets need to be entered again;
+save a session to recover its connection details. Unsupported SFTP/settings or
+detached-window workspaces are rejected; invalid startup files are preserved.
+
+For unknown SSH keys, verify the displayed target and fingerprint with the server
+owner, enter fresh credentials if needed, then choose **Trust once and connect**.
+Trust covers this connection and its retries, without writing known_hosts.
+Changed/revoked known-hosts keys and keys changing after probing remain blocked.
+**Cancel / disconnect** cancels prompts and retries. Optional **Automatically
+retry** makes up to five attempts (1/2/4/8/16 seconds); SSH password/key passphrase
+retries ask again rather than saving credentials.
+
+Saved SSH panes include an independent **SFTP companion**. Enter fresh credentials
+and connect it separately, then list remote or local directories and transfer files.
+Choose **Edit externally** on a regular remote file to create a private copy and
+open the system-associated application. Saves upload automatically by default;
+turn off **Upload saved changes automatically** to use **Upload changes** instead.
+**Reopen editor** reuses the copy; **Stop editing**, disconnect and close stop
+observation while keeping the displayed copy path available for recovery. At most
+eight files per companion and 4 MiB per file are supported in this experimental
+surface. Remote size/mtime conflicts reject the upload and retain both versions;
+there is no force-overwrite or three-way merge in the edit flow. Experimental edit
+copies use the separate `ax_ssh_egui` cache. No file content is persisted in workspace
+snapshots. An already launched external application retains its own lifetime. Stopping an
+edit prevents future observations/uploads; an upload already admitted by the
+server may finish.
+
+In the experimental SFTP panel, drag a local row onto **Remote files** to upload
+it, or a remote row onto **Local files** to download it into the loaded local
+directory. Files/folders dropped from the OS file manager upload only when the
+pointer is inside **Remote files**. These are copy operations; source files stay
+in place. Load the local directory before downloading with drag/drop. Directory
+uploads preserve relative paths, skip links and default filtered names, and accept
+at most 64 roots/files per batch. **Cancel upload preparation** cancels scanning;
+once queued, cancel individual transfers. Navigation or reconnect during preparation
+discards that batch. Wayland drops need a current pointer event; absent coordinates
+are rejected. Native dragging from egui out to the file manager and selection
+batches are not implemented yet.
+
+X11, microphone forwarding, settings, translations and detached windows
+remain later stages. Native GUI/device/performance acceptance is pending; see the
+[migration plan](egui-migration.md).
 
 ## Create and connect to a session
 
