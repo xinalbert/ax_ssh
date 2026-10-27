@@ -1,4 +1,4 @@
-"""Read gettext catalogs and Slint message keys for build-time translation tools."""
+"""Read gettext catalogs and static Slint/egui translation markers."""
 
 from __future__ import annotations
 
@@ -18,6 +18,16 @@ PO_FIELD = re.compile(
     rf"^(msgctxt|msgid_plural|msgid|msgstr(?:\[\d+\])?)\s+({QUOTED})\s*$"
 )
 SOURCE_COMMENTS = re.compile(rf"({QUOTED})|//[^\n]*|/\*[\s\S]*?\*/")
+RUST_TOKENS = re.compile(
+    rf'r(?P<hashes>\#{{0,255}})"[\s\S]*?"(?P=hashes)'
+    r"|'(?:\\(?:u\{[0-9a-fA-F_]+\}|x[0-9a-fA-F]{2}|.)|[^'\\\n])'"
+    rf'|{QUOTED}|//[^\n]*|(?P<block>/\*)'
+    r'|(?P<marker>\b(?:tr|mark)\s*!\s*\()'
+)
+RUST_MESSAGE = re.compile(
+    rf"\s*(?:({QUOTED})\s*=>\s*)?({QUOTED})\s*(?=[,)])"
+)
+BLOCK_COMMENT = re.compile(r"/\*|\*/")
 
 
 @dataclass(frozen=True, order=True)
@@ -95,9 +105,50 @@ def search_rows(repo_root: Path) -> list[tuple[str, str, str]]:
     return rows
 
 
+def egui_keys(source_root: Path) -> set[MessageKey]:
+    """Extract literal tr!/mark! keys outside Rust strings and nested comments.
+
+    Markers accept a source literal, optionally preceded by a context literal
+    and ``=>``. Dynamic keys fail validation rather than silently losing text.
+    Generated tables are excluded; they never define their own source keys.
+    """
+    keys: set[MessageKey] = set()
+    for path in sorted(source_root.rglob("*.rs")):
+        if path.relative_to(source_root).parts[:1] == ("i18n",):
+            continue
+        source = path.read_text(encoding="utf-8")
+        position = 0
+        while token := RUST_TOKENS.search(source, position):
+            position = token.end()
+            if token["block"]:
+                depth = 1
+                for delimiter in BLOCK_COMMENT.finditer(source, position):
+                    depth += 1 if delimiter[0] == "/*" else -1
+                    position = delimiter.end()
+                    if depth == 0:
+                        break
+                if depth:
+                    raise ValueError(f"{path}: unterminated Rust block comment")
+            elif token["marker"]:
+                message = RUST_MESSAGE.match(source, position)
+                if message is None:
+                    raise ValueError(f"{path}: translation marker needs string literals")
+                context, text = message.groups()
+                source_text = decode_quoted(text)
+                if not source_text:
+                    raise ValueError(f"{path}: empty translation source")
+                keys.add(
+                    MessageKey(
+                        decode_quoted(context) if context else "", source_text
+                    )
+                )
+    return keys
+
+
 def source_keys(repo_root: Path) -> set[MessageKey]:
-    """Combine Slint keys and settings-search context keys."""
+    """Keep both frontends and settings-search keys in the shared PO catalogs."""
     keys = slint_keys(repo_root / "ui")
+    keys.update(egui_keys(repo_root / "src/egui_app"))
     keys.update(
         MessageKey("settings-search", value)
         for row in search_rows(repo_root)

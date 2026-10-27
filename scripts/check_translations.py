@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate every bundled locale and the generated settings-search translations."""
+"""Validate bundled catalogs against Slint, egui, and settings-search keys."""
 
 from __future__ import annotations
 
@@ -82,7 +82,7 @@ def main() -> int:
         if not paths:
             raise ValueError("no bundled translation catalogs found")
         if any(not key.message for key in required):
-            raise ValueError("empty @tr() message is not allowed")
+            raise ValueError("empty translation message is not allowed")
         failed = False
         for path in paths:
             errors = validate_catalog(path, required)

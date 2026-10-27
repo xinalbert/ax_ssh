@@ -189,6 +189,92 @@ class TranslationTests(unittest.TestCase):
             self.assertNotIn("HashMap", output)
             self.assertNotIn("read_to_string", output)
 
+    def test_egui_extraction_ignores_strings_nested_comments_and_generated_tables(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "sample.rs").write_text(
+                'tr!("Settings", ui.ctx()); mark!("Save");\n'
+                'tr!("menu" => "Open", ctx);\n'
+                '// tr!("comment", ctx)\n'
+                '/* outer /* nested */ tr!("comment", ctx) */\n'
+                'let raw = r###"tr!("raw", ctx)"###;\n'
+                'let literal = "tr!(\\"escaped\\", ctx)";\n',
+                encoding="utf-8",
+            )
+            with (root / "sample.rs").open("a", encoding="utf-8") as output:
+                output.write("let quote = '\"'; let value: &'static str = \"x\"; tr!(\"After\", ctx);\n")
+            (root / "i18n").mkdir()
+            (root / "i18n/catalog.rs").write_text(
+                'tr!("generated", ctx);', encoding="utf-8"
+            )
+            self.assertEqual(catalog.egui_keys(root), {
+                catalog.MessageKey("", "Settings"),
+                catalog.MessageKey("", "Save"),
+                catalog.MessageKey("menu", "Open"),
+                catalog.MessageKey("", "After"),
+            })
+
+    def test_egui_markers_reject_dynamic_empty_and_unclosed_sources(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            path = root / "sample.rs"
+            for source in ['tr!(dynamic, ctx)', 'mark!("")', '/* unclosed']:
+                path.write_text(source, encoding="utf-8")
+                with self.assertRaises(ValueError):
+                    catalog.egui_keys(root)
+
+    def test_source_union_preserves_both_frontends_and_search(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            for folder in ["ui", "src/egui_app", "translations"]:
+                (root / folder).mkdir(parents=True)
+            (root / "ui/app.slint").write_text(
+                '@tr("Slint"); @tr("Shared");', encoding="utf-8"
+            )
+            (root / "src/egui_app/menu.rs").write_text(
+                'mark!("Egui"); tr!("Shared", ctx);', encoding="utf-8"
+            )
+            (root / "translations/settings-search.json").write_text(
+                '[["General", "Language", "Interface language"]]',
+                encoding="utf-8",
+            )
+            keys = catalog.source_keys(root)
+            shared = {
+                catalog.MessageKey("", name)
+                for name in ["Slint", "Shared", "Egui"]
+            }
+            self.assertTrue(shared <= keys)
+            self.assertIn(catalog.MessageKey("settings-search", "Language"), keys)
+            (root / "ui/app.slint").unlink()
+            self.assertIn(catalog.MessageKey("", "Shared"), catalog.source_keys(root))
+
+    def test_egui_generator_qualifies_context_and_rejects_unreviewed_or_invalid_text(self) -> None:
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            (root / "src/egui_app").mkdir(parents=True)
+            (root / "src/egui_app/sample.rs").write_text(
+                'mark!("Open"); tr!("menu" => "Open", ctx); mark!("Total {0}");',
+                encoding="utf-8",
+            )
+            entries = [
+                catalog.CatalogEntry(catalog.MessageKey("", "Open"), {0: "開く"}),
+                catalog.CatalogEntry(catalog.MessageKey("menu", "Open"), {0: "開くメニュー"}),
+                catalog.CatalogEntry(catalog.MessageKey("", "Total {0}"), {0: "合計 {0}"}),
+            ]
+            self.write_catalog(root, entries)
+            output = generator.render_egui_catalog(root)
+            self.assertIn('("", "Open", "開く")', output)
+            self.assertIn('("menu", "Open", "開くメニュー")', output)
+            for entry in [
+                catalog.CatalogEntry(entries[0].key, {0: ""}),
+                catalog.CatalogEntry(entries[0].key, {0: "開く"}, ["#, fuzzy"]),
+                catalog.CatalogEntry(entries[2].key, {0: "合計 {1}"}),
+            ]:
+                modified = [entry if item.key == entry.key else item for item in entries]
+                self.write_catalog(root, modified)
+                with self.assertRaises(ValueError):
+                    generator.render_egui_catalog(root)
+
 
 if __name__ == "__main__":
     unittest.main()

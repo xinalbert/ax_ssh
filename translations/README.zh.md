@@ -19,12 +19,15 @@ AxSSH 使用英文源文案，并内嵌十一个翻译目录：
 | `zh-CN` | 简体中文 |
 | `zh-TW` | 繁體中文 |
 
-Slint 在构建期将译文编译为静态表；
+Slint 在构建期编译译文，egui 使用 Python 生成的静态 Rust 表；
 运行中的应用不会扫描这个目录或解析 PO 文件。
 
-直接编辑 `LOCALE/LC_MESSAGES/ax_ssh.po`。没有 context 的条目对应 Slint `@tr` 文案。
+直接编辑 `LOCALE/LC_MESSAGES/ax_ssh.po`。两个前端共用译文；没有 context 的条目对应 Slint `@tr` 和 egui 文案标记。
 `msgctxt "settings-search"` 条目对应 `settings-search.json` 中的固定设置搜索项，生成静态
-Rust 数组，但保持英文路由 ID 不变。
+Rust 数组，但保持英文路由 ID 不变。egui 在 `src/egui_app/` 使用 `tr!("Settings", ui.ctx())`
+翻译，`mark!("Settings")` 标记菜单等静态源键；`tr!("menu" => "Open", ctx)` 可明确 context。
+源键须使用普通字符串字面量，动态键/空键会被拒绝。提取器跳过 Rust 字符串、嵌套注释及生成目录。
+`source_keys` 合并两前端和搜索项，删除 Slint 前必须先迁移仍需保留的键，不能直接移除翻译门禁。
 
 修改 UI 文案、翻译或搜索项后，在仓库根目录运行：
 
@@ -36,7 +39,9 @@ python3 -m unittest scripts/test_translations.py -v
 ```
 
 命令需要 Python 3.10+ 和 `rustfmt`。生成器保留已有译文和译者注释、移除过期项，并为新增项
-建立空译文。补全后重新运行；搜索译文缺失或标记为 fuzzy 时，生成器会拒绝生成搜索表。
+建立空译文。补全后重新运行；搜索/egui 译文缺失或标记为 fuzzy 时，生成器会拒绝生成相应表，
+egui 生成还检查格式参数。输出为 `src/app/settings_bridge/settings_search_catalog.rs` 和
+`src/egui_app/i18n/catalog.rs`；二者都纳入 `--check`。
 `--check` 不写文件。旧命令 `build_zh_catalog.py` 会委托给相同流程处理 `zh-CN`。
 
 新增语言时，建立 `LOCALE/LC_MESSAGES/ax_ssh.po`，填写与目录一致的 `Language` 和适当的
@@ -50,7 +55,7 @@ python3 -m unittest scripts/test_translations.py -v
 }
 ```
 
-补全 UI 与搜索译文，运行上述命令及 Cargo 验证即可。`build.rs` 自动发现翻译目录，在 Cargo
+补全两前端 UI 与搜索译文，运行上述命令及 Cargo 验证即可。`build.rs` 自动发现翻译目录，在 Cargo
 输出目录生成静态注册表；Settings 使用同一清单，无需逐语言修改 Rust 或 Slint。英文源语言只需
 `en/language.json`，不需要 PO。选项顺序为跟随系统、英文、按 locale 排序的目录；索引只在本次
 构建内使用，不保存到配置。
@@ -79,3 +84,18 @@ Rust 只传提示类型与稳定 action ID，切换语言会同步更新可见�
 
 运行时技术错误、日志、用户值和远端终端内容不进入此目录。语言切换保留先保存再应用的事务，
 并在 UI 线程同步主窗口和独立窗口。新增译文仍需用户验收用语、长度、字体及键盘/焦点行为。
+
+egui 的 E7L 已接通应用菜单、设置分类/控件/关闭确认、Settings Tab 标题和 About 入口。
+Settings 的 Language 使用相同语言清单和规范 locale，成功保存后生效；外观预览和保存失败
+不切换语言。系统语言在 GUI 启动前解析，各 egui Context 保留自己的静态查找器；未知键回退源英文。
+原生菜单原位更新文本，保留动作 ID、快捷键和 Window/Help 角色。E7W 增加终端连接/信任/认证、
+会话/分组、Tab/pane 操作和工作区窗口，保留稳定 ID 及用户数据/指纹原文。E7S 增加 SFTP
+目录/传输/外部编辑文案，终端与 SFTP 共用信任提示。其它设置仍待 E7R。
+E7M 复用已有鼠标/选择设置标签和说明，E7P 复用 Option/Meta、OSC 52 及读取确认文案。
+E7U 复用全局上传上限标签与说明，E7O 复用本地快照大小标签和说明。
+E7X 复用 22 条本机 X server 和 forwarding 模式的标签/说明。
+E7H 复用遮罩字符标签及侧栏说明。
+E7R-Theme 和 E7R-FPS 复用调色板及前台/后台刷新率文案。
+当前每个 PO 有 765 条键，egui 使用其中 300 条。
+
+E7R-Icons 复用图标选择标签，并新增主题轮廓与保存后生效说明两条文案到各 PO。

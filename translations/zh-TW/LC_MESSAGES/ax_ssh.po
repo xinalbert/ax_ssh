@@ -76,6 +76,9 @@ msgstr "關於 AxSSH"
 msgid "Accent / focus"
 msgstr "強調色 / 焦點"
 
+msgid "Add"
+msgstr "新增"
+
 msgid "Add Server"
 msgstr "新增伺服器"
 
@@ -84,6 +87,9 @@ msgstr "允許"
 
 msgid "Allow local connections without X authority"
 msgstr "允許無 X authority 的本地連線"
+
+msgid "Allow microphone forwarding for this connection"
+msgstr "允許此連線轉送麥克風"
 
 msgid "Allow remote OSC 52 clipboard access"
 msgstr "允許遠端 OSC 52 訪問剪貼簿"
@@ -133,6 +139,9 @@ msgstr "自動上傳"
 msgid "Automatic"
 msgstr "自動"
 
+msgid "Automatically retry (up to 5 attempts; fresh SSH credentials when needed)"
+msgstr "自動重試（最多 5 次，需要時重新輸入 SSH 憑證）"
+
 msgid "AxSSH"
 msgstr "AxSSH"
 
@@ -151,8 +160,14 @@ msgstr "頻寬上限（MiB/s）"
 msgid "Bandwidth limit (MiB/s; 0 unlimited)"
 msgstr "頻寬上限（MiB/s；0 不限速）"
 
+msgid "Baud (8N1, no flow control)"
+msgstr "鮑率（8N1，無流量控制）"
+
 msgid "Baud rate"
 msgstr "鮑率"
+
+msgid "Behavior changes apply after Save. Default size and shell apply to new terminals."
+msgstr "行為變更在儲存後生效。預設尺寸與 Shell 用於新終端機。"
 
 msgid "Blink terminal cursor"
 msgstr "終端機游標閃爍"
@@ -162,6 +177,9 @@ msgstr "邊框"
 
 msgid "Bright colors for bold text"
 msgstr "粗體文字使用亮色"
+
+msgid "Browse local"
+msgstr "瀏覽本機"
 
 msgid "Bug reports"
 msgstr "問題報告"
@@ -187,8 +205,14 @@ msgstr "快取未變化的終端機行"
 msgid "Cancel"
 msgstr "取消"
 
+msgid "Cancel / disconnect"
+msgstr "取消 / 中斷連線"
+
 msgid "Cancel selected"
 msgstr "取消所選"
+
+msgid "Cancel upload preparation"
+msgstr "取消上傳準備"
 
 msgid "Cancel {0}"
 msgstr "取消 {0}"
@@ -229,11 +253,17 @@ msgstr "立即清除{0}的已儲存密碼？確認後立即生效，其他編輯
 msgid "Close"
 msgstr "關閉"
 
+msgid "Close / discard draft"
+msgstr "關閉 / 捨棄草稿"
+
 msgid "Close Current Tab"
 msgstr "關閉當前分頁"
 
 msgid "Close Window"
 msgstr "關閉視窗"
+
+msgid "Close pane"
+msgstr "關閉窗格"
 
 msgid "Close tab"
 msgstr "關閉分頁"
@@ -255,6 +285,9 @@ msgstr "配色方案"
 
 msgid "Compact terminal rendering"
 msgstr "緊湊終端機渲染"
+
+msgid "Concurrent transfers per connection"
+msgstr "每個連線的同時傳輸數"
 
 msgid "Connect"
 msgstr "連線"
@@ -280,8 +313,14 @@ msgstr "已連線 · SSH 延遲探測超時"
 msgid "Connected · SSH latency unavailable"
 msgstr "已連線 · 無法獲取 SSH 延遲"
 
+msgid "Connection"
+msgstr "連線"
+
 msgid "Connection failed"
 msgstr "連線失敗"
+
+msgid "Connection limits apply on the next SFTP connection. Saved server overrides take precedence."
+msgstr "連線限制在下次 SFTP 連線時生效，已儲存的伺服器個別設定優先。"
 
 msgid "Connection lost"
 msgstr "連線已中斷"
@@ -343,6 +382,9 @@ msgstr "自定義可執行檔案"
 msgid "Custom filename patterns"
 msgstr "自定義檔名過濾模式"
 
+msgid "Custom filters: one name pattern per line; * matches any characters."
+msgstr "自訂篩選：每行一個名稱模式，* 比對任意字元序列。"
+
 msgid "Cut"
 msgstr "剪下"
 
@@ -391,6 +433,12 @@ msgstr "刪除伺服器"
 msgid "Delete group"
 msgstr "刪除組"
 
+msgid "Delete remote entry?"
+msgstr "刪除遠端項目？"
+
+msgid "Delete saved session?"
+msgstr "刪除已儲存的工作階段？"
+
 msgid "Delete server"
 msgstr "刪除伺服器"
 
@@ -399,6 +447,9 @@ msgstr "刪除 {0} 及其已儲存的認證資料？"
 
 msgid "Delete {0}? Servers in this group will move to Ungrouped."
 msgstr "刪除 {0}？該組中的伺服器將移至“未分組”。"
+
+msgid "Deletion cannot be undone. Directories must be empty."
+msgstr "刪除無法復原。目錄必須為空。"
 
 msgid "Deny"
 msgstr "拒絕"
@@ -427,6 +478,12 @@ msgstr "診斷資訊"
 msgid "Dialog and transient overlay tint"
 msgstr "對話方塊和臨時遮罩色"
 
+msgid "Discard"
+msgstr "捨棄"
+
+msgid "Disconnect"
+msgstr "中斷連線"
+
 msgid "Display mode"
 msgstr "顯示模式"
 
@@ -439,6 +496,12 @@ msgstr "下載"
 msgid "Download ({0})"
 msgstr "下載 ({0})"
 
+msgid "Download directory"
+msgstr "下載目錄"
+
+msgid "Download selected"
+msgstr "下載所選項目"
+
 msgid "Duplicate"
 msgstr "建立副本"
 
@@ -450,6 +513,9 @@ msgstr "編輯"
 
 msgid "Edit Server"
 msgstr "編輯伺服器"
+
+msgid "Edit externally"
+msgstr "外部編輯"
 
 msgid "Edit path"
 msgstr "編輯路徑"
@@ -468,6 +534,9 @@ msgstr "端點"
 
 msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
 msgstr "輸入 #RRGGBB 或 #RRGGBBAA。儲存時，對比度不足的顏色會回退為可讀顏色。"
+
+msgid "Enter fresh credentials to connect or retry."
+msgstr "請重新輸入憑證以連線或重試。"
 
 msgid "Enter the Telnet server address."
 msgstr "輸入 Telnet 伺服器地址。"
@@ -490,8 +559,17 @@ msgstr "可執行檔案路徑"
 msgid "Executable used for new local terminal tabs"
 msgstr "新建本地終端機分頁使用的可執行檔案"
 
+msgid "Existing group"
+msgstr "現有群組"
+
 msgid "Existing session groups"
 msgstr "現有會話組"
+
+msgid "Existing terminals stay open."
+msgstr "現有終端機將保持開啟。"
+
+msgid "Exit"
+msgstr "結束"
 
 msgid "Expand session sidebar"
 msgstr "展開會話側欄"
@@ -502,6 +580,9 @@ msgstr "展開傳輸"
 msgid "Expand {0} group"
 msgstr "展開 {0} 組"
 
+msgid "Expected key"
+msgstr "預期金鑰"
+
 msgid "Export Selected"
 msgstr "匯出所選項"
 
@@ -510,6 +591,12 @@ msgstr "匯出所選項快捷鍵"
 
 msgid "Export Selected to Clipboard"
 msgstr "將所選項匯出到剪貼簿"
+
+msgid "External edit maximum size (MiB)"
+msgstr "外部編輯大小上限（MiB）"
+
+msgid "External editing"
+msgstr "外部編輯"
 
 msgid "FPS"
 msgstr "FPS"
@@ -529,8 +616,17 @@ msgstr "檔案和傳輸區域大小"
 msgid "Filter system files"
 msgstr "過濾系統檔案"
 
+msgid "Filter upload and download names"
+msgstr "篩選上傳與下載名稱"
+
+msgid "Filters and edit limits apply after Save. Filters omit invalid names and keep up to 64 unique patterns."
+msgstr "篩選與編輯上限在儲存後生效。忽略無效名稱，最多保留 64 個不同模式。"
+
 msgid "Flow control"
 msgstr "流量控制"
+
+msgid "Focus pane"
+msgstr "聚焦窗格"
 
 msgid "Focus rings, selection, and active indicators"
 msgstr "焦點環、選擇和活動狀態指示"
@@ -568,6 +664,9 @@ msgstr "全域性同時上傳數"
 msgid "Group"
 msgstr "組"
 
+msgid "Group (empty for Ungrouped)"
+msgstr "群組（留空表示未分組）"
+
 msgid "Group name"
 msgstr "組名"
 
@@ -580,8 +679,17 @@ msgstr "幫助"
 msgid "Hidden"
 msgstr "隱藏"
 
+msgid "Hide AxSSH"
+msgstr "隱藏 AxSSH"
+
+msgid "Hide Others"
+msgstr "隱藏其他應用程式"
+
 msgid "Host"
 msgstr "主機"
+
+msgid "Host key blocked by trust policy or changed during connection. Disconnect and check the server and known_hosts."
+msgstr "主機金鑰遭信任原則封鎖，或在連線期間發生變更。請中斷連線並檢查伺服器和 known_hosts。"
 
 msgid "Hover and secondary surfaces"
 msgstr "懸停和次級表面"
@@ -631,6 +739,9 @@ msgstr "本地 X SERVER"
 msgid "Language"
 msgstr "語言"
 
+msgid "Language changes apply after Save."
+msgstr "語言變更在儲存後生效。"
+
 msgid "Language used by the AxSSH interface"
 msgstr "AxSSH 介面使用的語言"
 
@@ -651,6 +762,12 @@ msgstr "淺色"
 
 msgid "Line height"
 msgstr "行高"
+
+msgid "List"
+msgstr "列出"
+
+msgid "Live preview"
+msgstr "即時預覽"
 
 msgid "Loading"
 msgstr "正在載入"
@@ -681,6 +798,9 @@ msgstr "本地檔案開啟快照（MiB）"
 
 msgid "Local files"
 msgstr "本地檔案"
+
+msgid "Local files · drop remote entries here to download"
+msgstr "本機檔案 · 將遠端項目拖至此處下載"
 
 msgid "Local selection priority"
 msgstr "本地選區優先"
@@ -721,6 +841,9 @@ msgstr "SFTP 單檔案大小上限（GiB）"
 msgid "Maximum file size (GiB)"
 msgstr "單檔案大小上限（GiB）"
 
+msgid "Maximum file size (GiB, 0 = unlimited)"
+msgstr "單一檔案大小上限（GiB，0 = 不限）"
+
 msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
 msgstr "外部編輯下載和回傳的檔案大小上限；預設 4 MiB，範圍 1–64 MiB"
 
@@ -739,6 +862,9 @@ msgstr "最小化視窗"
 msgid "Modified"
 msgstr "修改時間"
 
+msgid "Modifier keys"
+msgstr "輔助鍵"
+
 msgid "Mono (1)"
 msgstr "單聲道 (1)"
 
@@ -751,8 +877,17 @@ msgstr "更多"
 msgid "Move Current Workspace to New Window"
 msgstr "將當前工作區移至新視窗"
 
+msgid "Move Tab Left"
+msgstr "向左移動分頁"
+
+msgid "Move Tab Right"
+msgstr "向右移動分頁"
+
 msgid "Move to line start after each wheel step in alternate-screen apps"
 msgstr "在備用螢幕程式中，每次滾輪上下移動後回到行首"
+
+msgid "Move to line start when scrolling the alternate screen"
+msgstr "捲動替代畫面時移至行首"
 
 msgid "Move workspace to new window"
 msgstr "將工作區移至新視窗"
@@ -766,6 +901,9 @@ msgstr "名稱"
 msgid "Navigation and title surfaces"
 msgstr "導航和標題表面"
 
+msgid "New Connection"
+msgstr "新增連線"
+
 msgid "New Group"
 msgstr "新建組"
 
@@ -777,6 +915,9 @@ msgstr "新建伺服器"
 
 msgid "New Server shortcut"
 msgstr "新建伺服器快捷鍵"
+
+msgid "New Server…"
+msgstr "新增伺服器…"
 
 msgid "New group"
 msgstr "新建組"
@@ -829,6 +970,9 @@ msgstr "每行一個模式；* 匹配任意字元"
 msgid "Open"
 msgstr "開啟"
 
+msgid "Open / Save Workspace…"
+msgstr "開啟 / 儲存工作區…"
+
 msgid "Open Recent"
 msgstr "開啟最近檔案"
 
@@ -858,6 +1002,9 @@ msgstr "開啟本地 Shell"
 
 msgid "Open log folder"
 msgstr "開啟日誌資料夾"
+
+msgid "Open replaces the current layout after saving it. Recovered terminals wait for explicit connection."
+msgstr "開啟前會儲存並取代目前配置。還原的終端機需手動連線。"
 
 msgid "Open saved connection"
 msgstr "開啟已儲存的連線"
@@ -906,6 +1053,12 @@ msgstr "同位檢查"
 
 msgid "Password"
 msgstr "密碼"
+
+msgid "Password / key passphrase (empty for agent)"
+msgstr "密碼 / 私鑰密語（使用 agent 時留空）"
+
+msgid "Password / passphrase"
+msgstr "密碼 / 密語"
 
 msgid "Password authentication"
 msgstr "密碼驗證"
@@ -976,8 +1129,20 @@ msgstr "協議"
 msgid "Provider"
 msgstr "提供程式"
 
+msgid "Queued ({0})"
+msgstr "已排入佇列（{0}）"
+
+msgid "Quit"
+msgstr "結束"
+
+msgid "Quit AxSSH"
+msgstr "結束 AxSSH"
+
 msgid "RENDERING"
 msgstr "渲染"
+
+msgid "Reading local directory…"
+msgstr "正在讀取本機目錄…"
 
 msgid "Reduce terminal items and omit default background rectangles"
 msgstr "減少終端機繪製項並省略預設背景矩形"
@@ -1018,11 +1183,20 @@ msgstr "遠端檔案：{0} - 修改時間：{1}"
 msgid "Remote files"
 msgstr "遠端檔案"
 
+msgid "Remote files · drop local files or folders here to upload"
+msgstr "遠端檔案 · 將本機檔案或資料夾拖至此處上傳"
+
+msgid "Remote path"
+msgstr "遠端路徑"
+
 msgid "Remote sample rate"
 msgstr "遠端取樣率"
 
 msgid "Remove"
 msgstr "移除"
+
+msgid "Remove group (keep sessions)"
+msgstr "刪除群組（保留工作階段）"
 
 msgid "Remove revoked record"
 msgstr "移除已撤銷記錄"
@@ -1045,6 +1219,9 @@ msgstr "渲染器"
 msgid "Rendering backend"
 msgstr "渲染後端"
 
+msgid "Reopen editor"
+msgstr "重新開啟編輯器"
+
 msgid "Report a bug"
 msgstr "報告問題"
 
@@ -1053,6 +1230,9 @@ msgstr "恢復預設值"
 
 msgid "Reset filters"
 msgstr "重置過濾規則"
+
+msgid "Reset filters to platform defaults"
+msgstr "將篩選規則還原為平台預設值"
 
 msgid "Restart"
 msgstr "重新啟動"
@@ -1086,6 +1266,9 @@ msgstr "將工作區返回主視窗"
 
 msgid "Reuse GPU row layers; may increase graphics memory"
 msgstr "複用 GPU 行圖層；可能增加圖形記憶體"
+
+msgid "Revert"
+msgstr "還原"
 
 msgid "Review before sharing"
 msgstr "分享前請檢查內容"
@@ -1177,8 +1360,14 @@ msgstr "儲存 SSH 密碼供以後連線使用"
 msgid "Save Workspace"
 msgstr "儲存工作區"
 
+msgid "Save Workspace As…"
+msgstr "工作區另存為…"
+
 msgid "Save audio settings"
 msgstr "儲存音訊設定"
+
+msgid "Save in the system application. Copies remain available after editing stops."
+msgstr "請在系統應用程式中儲存。停止編輯後，副本仍可使用。"
 
 msgid "Save password (optional)"
 msgstr "儲存密碼（可選）"
@@ -1189,6 +1378,18 @@ msgstr "密碼儲存位置"
 msgid "Save session"
 msgstr "儲存會話"
 
+msgid "Save settings changes?"
+msgstr "儲存設定變更？"
+
+msgid "Saved"
+msgstr "已儲存"
+
+msgid "Saved connection"
+msgstr "已儲存的連線"
+
+msgid "Saved connection details; passwords and passphrases are entered when connecting."
+msgstr "儲存連線資訊；密碼和私鑰密語於連線時輸入。"
+
 msgid "Saved connections"
 msgstr "已儲存的連線"
 
@@ -1197,6 +1398,9 @@ msgstr "已儲存至{0}。"
 
 msgid "Saved password"
 msgstr "已儲存密碼"
+
+msgid "Saving…"
+msgstr "正在儲存…"
 
 msgid "Scrollback"
 msgstr "回滾行數"
@@ -1288,6 +1492,9 @@ msgstr "工作階段已結束"
 msgid "Session group"
 msgstr "會話組"
 
+msgid "Session list changed. Close and reopen this editor to use the latest version."
+msgstr "工作階段清單已變更。請關閉並重新開啟編輯器以使用最新版本。"
+
 msgid "Session mask character"
 msgstr "會話掩碼字元"
 
@@ -1309,11 +1516,17 @@ msgstr "設定"
 msgid "Settings..."
 msgstr "設定..."
 
+msgid "Settings…"
+msgstr "設定…"
+
 msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
 msgstr "每個 SFTP 分頁的上傳與下載共享；0 表示不限速"
 
 msgid "Shortcuts"
 msgstr "快捷鍵"
+
+msgid "Show All"
+msgstr "全部顯示"
 
 msgid "Show a blinking cursor while the terminal is focused"
 msgstr "終端機聚焦時顯示閃爍游標"
@@ -1335,6 +1548,9 @@ msgstr "跳過"
 
 msgid "Skip matching names during SFTP uploads and downloads"
 msgstr "SFTP 上傳和下載時跳過匹配的名稱"
+
+msgid "Skip platform metadata files"
+msgstr "略過平台中繼資料檔案"
 
 msgid "Skipped"
 msgstr "已跳過"
@@ -1363,8 +1579,17 @@ msgstr "按名稱排序"
 msgid "Sort by size"
 msgstr "按大小排序"
 
+msgid "Source and licenses"
+msgstr "原始碼與授權條款"
+
 msgid "Speed"
 msgstr "速度"
+
+msgid "Split Columns"
+msgstr "依欄分割"
+
+msgid "Split Rows"
+msgstr "依列分割"
 
 msgid "Split active terminal horizontally"
 msgstr "水平拆分當前終端機"
@@ -1411,6 +1636,10 @@ msgstr "系統認證資料儲存"
 msgid "System icon"
 msgstr "系統圖示"
 
+#. egui system icon appearance setting
+msgid "System icons follow theme"
+msgstr "系統圖示跟隨佈景主題"
+
 msgid "TERMINAL"
 msgstr "終端機"
 
@@ -1431,6 +1660,9 @@ msgstr "Telnet 協議"
 
 msgid "Telnet sends terminal traffic without encryption or host identity verification."
 msgstr "Telnet 傳輸終端機流量時不加密，也不驗證主機身份。"
+
+msgid "Temporary; replaces this terminal. Credentials are not saved."
+msgstr "暫時連線，將取代此終端機。憑證不會儲存。"
 
 msgid "Terminal"
 msgstr "終端機"
@@ -1467,6 +1699,9 @@ msgstr "終端機窗格高度"
 
 msgid "Terminal pane widths"
 msgstr "終端機窗格寬度"
+
+msgid "Terminal preview"
+msgstr "終端機預覽"
 
 msgid "Terminal scrollback lines"
 msgstr "終端機回滾行數"
@@ -1516,6 +1751,9 @@ msgstr "信任並繼續"
 msgid "Trust new key"
 msgstr "信任新金鑰"
 
+msgid "Trust once and connect"
+msgstr "僅本次信任並連線"
+
 msgid "Trusted (-Y)"
 msgstr "受信任（-Y）"
 
@@ -1525,11 +1763,17 @@ msgstr "非聚焦重新整理率"
 msgid "Unfocused terminal refresh rate"
 msgstr "非聚焦終端機重新整理率"
 
+msgid "Ungrouped"
+msgstr "未分組"
+
 msgid "Unknown SSH host key"
 msgstr "未知 SSH 主機金鑰"
 
 msgid "Unlock encrypted credentials"
 msgstr "解鎖加密認證資料"
+
+msgid "Unsaved changes"
+msgstr "尚未儲存的變更"
 
 msgid "Untrusted (-X)"
 msgstr "非信任（-X）"
@@ -1545,6 +1789,21 @@ msgstr "上傳 ({0})"
 
 msgid "Upload changes"
 msgstr "上傳修改"
+
+msgid "Upload file"
+msgstr "上傳檔案"
+
+msgid "Upload saved changes automatically"
+msgstr "自動上傳已儲存的變更"
+
+msgid "Upload selected"
+msgstr "上傳所選項目"
+
+msgid "Use System default for the platform shell; otherwise enter an executable path."
+msgstr "使用平台預設 Shell 時輸入 System default，否則輸入執行檔路徑。"
+
+msgid "Use for upload"
+msgstr "用於上傳"
 
 msgid "Use platform default filters"
 msgstr "使用平臺預設過濾規則"
@@ -1567,8 +1826,15 @@ msgstr "使用者名稱"
 msgid "Uses the host system by default. Changes are saved immediately."
 msgstr "預設使用本機系統圖示，更改後立即儲存。"
 
+#. egui system icon appearance setting
+msgid "Uses the host system by default. Save applies the selection."
+msgstr "預設使用主機系統圖示。儲存後套用選擇。"
+
 msgid "Vault password"
 msgstr "保險庫密碼"
+
+msgid "Verify the fingerprint with the server owner before trusting it for this connection."
+msgstr "請先向伺服器管理員核實指紋，再為此次連線信任該金鑰。"
 
 msgid "Version {0}"
 msgstr "版本 {0}"
@@ -1581,6 +1847,9 @@ msgstr "其他窗格聚焦時可見終端機的重新整理幀率"
 
 msgid "WORKSPACE"
 msgstr "工作區"
+
+msgid "Waiting for server…"
+msgstr "等待伺服器…"
 
 msgid "Warning"
 msgstr "警告"
@@ -1611,6 +1880,9 @@ msgstr "X11"
 
 msgid "X11 forwarding"
 msgstr "X11 轉發"
+
+msgid "columns"
+msgstr "欄"
 
 msgid "lines"
 msgstr "行"

@@ -76,6 +76,9 @@ msgstr "Про AxSSH"
 msgid "Accent / focus"
 msgstr "Акцент / фокус"
 
+msgid "Add"
+msgstr "Додати"
+
 msgid "Add Server"
 msgstr "Додати сервер"
 
@@ -84,6 +87,9 @@ msgstr "Дозволити"
 
 msgid "Allow local connections without X authority"
 msgstr "Дозволити локальні з’єднання без авторизації X"
+
+msgid "Allow microphone forwarding for this connection"
+msgstr "Дозволити перенаправлення мікрофона для цього з’єднання"
 
 msgid "Allow remote OSC 52 clipboard access"
 msgstr "Дозволити віддалений доступ до буфера обміну через OSC 52"
@@ -133,6 +139,9 @@ msgstr "Автоматичне надсилання"
 msgid "Automatic"
 msgstr "Автоматично"
 
+msgid "Automatically retry (up to 5 attempts; fresh SSH credentials when needed)"
+msgstr "Повторювати автоматично (до 5 спроб; повторне введення даних SSH за потреби)"
+
 msgid "AxSSH"
 msgstr "AxSSH"
 
@@ -151,8 +160,14 @@ msgstr "Обмеження пропускної здатності (MiB/s)"
 msgid "Bandwidth limit (MiB/s; 0 unlimited)"
 msgstr "Обмеження пропускної здатності (MiB/s; 0 — без обмежень)"
 
+msgid "Baud (8N1, no flow control)"
+msgstr "Швидкість (8N1, без керування потоком)"
+
 msgid "Baud rate"
 msgstr "Швидкість у бодах"
+
+msgid "Behavior changes apply after Save. Default size and shell apply to new terminals."
+msgstr "Зміни поведінки застосовуються після збереження. Типові розмір і оболонка використовуються в нових терміналах."
 
 msgid "Blink terminal cursor"
 msgstr "Миготливий курсор термінала"
@@ -162,6 +177,9 @@ msgstr "Межа"
 
 msgid "Bright colors for bold text"
 msgstr "Яскраві кольори для напівжирного тексту"
+
+msgid "Browse local"
+msgstr "Огляд локальних файлів"
 
 msgid "Bug reports"
 msgstr "Повідомлення про помилки"
@@ -187,8 +205,14 @@ msgstr "Кешувати незмінені рядки термінала"
 msgid "Cancel"
 msgstr "Скасувати"
 
+msgid "Cancel / disconnect"
+msgstr "Скасувати / від’єднати"
+
 msgid "Cancel selected"
 msgstr "Скасувати вибрані"
+
+msgid "Cancel upload preparation"
+msgstr "Скасувати підготовку передавання"
 
 msgid "Cancel {0}"
 msgstr "Скасувати {0}"
@@ -229,11 +253,17 @@ msgstr "Видалити збережений пароль для {0} зараз
 msgid "Close"
 msgstr "Закрити"
 
+msgid "Close / discard draft"
+msgstr "Закрити / відхилити зміни"
+
 msgid "Close Current Tab"
 msgstr "Закрити поточну вкладку"
 
 msgid "Close Window"
 msgstr "Закрити вікно"
+
+msgid "Close pane"
+msgstr "Закрити панель"
 
 msgid "Close tab"
 msgstr "Закрити вкладку"
@@ -255,6 +285,9 @@ msgstr "Палітра кольорів"
 
 msgid "Compact terminal rendering"
 msgstr "Компактне відтворення термінала"
+
+msgid "Concurrent transfers per connection"
+msgstr "Одночасні передавання на підключення"
 
 msgid "Connect"
 msgstr "Під’єднати"
@@ -280,8 +313,14 @@ msgstr "Під’єднано · Час перевірки затримки SSH 
 msgid "Connected · SSH latency unavailable"
 msgstr "Під’єднано · Затримка SSH недоступна"
 
+msgid "Connection"
+msgstr "З’єднання"
+
 msgid "Connection failed"
 msgstr "Помилка підключення"
+
+msgid "Connection limits apply on the next SFTP connection. Saved server overrides take precedence."
+msgstr "Обмеження діють із наступного підключення SFTP. Збережені налаштування сервера мають пріоритет."
 
 msgid "Connection lost"
 msgstr "З’єднання втрачено"
@@ -343,6 +382,9 @@ msgstr "Власний виконуваний файл"
 msgid "Custom filename patterns"
 msgstr "Власні шаблони імен файлів"
 
+msgid "Custom filters: one name pattern per line; * matches any characters."
+msgstr "Власні фільтри: один шаблон назви на рядок; * відповідає довільній послідовності символів."
+
 msgid "Cut"
 msgstr "Вирізати"
 
@@ -391,6 +433,12 @@ msgstr "Видалити сервер"
 msgid "Delete group"
 msgstr "Видалити групу"
 
+msgid "Delete remote entry?"
+msgstr "Видалити віддалений елемент?"
+
+msgid "Delete saved session?"
+msgstr "Видалити збережене з’єднання?"
+
 msgid "Delete server"
 msgstr "Видалити сервер"
 
@@ -399,6 +447,9 @@ msgstr "Видалити {0} і збережені облікові дані?"
 
 msgid "Delete {0}? Servers in this group will move to Ungrouped."
 msgstr "Видалити {0}? Сервери цієї групи буде переміщено до «Без групи»."
+
+msgid "Deletion cannot be undone. Directories must be empty."
+msgstr "Видалення неможливо скасувати. Каталоги мають бути порожніми."
 
 msgid "Deny"
 msgstr "Відхилити"
@@ -427,6 +478,12 @@ msgstr "Діагностика"
 msgid "Dialog and transient overlay tint"
 msgstr "Відтінок діалогів і тимчасових накладень"
 
+msgid "Discard"
+msgstr "Відкинути"
+
+msgid "Disconnect"
+msgstr "Від’єднати"
+
 msgid "Display mode"
 msgstr "Режим відображення"
 
@@ -439,6 +496,12 @@ msgstr "Завантажити"
 msgid "Download ({0})"
 msgstr "Завантажити ({0})"
 
+msgid "Download directory"
+msgstr "Папка завантажень"
+
+msgid "Download selected"
+msgstr "Завантажити вибране"
+
 msgid "Duplicate"
 msgstr "Дублювати"
 
@@ -450,6 +513,9 @@ msgstr "Редагувати"
 
 msgid "Edit Server"
 msgstr "Редагувати сервер"
+
+msgid "Edit externally"
+msgstr "Редагувати в зовнішній програмі"
 
 msgid "Edit path"
 msgstr "Редагувати шлях"
@@ -468,6 +534,9 @@ msgstr "Адреса з’єднання"
 
 msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
 msgstr "Введіть #RRGGBB або #RRGGBBAA. Під час збереження недостатній контраст буде замінено читабельними кольорами."
+
+msgid "Enter fresh credentials to connect or retry."
+msgstr "Повторно введіть облікові дані для з’єднання або нової спроби."
 
 msgid "Enter the Telnet server address."
 msgstr "Введіть адресу сервера Telnet."
@@ -490,8 +559,17 @@ msgstr "Шлях до виконуваного файлу"
 msgid "Executable used for new local terminal tabs"
 msgstr "Виконуваний файл для нових вкладок локального термінала"
 
+msgid "Existing group"
+msgstr "Наявна група"
+
 msgid "Existing session groups"
 msgstr "Наявні групи сеансів"
+
+msgid "Existing terminals stay open."
+msgstr "Відкриті термінали залишаться відкритими."
+
+msgid "Exit"
+msgstr "Вийти"
 
 msgid "Expand session sidebar"
 msgstr "Розгорнути бічну панель сеансів"
@@ -502,6 +580,9 @@ msgstr "Розгорнути передачі"
 msgid "Expand {0} group"
 msgstr "Розгорнути групу {0}"
 
+msgid "Expected key"
+msgstr "Очікуваний ключ"
+
 msgid "Export Selected"
 msgstr "Експортувати вибране"
 
@@ -510,6 +591,12 @@ msgstr "Сполучення клавіш для експорту вибрано
 
 msgid "Export Selected to Clipboard"
 msgstr "Експортувати вибране до буфера обміну"
+
+msgid "External edit maximum size (MiB)"
+msgstr "Максимальний розмір для зовнішнього редагування (MiB)"
+
+msgid "External editing"
+msgstr "Зовнішнє редагування"
 
 msgid "FPS"
 msgstr "FPS"
@@ -529,8 +616,17 @@ msgstr "Розміри областей файлів і передач"
 msgid "Filter system files"
 msgstr "Фільтрувати системні файли"
 
+msgid "Filter upload and download names"
+msgstr "Фільтрувати назви під час вивантаження та завантаження"
+
+msgid "Filters and edit limits apply after Save. Filters omit invalid names and keep up to 64 unique patterns."
+msgstr "Фільтри й обмеження редагування застосовуються після збереження. Некоректні назви пропускаються; зберігається до 64 унікальних шаблонів."
+
 msgid "Flow control"
 msgstr "Керування потоком"
+
+msgid "Focus pane"
+msgstr "Перевести фокус на панель"
 
 msgid "Focus rings, selection, and active indicators"
 msgstr "Обводки фокуса, виділення й активні індикатори"
@@ -568,6 +664,9 @@ msgstr "Загальна кількість одночасних надсила�
 msgid "Group"
 msgstr "Група"
 
+msgid "Group (empty for Ungrouped)"
+msgstr "Група (порожнє поле — Без групи)"
+
 msgid "Group name"
 msgstr "Назва групи"
 
@@ -580,8 +679,17 @@ msgstr "Довідка"
 msgid "Hidden"
 msgstr "Приховано"
 
+msgid "Hide AxSSH"
+msgstr "Сховати AxSSH"
+
+msgid "Hide Others"
+msgstr "Сховати інші"
+
 msgid "Host"
 msgstr "Вузол"
+
+msgid "Host key blocked by trust policy or changed during connection. Disconnect and check the server and known_hosts."
+msgstr "Ключ сервера заблоковано політикою довіри або він змінився під час з’єднання. Від’єднайтеся та перевірте сервер і known_hosts."
 
 msgid "Hover and secondary surfaces"
 msgstr "Вторинні поверхні й наведення"
@@ -631,6 +739,9 @@ msgstr "ЛОКАЛЬНИЙ X-СЕРВЕР"
 msgid "Language"
 msgstr "Мова"
 
+msgid "Language changes apply after Save."
+msgstr "Зміна мови застосовується після збереження."
+
 msgid "Language used by the AxSSH interface"
 msgstr "Мова інтерфейсу AxSSH"
 
@@ -651,6 +762,12 @@ msgstr "Світлий"
 
 msgid "Line height"
 msgstr "Висота рядка"
+
+msgid "List"
+msgstr "Показати список"
+
+msgid "Live preview"
+msgstr "Попередній перегляд"
 
 msgid "Loading"
 msgstr "Завантаження"
@@ -681,6 +798,9 @@ msgstr "Локальна копія для відкриття (MiB)"
 
 msgid "Local files"
 msgstr "Локальні файли"
+
+msgid "Local files · drop remote entries here to download"
+msgstr "Локальні файли · Перетягніть сюди віддалені об’єкти для завантаження"
 
 msgid "Local selection priority"
 msgstr "Пріоритет локального виділення"
@@ -721,6 +841,9 @@ msgstr "Максимальний розмір файлу SFTP у GiB"
 msgid "Maximum file size (GiB)"
 msgstr "Максимальний розмір файлу (GiB)"
 
+msgid "Maximum file size (GiB, 0 = unlimited)"
+msgstr "Максимальний розмір файлу (GiB, 0 = без обмежень)"
+
 msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
 msgstr "Максимальний розмір файлу для завантаження й надсилання під час зовнішнього редагування; типово 4 MiB, діапазон 1–64 MiB"
 
@@ -739,6 +862,9 @@ msgstr "Згорнути вікно"
 msgid "Modified"
 msgstr "Змінено"
 
+msgid "Modifier keys"
+msgstr "Клавіші-модифікатори"
+
 msgid "Mono (1)"
 msgstr "Моно (1)"
 
@@ -751,8 +877,17 @@ msgstr "Ще"
 msgid "Move Current Workspace to New Window"
 msgstr "Перемістити поточну робочу область до нового вікна"
 
+msgid "Move Tab Left"
+msgstr "Перемістити вкладку ліворуч"
+
+msgid "Move Tab Right"
+msgstr "Перемістити вкладку праворуч"
+
 msgid "Move to line start after each wheel step in alternate-screen apps"
 msgstr "Переходити на початок рядка після кожного кроку коліщатка в програмах з альтернативним екраном"
+
+msgid "Move to line start when scrolling the alternate screen"
+msgstr "Переходити на початок рядка під час прокручування альтернативного екрана"
 
 msgid "Move workspace to new window"
 msgstr "Перемістити робочу область до нового вікна"
@@ -766,6 +901,9 @@ msgstr "Назва"
 msgid "Navigation and title surfaces"
 msgstr "Поверхні навігації та заголовків"
 
+msgid "New Connection"
+msgstr "Нове підключення"
+
 msgid "New Group"
 msgstr "Нова група"
 
@@ -777,6 +915,9 @@ msgstr "Новий сервер"
 
 msgid "New Server shortcut"
 msgstr "Сполучення клавіш для нового сервера"
+
+msgid "New Server…"
+msgstr "Новий сервер…"
 
 msgid "New group"
 msgstr "Нова група"
@@ -829,6 +970,9 @@ msgstr "Один шаблон на рядок; * відповідає будь-�
 msgid "Open"
 msgstr "Відкрити"
 
+msgid "Open / Save Workspace…"
+msgstr "Відкрити / зберегти робочий простір…"
+
 msgid "Open Recent"
 msgstr "Відкрити нещодавні"
 
@@ -858,6 +1002,9 @@ msgstr "Відкрити локальну оболонку"
 
 msgid "Open log folder"
 msgstr "Відкрити теку журналів"
+
+msgid "Open replaces the current layout after saving it. Recovered terminals wait for explicit connection."
+msgstr "Під час відкриття поточне компонування зберігається та замінюється. Відновлені термінали очікують явного з’єднання."
 
 msgid "Open saved connection"
 msgstr "Відкрити збережене з’єднання"
@@ -906,6 +1053,12 @@ msgstr "Контроль парності"
 
 msgid "Password"
 msgstr "Пароль"
+
+msgid "Password / key passphrase (empty for agent)"
+msgstr "Пароль / пароль ключа (порожнє поле для агента)"
+
+msgid "Password / passphrase"
+msgstr "Пароль / парольна фраза"
 
 msgid "Password authentication"
 msgstr "Автентифікація за паролем"
@@ -976,8 +1129,20 @@ msgstr "Протокол"
 msgid "Provider"
 msgstr "Постачальник"
 
+msgid "Queued ({0})"
+msgstr "У черзі ({0})"
+
+msgid "Quit"
+msgstr "Вийти"
+
+msgid "Quit AxSSH"
+msgstr "Вийти з AxSSH"
+
 msgid "RENDERING"
 msgstr "ВІДТВОРЕННЯ"
+
+msgid "Reading local directory…"
+msgstr "Читання локальної папки…"
 
 msgid "Reduce terminal items and omit default background rectangles"
 msgstr "Зменшити кількість елементів термінала й не малювати прямокутники типового тла"
@@ -1018,11 +1183,20 @@ msgstr "Віддалений файл: {0} - Змінено: {1}"
 msgid "Remote files"
 msgstr "Віддалені файли"
 
+msgid "Remote files · drop local files or folders here to upload"
+msgstr "Віддалені файли · Перетягніть сюди локальні файли чи папки для передавання"
+
+msgid "Remote path"
+msgstr "Віддалений шлях"
+
 msgid "Remote sample rate"
 msgstr "Віддалена частота дискретизації"
 
 msgid "Remove"
 msgstr "Прибрати"
+
+msgid "Remove group (keep sessions)"
+msgstr "Видалити групу (зберегти з’єднання)"
 
 msgid "Remove revoked record"
 msgstr "Видалити відкликаний запис"
@@ -1045,6 +1219,9 @@ msgstr "Засіб відтворення"
 msgid "Rendering backend"
 msgstr "Механізм відтворення"
 
+msgid "Reopen editor"
+msgstr "Знову відкрити редактор"
+
 msgid "Report a bug"
 msgstr "Повідомити про помилку"
 
@@ -1053,6 +1230,9 @@ msgstr "Відновити типові налаштування"
 
 msgid "Reset filters"
 msgstr "Скинути фільтри"
+
+msgid "Reset filters to platform defaults"
+msgstr "Відновити типові фільтри платформи"
 
 msgid "Restart"
 msgstr "Перезапустити"
@@ -1086,6 +1266,9 @@ msgstr "Повернути робочу область до головного �
 
 msgid "Reuse GPU row layers; may increase graphics memory"
 msgstr "Повторно використовувати шари рядків GPU; може збільшити використання відеопам’яті"
+
+msgid "Revert"
+msgstr "Повернути"
 
 msgid "Review before sharing"
 msgstr "Перевірити перед надсиланням"
@@ -1177,8 +1360,14 @@ msgstr "Зберегти пароль SSH для майбутніх з’єдн�
 msgid "Save Workspace"
 msgstr "Зберегти робочу область"
 
+msgid "Save Workspace As…"
+msgstr "Зберегти робочу область як…"
+
 msgid "Save audio settings"
 msgstr "Зберегти налаштування аудіо"
+
+msgid "Save in the system application. Copies remain available after editing stops."
+msgstr "Збережіть файл у системній програмі. Копії залишаються доступними після завершення редагування."
 
 msgid "Save password (optional)"
 msgstr "Зберегти пароль (необов’язково)"
@@ -1189,6 +1378,18 @@ msgstr "Зберігати пароль у"
 msgid "Save session"
 msgstr "Зберегти сеанс"
 
+msgid "Save settings changes?"
+msgstr "Зберегти зміни налаштувань?"
+
+msgid "Saved"
+msgstr "Збережено"
+
+msgid "Saved connection"
+msgstr "Збережене з’єднання"
+
+msgid "Saved connection details; passwords and passphrases are entered when connecting."
+msgstr "Збережені параметри з’єднання; паролі та парольні фрази вводяться під час з’єднання."
+
 msgid "Saved connections"
 msgstr "Збережені з’єднання"
 
@@ -1197,6 +1398,9 @@ msgstr "Збережено в {0}."
 
 msgid "Saved password"
 msgstr "Збережений пароль"
+
+msgid "Saving…"
+msgstr "Збереження…"
 
 msgid "Scrollback"
 msgstr "Історія термінала"
@@ -1288,6 +1492,9 @@ msgstr "Сеанс завершено"
 msgid "Session group"
 msgstr "Група сеансів"
 
+msgid "Session list changed. Close and reopen this editor to use the latest version."
+msgstr "Список з’єднань змінився. Закрийте та знову відкрийте редактор, щоб використовувати останню версію."
+
 msgid "Session mask character"
 msgstr "Символ маскування сеансів"
 
@@ -1309,11 +1516,17 @@ msgstr "Налаштування"
 msgid "Settings..."
 msgstr "Налаштування…"
 
+msgid "Settings…"
+msgstr "Налаштування…"
+
 msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
 msgstr "Спільне для надсилання й завантаження в кожній вкладці SFTP; 0 — без обмежень"
 
 msgid "Shortcuts"
 msgstr "Сполучення клавіш"
+
+msgid "Show All"
+msgstr "Показати всі"
 
 msgid "Show a blinking cursor while the terminal is focused"
 msgstr "Показувати миготливий курсор, коли термінал у фокусі"
@@ -1335,6 +1548,9 @@ msgstr "Пропустити"
 
 msgid "Skip matching names during SFTP uploads and downloads"
 msgstr "Пропускати відповідні імена під час надсилання й завантаження SFTP"
+
+msgid "Skip platform metadata files"
+msgstr "Пропускати файли метаданих платформи"
 
 msgid "Skipped"
 msgstr "Пропущено"
@@ -1363,8 +1579,17 @@ msgstr "Сортувати за назвою"
 msgid "Sort by size"
 msgstr "Сортувати за розміром"
 
+msgid "Source and licenses"
+msgstr "Початковий код і ліцензії"
+
 msgid "Speed"
 msgstr "Швидкість"
+
+msgid "Split Columns"
+msgstr "Розділити на стовпці"
+
+msgid "Split Rows"
+msgstr "Розділити на рядки"
 
 msgid "Split active terminal horizontally"
 msgstr "Розділити активний термінал горизонтально"
@@ -1411,6 +1636,10 @@ msgstr "Системне сховище облікових даних"
 msgid "System icon"
 msgstr "Піктограма системи"
 
+#. egui system icon appearance setting
+msgid "System icons follow theme"
+msgstr "Системні піктограми відповідають темі"
+
 msgid "TERMINAL"
 msgstr "ТЕРМІНАЛ"
 
@@ -1431,6 +1660,9 @@ msgstr "Протокол Telnet"
 
 msgid "Telnet sends terminal traffic without encryption or host identity verification."
 msgstr "Telnet передає дані термінала без шифрування та перевірки справжності вузла."
+
+msgid "Temporary; replaces this terminal. Credentials are not saved."
+msgstr "Тимчасове з’єднання; замінює цей термінал. Облікові дані не зберігаються."
 
 msgid "Terminal"
 msgstr "Термінал"
@@ -1467,6 +1699,9 @@ msgstr "Висота панелей термінала"
 
 msgid "Terminal pane widths"
 msgstr "Ширина панелей термінала"
+
+msgid "Terminal preview"
+msgstr "Попередній перегляд термінала"
 
 msgid "Terminal scrollback lines"
 msgstr "Рядки історії термінала"
@@ -1516,6 +1751,9 @@ msgstr "Довіряти й продовжити"
 msgid "Trust new key"
 msgstr "Довіряти новому ключу"
 
+msgid "Trust once and connect"
+msgstr "Довіряти один раз і з’єднатися"
+
 msgid "Trusted (-Y)"
 msgstr "Довірений (-Y)"
 
@@ -1525,11 +1763,17 @@ msgstr "Частота оновлення без фокуса"
 msgid "Unfocused terminal refresh rate"
 msgstr "Частота оновлення термінала без фокуса"
 
+msgid "Ungrouped"
+msgstr "Без групи"
+
 msgid "Unknown SSH host key"
 msgstr "Невідомий ключ вузла SSH"
 
 msgid "Unlock encrypted credentials"
 msgstr "Розблокувати зашифровані облікові дані"
+
+msgid "Unsaved changes"
+msgstr "Незбережені зміни"
 
 msgid "Untrusted (-X)"
 msgstr "Недовірений (-X)"
@@ -1545,6 +1789,21 @@ msgstr "Надіслати ({0})"
 
 msgid "Upload changes"
 msgstr "Надіслати зміни"
+
+msgid "Upload file"
+msgstr "Передати файл"
+
+msgid "Upload saved changes automatically"
+msgstr "Автоматично передавати збережені зміни"
+
+msgid "Upload selected"
+msgstr "Вивантажити вибране"
+
+msgid "Use System default for the platform shell; otherwise enter an executable path."
+msgstr "Для системної оболонки вкажіть System default; інакше введіть шлях до виконуваного файлу."
+
+msgid "Use for upload"
+msgstr "Використати для передавання"
 
 msgid "Use platform default filters"
 msgstr "Використовувати типові фільтри платформи"
@@ -1567,8 +1826,15 @@ msgstr "Ім’я користувача"
 msgid "Uses the host system by default. Changes are saved immediately."
 msgstr "Типово використовується система вузла. Зміни зберігаються одразу."
 
+#. egui system icon appearance setting
+msgid "Uses the host system by default. Save applies the selection."
+msgstr "Типово використовується система хоста. Вибір застосовується після збереження."
+
 msgid "Vault password"
 msgstr "Пароль сховища"
+
+msgid "Verify the fingerprint with the server owner before trusting it for this connection."
+msgstr "Звірте відбиток із власником сервера, перш ніж довіряти йому для цього з’єднання."
 
 msgid "Version {0}"
 msgstr "Версія {0}"
@@ -1581,6 +1847,9 @@ msgstr "Оновлення видимого термінала, коли інш�
 
 msgid "WORKSPACE"
 msgstr "РОБОЧА ОБЛАСТЬ"
+
+msgid "Waiting for server…"
+msgstr "Очікування сервера…"
 
 msgid "Warning"
 msgstr "Попередження"
@@ -1611,6 +1880,9 @@ msgstr "X11"
 
 msgid "X11 forwarding"
 msgstr "Перенаправлення X11"
+
+msgid "columns"
+msgstr "стовпців"
 
 msgid "lines"
 msgstr "рядків"

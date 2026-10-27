@@ -76,6 +76,9 @@ msgstr "Acerca de AxSSH"
 msgid "Accent / focus"
 msgstr "Acento / foco"
 
+msgid "Add"
+msgstr "Añadir"
+
 msgid "Add Server"
 msgstr "Añadir servidor"
 
@@ -84,6 +87,9 @@ msgstr "Permitir"
 
 msgid "Allow local connections without X authority"
 msgstr "Permitir conexiones locales sin autorización X"
+
+msgid "Allow microphone forwarding for this connection"
+msgstr "Permitir el reenvío del micrófono para esta conexión"
 
 msgid "Allow remote OSC 52 clipboard access"
 msgstr "Permitir acceso remoto al portapapeles mediante OSC 52"
@@ -133,6 +139,9 @@ msgstr "Subida automática"
 msgid "Automatic"
 msgstr "Automático"
 
+msgid "Automatically retry (up to 5 attempts; fresh SSH credentials when needed)"
+msgstr "Reintentar automáticamente (hasta 5 intentos; nuevas credenciales SSH cuando sea necesario)"
+
 msgid "AxSSH"
 msgstr "AxSSH"
 
@@ -151,8 +160,14 @@ msgstr "Límite de ancho de banda (MiB/s)"
 msgid "Bandwidth limit (MiB/s; 0 unlimited)"
 msgstr "Límite de ancho de banda (MiB/s; 0 = sin límite)"
 
+msgid "Baud (8N1, no flow control)"
+msgstr "Baudios (8N1, sin control de flujo)"
+
 msgid "Baud rate"
 msgstr "Velocidad en baudios"
+
+msgid "Behavior changes apply after Save. Default size and shell apply to new terminals."
+msgstr "Los cambios de comportamiento se aplican al guardar. El tamaño y shell predeterminados se usan en terminales nuevos."
 
 msgid "Blink terminal cursor"
 msgstr "Hacer parpadear el cursor del terminal"
@@ -162,6 +177,9 @@ msgstr "Borde"
 
 msgid "Bright colors for bold text"
 msgstr "Colores brillantes para texto en negrita"
+
+msgid "Browse local"
+msgstr "Explorar archivos locales"
 
 msgid "Bug reports"
 msgstr "Informes de errores"
@@ -187,8 +205,14 @@ msgstr "Guardar en caché las filas de terminal sin cambios"
 msgid "Cancel"
 msgstr "Cancelar"
 
+msgid "Cancel / disconnect"
+msgstr "Cancelar / desconectar"
+
 msgid "Cancel selected"
 msgstr "Cancelar seleccionadas"
+
+msgid "Cancel upload preparation"
+msgstr "Cancelar preparación de la subida"
 
 msgid "Cancel {0}"
 msgstr "Cancelar {0}"
@@ -229,11 +253,17 @@ msgstr "¿Borrar ahora la contraseña guardada de {0}? El cambio es inmediato. L
 msgid "Close"
 msgstr "Cerrar"
 
+msgid "Close / discard draft"
+msgstr "Cerrar / descartar borrador"
+
 msgid "Close Current Tab"
 msgstr "Cerrar pestaña actual"
 
 msgid "Close Window"
 msgstr "Cerrar ventana"
+
+msgid "Close pane"
+msgstr "Cerrar panel"
 
 msgid "Close tab"
 msgstr "Cerrar pestaña"
@@ -255,6 +285,9 @@ msgstr "Paleta de colores"
 
 msgid "Compact terminal rendering"
 msgstr "Renderizado compacto del terminal"
+
+msgid "Concurrent transfers per connection"
+msgstr "Transferencias simultáneas por conexión"
 
 msgid "Connect"
 msgstr "Conectar"
@@ -280,8 +313,14 @@ msgstr "Conectado · Tiempo de espera agotado al medir latencia SSH"
 msgid "Connected · SSH latency unavailable"
 msgstr "Conectado · Latencia SSH no disponible"
 
+msgid "Connection"
+msgstr "Conexión"
+
 msgid "Connection failed"
 msgstr "Error de conexión"
+
+msgid "Connection limits apply on the next SFTP connection. Saved server overrides take precedence."
+msgstr "Los límites se aplican en la próxima conexión SFTP. La configuración específica del servidor tiene prioridad."
 
 msgid "Connection lost"
 msgstr "Conexión perdida"
@@ -343,6 +382,9 @@ msgstr "Ejecutable personalizado"
 msgid "Custom filename patterns"
 msgstr "Patrones de nombres de archivo personalizados"
 
+msgid "Custom filters: one name pattern per line; * matches any characters."
+msgstr "Filtros personalizados: un patrón de nombre por línea; * coincide con cualquier secuencia de caracteres."
+
 msgid "Cut"
 msgstr "Cortar"
 
@@ -391,6 +433,12 @@ msgstr "Eliminar servidor"
 msgid "Delete group"
 msgstr "Eliminar grupo"
 
+msgid "Delete remote entry?"
+msgstr "¿Eliminar la entrada remota?"
+
+msgid "Delete saved session?"
+msgstr "¿Eliminar la conexión guardada?"
+
 msgid "Delete server"
 msgstr "Eliminar servidor"
 
@@ -399,6 +447,9 @@ msgstr "¿Eliminar {0} y sus credenciales guardadas?"
 
 msgid "Delete {0}? Servers in this group will move to Ungrouped."
 msgstr "¿Eliminar {0}? Los servidores de este grupo pasarán a Sin grupo."
+
+msgid "Deletion cannot be undone. Directories must be empty."
+msgstr "La eliminación no se puede deshacer. Los directorios deben estar vacíos."
 
 msgid "Deny"
 msgstr "Denegar"
@@ -427,6 +478,12 @@ msgstr "Diagnóstico"
 msgid "Dialog and transient overlay tint"
 msgstr "Tinte de diálogos y capas temporales"
 
+msgid "Discard"
+msgstr "Descartar"
+
+msgid "Disconnect"
+msgstr "Desconectar"
+
 msgid "Display mode"
 msgstr "Modo de visualización"
 
@@ -439,6 +496,12 @@ msgstr "Descargar"
 msgid "Download ({0})"
 msgstr "Descargar ({0})"
 
+msgid "Download directory"
+msgstr "Carpeta de descarga"
+
+msgid "Download selected"
+msgstr "Descargar selección"
+
 msgid "Duplicate"
 msgstr "Duplicar"
 
@@ -450,6 +513,9 @@ msgstr "Editar"
 
 msgid "Edit Server"
 msgstr "Editar servidor"
+
+msgid "Edit externally"
+msgstr "Editar externamente"
 
 msgid "Edit path"
 msgstr "Editar ruta"
@@ -468,6 +534,9 @@ msgstr "Destino"
 
 msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
 msgstr "Introduzca valores #RRGGBB o #RRGGBBAA. Un contraste insuficiente se sustituye por colores legibles al guardar."
+
+msgid "Enter fresh credentials to connect or retry."
+msgstr "Introduzca de nuevo las credenciales para conectar o reintentar."
 
 msgid "Enter the Telnet server address."
 msgstr "Introduzca la dirección del servidor Telnet."
@@ -490,8 +559,17 @@ msgstr "Ruta del ejecutable"
 msgid "Executable used for new local terminal tabs"
 msgstr "Ejecutable usado para nuevas pestañas de terminal local"
 
+msgid "Existing group"
+msgstr "Grupo existente"
+
 msgid "Existing session groups"
 msgstr "Grupos de sesiones existentes"
+
+msgid "Existing terminals stay open."
+msgstr "Los terminales existentes permanecerán abiertos."
+
+msgid "Exit"
+msgstr "Salir"
 
 msgid "Expand session sidebar"
 msgstr "Expandir barra lateral de sesiones"
@@ -502,6 +580,9 @@ msgstr "Expandir transferencias"
 msgid "Expand {0} group"
 msgstr "Expandir grupo {0}"
 
+msgid "Expected key"
+msgstr "Clave esperada"
+
 msgid "Export Selected"
 msgstr "Exportar selección"
 
@@ -510,6 +591,12 @@ msgstr "Atajo Exportar selección"
 
 msgid "Export Selected to Clipboard"
 msgstr "Exportar selección al portapapeles"
+
+msgid "External edit maximum size (MiB)"
+msgstr "Tamaño máximo para edición externa (MiB)"
+
+msgid "External editing"
+msgstr "Edición externa"
 
 msgid "FPS"
 msgstr "FPS"
@@ -529,8 +616,17 @@ msgstr "Tamaños de áreas de archivos y transferencias"
 msgid "Filter system files"
 msgstr "Filtrar archivos del sistema"
 
+msgid "Filter upload and download names"
+msgstr "Filtrar nombres en cargas y descargas"
+
+msgid "Filters and edit limits apply after Save. Filters omit invalid names and keep up to 64 unique patterns."
+msgstr "Los filtros y límites de edición se aplican al guardar. Se omiten nombres no válidos y se conservan hasta 64 patrones únicos."
+
 msgid "Flow control"
 msgstr "Control de flujo"
+
+msgid "Focus pane"
+msgstr "Enfocar panel"
 
 msgid "Focus rings, selection, and active indicators"
 msgstr "Contornos de foco, selección e indicadores activos"
@@ -568,6 +664,9 @@ msgstr "Subidas simultáneas globales"
 msgid "Group"
 msgstr "Grupo"
 
+msgid "Group (empty for Ungrouped)"
+msgstr "Grupo (vacío para Sin grupo)"
+
 msgid "Group name"
 msgstr "Nombre del grupo"
 
@@ -580,8 +679,17 @@ msgstr "Ayuda"
 msgid "Hidden"
 msgstr "Oculto"
 
+msgid "Hide AxSSH"
+msgstr "Ocultar AxSSH"
+
+msgid "Hide Others"
+msgstr "Ocultar otros"
+
 msgid "Host"
 msgstr "Host"
+
+msgid "Host key blocked by trust policy or changed during connection. Disconnect and check the server and known_hosts."
+msgstr "La política de confianza ha bloqueado la clave del servidor o esta ha cambiado durante la conexión. Desconecte y compruebe el servidor y known_hosts."
 
 msgid "Hover and secondary surfaces"
 msgstr "Superficies secundarias y al pasar el cursor"
@@ -631,6 +739,9 @@ msgstr "SERVIDOR X LOCAL"
 msgid "Language"
 msgstr "Idioma"
 
+msgid "Language changes apply after Save."
+msgstr "El cambio de idioma se aplica al guardar."
+
 msgid "Language used by the AxSSH interface"
 msgstr "Idioma usado por la interfaz de AxSSH"
 
@@ -651,6 +762,12 @@ msgstr "Claro"
 
 msgid "Line height"
 msgstr "Altura de línea"
+
+msgid "List"
+msgstr "Listar"
+
+msgid "Live preview"
+msgstr "Vista previa en tiempo real"
 
 msgid "Loading"
 msgstr "Cargando"
@@ -681,6 +798,9 @@ msgstr "Copia local para abrir archivos (MiB)"
 
 msgid "Local files"
 msgstr "Archivos locales"
+
+msgid "Local files · drop remote entries here to download"
+msgstr "Archivos locales · Suelte aquí elementos remotos para descargarlos"
 
 msgid "Local selection priority"
 msgstr "Prioridad de selección local"
@@ -721,6 +841,9 @@ msgstr "Tamaño máximo de archivos SFTP en GiB"
 msgid "Maximum file size (GiB)"
 msgstr "Tamaño máximo de archivo (GiB)"
 
+msgid "Maximum file size (GiB, 0 = unlimited)"
+msgstr "Tamaño máximo de archivo (GiB, 0 = sin límite)"
+
 msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
 msgstr "Tamaño máximo de un archivo descargado o subido para edición externa; 4 MiB por defecto, de 1 a 64 MiB"
 
@@ -739,6 +862,9 @@ msgstr "Minimizar ventana"
 msgid "Modified"
 msgstr "Modificado"
 
+msgid "Modifier keys"
+msgstr "Teclas modificadoras"
+
 msgid "Mono (1)"
 msgstr "Mono (1)"
 
@@ -751,8 +877,17 @@ msgstr "Más"
 msgid "Move Current Workspace to New Window"
 msgstr "Mover espacio de trabajo actual a una ventana nueva"
 
+msgid "Move Tab Left"
+msgstr "Mover pestaña a la izquierda"
+
+msgid "Move Tab Right"
+msgstr "Mover pestaña a la derecha"
+
 msgid "Move to line start after each wheel step in alternate-screen apps"
 msgstr "Ir al inicio de línea tras cada paso de rueda en aplicaciones de pantalla alternativa"
+
+msgid "Move to line start when scrolling the alternate screen"
+msgstr "Ir al inicio de línea al desplazar la pantalla alternativa"
 
 msgid "Move workspace to new window"
 msgstr "Mover espacio de trabajo a una ventana nueva"
@@ -766,6 +901,9 @@ msgstr "Nombre"
 msgid "Navigation and title surfaces"
 msgstr "Superficies de navegación y título"
 
+msgid "New Connection"
+msgstr "Nueva conexión"
+
 msgid "New Group"
 msgstr "Nuevo grupo"
 
@@ -777,6 +915,9 @@ msgstr "Nuevo servidor"
 
 msgid "New Server shortcut"
 msgstr "Atajo Nuevo servidor"
+
+msgid "New Server…"
+msgstr "Nuevo servidor…"
 
 msgid "New group"
 msgstr "Nuevo grupo"
@@ -829,6 +970,9 @@ msgstr "Un patrón por línea; * coincide con cualquier carácter"
 msgid "Open"
 msgstr "Abrir"
 
+msgid "Open / Save Workspace…"
+msgstr "Abrir / guardar espacio de trabajo…"
+
 msgid "Open Recent"
 msgstr "Abrir recientes"
 
@@ -858,6 +1002,9 @@ msgstr "Abrir shell local"
 
 msgid "Open log folder"
 msgstr "Abrir carpeta de registros"
+
+msgid "Open replaces the current layout after saving it. Recovered terminals wait for explicit connection."
+msgstr "Abrir sustituye la disposición actual después de guardarla. Los terminales restaurados esperan una conexión explícita."
 
 msgid "Open saved connection"
 msgstr "Abrir conexión guardada"
@@ -906,6 +1053,12 @@ msgstr "Paridad"
 
 msgid "Password"
 msgstr "Contraseña"
+
+msgid "Password / key passphrase (empty for agent)"
+msgstr "Contraseña / frase de paso de la clave (vacío para el agente)"
+
+msgid "Password / passphrase"
+msgstr "Contraseña / frase de paso"
 
 msgid "Password authentication"
 msgstr "Autenticación por contraseña"
@@ -976,8 +1129,20 @@ msgstr "Protocolo"
 msgid "Provider"
 msgstr "Proveedor"
 
+msgid "Queued ({0})"
+msgstr "En cola ({0})"
+
+msgid "Quit"
+msgstr "Salir"
+
+msgid "Quit AxSSH"
+msgstr "Salir de AxSSH"
+
 msgid "RENDERING"
 msgstr "RENDERIZADO"
+
+msgid "Reading local directory…"
+msgstr "Leyendo carpeta local…"
 
 msgid "Reduce terminal items and omit default background rectangles"
 msgstr "Reducir elementos del terminal y omitir rectángulos del fondo predeterminado"
@@ -1018,11 +1183,20 @@ msgstr "Archivo remoto: {0} - Modificado: {1}"
 msgid "Remote files"
 msgstr "Archivos remotos"
 
+msgid "Remote files · drop local files or folders here to upload"
+msgstr "Archivos remotos · Suelte aquí archivos o carpetas locales para subirlos"
+
+msgid "Remote path"
+msgstr "Ruta remota"
+
 msgid "Remote sample rate"
 msgstr "Frecuencia de muestreo remota"
 
 msgid "Remove"
 msgstr "Quitar"
+
+msgid "Remove group (keep sessions)"
+msgstr "Eliminar grupo (conservar conexiones)"
 
 msgid "Remove revoked record"
 msgstr "Quitar registro revocado"
@@ -1045,6 +1219,9 @@ msgstr "Motor de renderizado"
 msgid "Rendering backend"
 msgstr "Motor de renderizado"
 
+msgid "Reopen editor"
+msgstr "Volver a abrir el editor"
+
 msgid "Report a bug"
 msgstr "Informar de un error"
 
@@ -1053,6 +1230,9 @@ msgstr "Restablecer valores predeterminados"
 
 msgid "Reset filters"
 msgstr "Restablecer filtros"
+
+msgid "Reset filters to platform defaults"
+msgstr "Restablecer filtros predeterminados de la plataforma"
 
 msgid "Restart"
 msgstr "Reiniciar"
@@ -1086,6 +1266,9 @@ msgstr "Devolver espacio de trabajo a la ventana principal"
 
 msgid "Reuse GPU row layers; may increase graphics memory"
 msgstr "Reutilizar capas GPU de las filas; puede aumentar la memoria gráfica"
+
+msgid "Revert"
+msgstr "Revertir"
 
 msgid "Review before sharing"
 msgstr "Revisar antes de compartir"
@@ -1177,8 +1360,14 @@ msgstr "Guardar contraseña SSH para futuras conexiones"
 msgid "Save Workspace"
 msgstr "Guardar espacio de trabajo"
 
+msgid "Save Workspace As…"
+msgstr "Guardar espacio de trabajo como…"
+
 msgid "Save audio settings"
 msgstr "Guardar ajustes de audio"
+
+msgid "Save in the system application. Copies remain available after editing stops."
+msgstr "Guarde en la aplicación del sistema. Las copias siguen disponibles al terminar la edición."
 
 msgid "Save password (optional)"
 msgstr "Guardar contraseña (opcional)"
@@ -1189,6 +1378,18 @@ msgstr "Guardar contraseña en"
 msgid "Save session"
 msgstr "Guardar sesión"
 
+msgid "Save settings changes?"
+msgstr "¿Guardar los cambios de configuración?"
+
+msgid "Saved"
+msgstr "Guardado"
+
+msgid "Saved connection"
+msgstr "Conexión guardada"
+
+msgid "Saved connection details; passwords and passphrases are entered when connecting."
+msgstr "Datos de conexión guardados; las contraseñas y frases de paso se introducen al conectar."
+
 msgid "Saved connections"
 msgstr "Conexiones guardadas"
 
@@ -1197,6 +1398,9 @@ msgstr "Guardado en {0}."
 
 msgid "Saved password"
 msgstr "Contraseña guardada"
+
+msgid "Saving…"
+msgstr "Guardando…"
 
 msgid "Scrollback"
 msgstr "Historial del terminal"
@@ -1288,6 +1492,9 @@ msgstr "Sesión finalizada"
 msgid "Session group"
 msgstr "Grupo de sesiones"
 
+msgid "Session list changed. Close and reopen this editor to use the latest version."
+msgstr "La lista de conexiones ha cambiado. Cierre y vuelva a abrir el editor para usar la versión más reciente."
+
 msgid "Session mask character"
 msgstr "Carácter de ocultación de sesiones"
 
@@ -1309,11 +1516,17 @@ msgstr "Ajustes"
 msgid "Settings..."
 msgstr "Ajustes…"
 
+msgid "Settings…"
+msgstr "Configuración…"
+
 msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
 msgstr "Compartido por subidas y descargas de cada pestaña SFTP; 0 = sin límite"
 
 msgid "Shortcuts"
 msgstr "Atajos"
+
+msgid "Show All"
+msgstr "Mostrar todo"
 
 msgid "Show a blinking cursor while the terminal is focused"
 msgstr "Mostrar un cursor parpadeante cuando el terminal tiene el foco"
@@ -1335,6 +1548,9 @@ msgstr "Omitir"
 
 msgid "Skip matching names during SFTP uploads and downloads"
 msgstr "Omitir nombres coincidentes durante subidas y descargas SFTP"
+
+msgid "Skip platform metadata files"
+msgstr "Omitir archivos de metadatos de la plataforma"
 
 msgid "Skipped"
 msgstr "Omitido"
@@ -1363,8 +1579,17 @@ msgstr "Ordenar por nombre"
 msgid "Sort by size"
 msgstr "Ordenar por tamaño"
 
+msgid "Source and licenses"
+msgstr "Código fuente y licencias"
+
 msgid "Speed"
 msgstr "Velocidad"
+
+msgid "Split Columns"
+msgstr "Dividir en columnas"
+
+msgid "Split Rows"
+msgstr "Dividir en filas"
 
 msgid "Split active terminal horizontally"
 msgstr "Dividir terminal activo horizontalmente"
@@ -1411,6 +1636,10 @@ msgstr "Almacén de credenciales del sistema"
 msgid "System icon"
 msgstr "Icono del sistema"
 
+#. egui system icon appearance setting
+msgid "System icons follow theme"
+msgstr "Los iconos del sistema siguen el tema"
+
 msgid "TERMINAL"
 msgstr "TERMINAL"
 
@@ -1431,6 +1660,9 @@ msgstr "Protocolo Telnet"
 
 msgid "Telnet sends terminal traffic without encryption or host identity verification."
 msgstr "Telnet envía el tráfico del terminal sin cifrado ni verificación de identidad del host."
+
+msgid "Temporary; replaces this terminal. Credentials are not saved."
+msgstr "Temporal; sustituye este terminal. Las credenciales no se guardan."
 
 msgid "Terminal"
 msgstr "Terminal"
@@ -1467,6 +1699,9 @@ msgstr "Altura de paneles del terminal"
 
 msgid "Terminal pane widths"
 msgstr "Ancho de paneles del terminal"
+
+msgid "Terminal preview"
+msgstr "Vista previa del terminal"
 
 msgid "Terminal scrollback lines"
 msgstr "Líneas del historial del terminal"
@@ -1516,6 +1751,9 @@ msgstr "Confiar y continuar"
 msgid "Trust new key"
 msgstr "Confiar en la nueva clave"
 
+msgid "Trust once and connect"
+msgstr "Confiar una vez y conectar"
+
 msgid "Trusted (-Y)"
 msgstr "De confianza (-Y)"
 
@@ -1525,11 +1763,17 @@ msgstr "Frecuencia de actualización sin foco"
 msgid "Unfocused terminal refresh rate"
 msgstr "Frecuencia de actualización del terminal sin foco"
 
+msgid "Ungrouped"
+msgstr "Sin grupo"
+
 msgid "Unknown SSH host key"
 msgstr "Clave de host SSH desconocida"
 
 msgid "Unlock encrypted credentials"
 msgstr "Desbloquear credenciales cifradas"
+
+msgid "Unsaved changes"
+msgstr "Cambios sin guardar"
 
 msgid "Untrusted (-X)"
 msgstr "No confiable (-X)"
@@ -1545,6 +1789,21 @@ msgstr "Subir ({0})"
 
 msgid "Upload changes"
 msgstr "Subir cambios"
+
+msgid "Upload file"
+msgstr "Subir archivo"
+
+msgid "Upload saved changes automatically"
+msgstr "Subir automáticamente los cambios guardados"
+
+msgid "Upload selected"
+msgstr "Subir selección"
+
+msgid "Use System default for the platform shell; otherwise enter an executable path."
+msgstr "Use System default para el shell de la plataforma; de lo contrario, indique la ruta de un ejecutable."
+
+msgid "Use for upload"
+msgstr "Usar para subir"
 
 msgid "Use platform default filters"
 msgstr "Usar filtros predeterminados de la plataforma"
@@ -1567,8 +1826,15 @@ msgstr "Usuario"
 msgid "Uses the host system by default. Changes are saved immediately."
 msgstr "Usa el sistema del host por defecto. Los cambios se guardan inmediatamente."
 
+#. egui system icon appearance setting
+msgid "Uses the host system by default. Save applies the selection."
+msgstr "Se usa el sistema anfitrión de forma predeterminada. Guardar aplica la selección."
+
 msgid "Vault password"
 msgstr "Contraseña de la bóveda"
+
+msgid "Verify the fingerprint with the server owner before trusting it for this connection."
+msgstr "Verifique la huella con el administrador del servidor antes de confiar en ella para esta conexión."
 
 msgid "Version {0}"
 msgstr "Versión {0}"
@@ -1581,6 +1847,9 @@ msgstr "Actualizaciones del terminal visible cuando otro panel tiene el foco"
 
 msgid "WORKSPACE"
 msgstr "ESPACIO DE TRABAJO"
+
+msgid "Waiting for server…"
+msgstr "Esperando al servidor…"
 
 msgid "Warning"
 msgstr "Advertencia"
@@ -1611,6 +1880,9 @@ msgstr "X11"
 
 msgid "X11 forwarding"
 msgstr "Reenvío X11"
+
+msgid "columns"
+msgstr "columnas"
 
 msgid "lines"
 msgstr "líneas"

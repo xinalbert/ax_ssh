@@ -19,13 +19,18 @@ AxSSH includes English source text and eleven bundled catalogs:
 | `zh-CN` | 简体中文 |
 | `zh-TW` | 繁體中文 |
 
-Translations are compiled by Slint into static tables. The running application
+Slint compiles translations, while egui uses Python-generated static Rust tables. The running application
 never scans this directory or parses PO files.
 
 Edit `LOCALE/LC_MESSAGES/ax_ssh.po` directly. The context-free entries translate
-Slint `@tr` messages. Entries with `msgctxt "settings-search"` translate the
+Slint `@tr` and egui markers. Entries with `msgctxt "settings-search"` translate the
 fixed search routes in `settings-search.json`; those entries generate static
-Rust arrays without changing their English route IDs.
+Rust arrays without changing their English route IDs. Under `src/egui_app/`, use
+`tr!("Settings", ui.ctx())` to translate, `mark!("Settings")` for static menu keys,
+or `tr!("menu" => "Open", ctx)` for an explicit context. Keys must be ordinary string
+literals; dynamic/empty keys are rejected. Extraction skips Rust strings, nested
+comments and generated tables. Source keys combine both frontends and search;
+migrate remaining keys before deleting Slint rather than dropping translation gates.
 
 After editing UI strings, a catalog, or the search routes, run:
 
@@ -39,8 +44,10 @@ python3 -m unittest scripts/test_translations.py -v
 Run these commands from the repository root. Python 3.10+ and `rustfmt` are
 required. `build_translations.py` retains existing translations and translator
 comments, removes stale entries, and adds new entries with an empty translation.
-Fill these entries and rerun the command; it refuses to generate a search table
-from missing or fuzzy search translations. `--check` changes no files. The old
+Fill these entries and rerun the command; missing/fuzzy search or egui translations
+prevent generation of their tables. The egui generator also validates format arguments.
+Outputs are `src/app/settings_bridge/settings_search_catalog.rs` and
+`src/egui_app/i18n/catalog.rs`, both covered by `--check`. `--check` changes no files. The old
 `build_zh_catalog.py` command delegates to this workflow for `zh-CN`.
 
 When adding a language, create `LOCALE/LC_MESSAGES/ax_ssh.po` with matching
@@ -55,7 +62,7 @@ For example, the French catalog uses:
 }
 ```
 
-Complete both Slint and search entries, then run the commands above and Cargo
+Complete both frontends' UI and search entries, then run the commands above and Cargo
 verification. `build.rs` discovers catalog directories and generates the
 registry into Cargo's output directory; Settings uses that registry without
 per-language Rust or Slint edits. English source metadata lives in
@@ -103,3 +110,24 @@ Runtime technical errors, logs, user values, and remote terminal text are outsid
 this catalog. Language changes reuse the existing save-before-apply transaction
 and update main and detached windows on the UI thread. New translations still
 need user review for wording, text length, fonts, and keyboard/focus behavior.
+
+Egui E7L covers application menus, settings categories/controls/close confirmation,
+the Settings tab title and About entry. Language uses the shared registry and
+canonical locale, applying only after a successful settings save. Appearance
+preview and failed saves do not switch languages. System locale is resolved before
+GUI startup; each egui context retains its own static lookup, with source-English
+fallback for unknown keys. Native menu text updates in place, keeping action IDs,
+accelerators and Window/Help roles. E7W adds terminal connection/trust/authentication,
+saved sessions/groups, Tab/pane controls and workspace dialogs, preserving stable
+IDs and untranslated user data/fingerprints. E7S adds SFTP directory/transfer/
+external-edit labels and the shared terminal/SFTP trust prompt. Other remaining
+settings belong to E7R. E7M reuses existing mouse/selection setting labels and
+descriptions. E7P reuses Option/Meta, OSC 52 and read-consent labels.
+E7U reuses the global upload cap label and description.
+E7O reuses the local snapshot size label and description.
+E7X reuses 22 local X server and forwarding-mode labels/descriptions.
+E7H reuses the mask character label and sidebar description.
+E7R-Theme and E7R-FPS reuse the palette and focused/unfocused refresh labels.
+Each PO currently contains 765 keys, with 300 used by egui.
+
+E7R-Icons reuses icon selection labels and adds theme silhouette and Save-application text to each PO.

@@ -76,6 +76,9 @@ msgstr "AxSSHについて"
 msgid "Accent / focus"
 msgstr "アクセント／フォーカス"
 
+msgid "Add"
+msgstr "追加"
+
 msgid "Add Server"
 msgstr "サーバーを追加"
 
@@ -84,6 +87,9 @@ msgstr "許可"
 
 msgid "Allow local connections without X authority"
 msgstr "X認証なしのローカル接続を許可"
+
+msgid "Allow microphone forwarding for this connection"
+msgstr "この接続でマイクの転送を許可"
 
 msgid "Allow remote OSC 52 clipboard access"
 msgstr "リモートのOSC 52クリップボードアクセスを許可"
@@ -133,6 +139,9 @@ msgstr "自動アップロード"
 msgid "Automatic"
 msgstr "自動"
 
+msgid "Automatically retry (up to 5 attempts; fresh SSH credentials when needed)"
+msgstr "自動再試行（最大5回、必要に応じてSSH認証情報を再入力）"
+
 msgid "AxSSH"
 msgstr "AxSSH"
 
@@ -151,8 +160,14 @@ msgstr "帯域幅の上限（MiB/s）"
 msgid "Bandwidth limit (MiB/s; 0 unlimited)"
 msgstr "帯域幅の上限（MiB/s；0は無制限）"
 
+msgid "Baud (8N1, no flow control)"
+msgstr "ボーレート（8N1、フロー制御なし）"
+
 msgid "Baud rate"
 msgstr "ボーレート"
+
+msgid "Behavior changes apply after Save. Default size and shell apply to new terminals."
+msgstr "動作の変更は保存後に適用されます。既定のサイズとシェルは新しい端末に適用されます。"
 
 msgid "Blink terminal cursor"
 msgstr "端末カーソルを点滅"
@@ -162,6 +177,9 @@ msgstr "枠線"
 
 msgid "Bright colors for bold text"
 msgstr "太字を明るい色で表示"
+
+msgid "Browse local"
+msgstr "ローカルを参照"
 
 msgid "Bug reports"
 msgstr "不具合報告"
@@ -187,8 +205,14 @@ msgstr "変更のない端末行をキャッシュ"
 msgid "Cancel"
 msgstr "キャンセル"
 
+msgid "Cancel / disconnect"
+msgstr "キャンセル / 切断"
+
 msgid "Cancel selected"
 msgstr "選択した項目をキャンセル"
+
+msgid "Cancel upload preparation"
+msgstr "アップロード準備をキャンセル"
 
 msgid "Cancel {0}"
 msgstr "{0}をキャンセル"
@@ -229,11 +253,17 @@ msgstr "{0}の保存済みパスワードを削除しますか？直ちに反映
 msgid "Close"
 msgstr "閉じる"
 
+msgid "Close / discard draft"
+msgstr "閉じる / 下書きを破棄"
+
 msgid "Close Current Tab"
 msgstr "現在のタブを閉じる"
 
 msgid "Close Window"
 msgstr "ウィンドウを閉じる"
+
+msgid "Close pane"
+msgstr "ペインを閉じる"
 
 msgid "Close tab"
 msgstr "タブを閉じる"
@@ -255,6 +285,9 @@ msgstr "配色"
 
 msgid "Compact terminal rendering"
 msgstr "端末の描画を簡略化"
+
+msgid "Concurrent transfers per connection"
+msgstr "接続ごとの同時転送数"
 
 msgid "Connect"
 msgstr "接続"
@@ -280,8 +313,14 @@ msgstr "接続済み・SSH遅延計測がタイムアウト"
 msgid "Connected · SSH latency unavailable"
 msgstr "接続済み・SSH遅延を取得できません"
 
+msgid "Connection"
+msgstr "接続"
+
 msgid "Connection failed"
 msgstr "接続に失敗しました"
+
+msgid "Connection limits apply on the next SFTP connection. Saved server overrides take precedence."
+msgstr "接続の制限は次回の SFTP 接続から適用されます。保存済みのサーバー別設定が優先されます。"
 
 msgid "Connection lost"
 msgstr "接続が切断されました"
@@ -343,6 +382,9 @@ msgstr "カスタム実行ファイル"
 msgid "Custom filename patterns"
 msgstr "カスタムファイル名パターン"
 
+msgid "Custom filters: one name pattern per line; * matches any characters."
+msgstr "カスタムフィルター：1 行に 1 つの名前パターンを入力します。* は任意の文字列に一致します。"
+
 msgid "Cut"
 msgstr "切り取り"
 
@@ -391,6 +433,12 @@ msgstr "サーバーを削除"
 msgid "Delete group"
 msgstr "グループを削除"
 
+msgid "Delete remote entry?"
+msgstr "リモート項目を削除しますか？"
+
+msgid "Delete saved session?"
+msgstr "保存済みの接続を削除しますか？"
+
 msgid "Delete server"
 msgstr "サーバーを削除"
 
@@ -399,6 +447,9 @@ msgstr "{0}と保存した認証情報を削除しますか？"
 
 msgid "Delete {0}? Servers in this group will move to Ungrouped."
 msgstr "{0}を削除しますか？このグループのサーバーは「未分類」に移動します。"
+
+msgid "Deletion cannot be undone. Directories must be empty."
+msgstr "削除は取り消せません。ディレクトリは空である必要があります。"
 
 msgid "Deny"
 msgstr "拒否"
@@ -427,6 +478,12 @@ msgstr "診断情報"
 msgid "Dialog and transient overlay tint"
 msgstr "ダイアログと一時オーバーレイの色"
 
+msgid "Discard"
+msgstr "破棄"
+
+msgid "Disconnect"
+msgstr "切断"
+
 msgid "Display mode"
 msgstr "表示モード"
 
@@ -439,6 +496,12 @@ msgstr "ダウンロード"
 msgid "Download ({0})"
 msgstr "ダウンロード ({0})"
 
+msgid "Download directory"
+msgstr "ダウンロード先フォルダー"
+
+msgid "Download selected"
+msgstr "選択項目をダウンロード"
+
 msgid "Duplicate"
 msgstr "複製"
 
@@ -450,6 +513,9 @@ msgstr "編集"
 
 msgid "Edit Server"
 msgstr "サーバーを編集"
+
+msgid "Edit externally"
+msgstr "外部アプリで編集"
 
 msgid "Edit path"
 msgstr "パスを編集"
@@ -468,6 +534,9 @@ msgstr "接続先"
 
 msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
 msgstr "#RRGGBBまたは#RRGGBBAAを入力。保存時にコントラストが不十分な色は読みやすい色に戻します。"
+
+msgid "Enter fresh credentials to connect or retry."
+msgstr "接続または再試行するために認証情報を再入力してください。"
 
 msgid "Enter the Telnet server address."
 msgstr "Telnetサーバーのアドレスを入力。"
@@ -490,8 +559,17 @@ msgstr "実行ファイルのパス"
 msgid "Executable used for new local terminal tabs"
 msgstr "新しいローカル端末タブに使用する実行ファイル"
 
+msgid "Existing group"
+msgstr "既存のグループ"
+
 msgid "Existing session groups"
 msgstr "既存の接続グループ"
+
+msgid "Existing terminals stay open."
+msgstr "既存のターミナルは開いたままになります。"
+
+msgid "Exit"
+msgstr "終了"
 
 msgid "Expand session sidebar"
 msgstr "接続サイドバーを展開"
@@ -502,6 +580,9 @@ msgstr "転送一覧を展開"
 msgid "Expand {0} group"
 msgstr "{0}グループを展開"
 
+msgid "Expected key"
+msgstr "期待される鍵"
+
 msgid "Export Selected"
 msgstr "選択した項目をエクスポート"
 
@@ -510,6 +591,12 @@ msgstr "選択した項目をエクスポートするショートカット"
 
 msgid "Export Selected to Clipboard"
 msgstr "選択した項目をクリップボードにエクスポート"
+
+msgid "External edit maximum size (MiB)"
+msgstr "外部編集の最大サイズ (MiB)"
+
+msgid "External editing"
+msgstr "外部編集"
 
 msgid "FPS"
 msgstr "FPS"
@@ -529,8 +616,17 @@ msgstr "ファイルと転送領域のサイズ"
 msgid "Filter system files"
 msgstr "システムファイルを除外"
 
+msgid "Filter upload and download names"
+msgstr "アップロードとダウンロードの名前をフィルター"
+
+msgid "Filters and edit limits apply after Save. Filters omit invalid names and keep up to 64 unique patterns."
+msgstr "フィルターと編集の制限は保存後に適用されます。無効な名前は除外され、重複しないパターンを最大 64 個保持します。"
+
 msgid "Flow control"
 msgstr "フロー制御"
+
+msgid "Focus pane"
+msgstr "ペインにフォーカス"
 
 msgid "Focus rings, selection, and active indicators"
 msgstr "フォーカス枠、選択、アクティブ状態の表示"
@@ -568,6 +664,9 @@ msgstr "全体の同時アップロード数"
 msgid "Group"
 msgstr "グループ"
 
+msgid "Group (empty for Ungrouped)"
+msgstr "グループ（空欄は未分類）"
+
 msgid "Group name"
 msgstr "グループ名"
 
@@ -580,8 +679,17 @@ msgstr "ヘルプ"
 msgid "Hidden"
 msgstr "隠しファイル"
 
+msgid "Hide AxSSH"
+msgstr "AxSSH を隠す"
+
+msgid "Hide Others"
+msgstr "ほかを隠す"
+
 msgid "Host"
 msgstr "ホスト"
+
+msgid "Host key blocked by trust policy or changed during connection. Disconnect and check the server and known_hosts."
+msgstr "ホスト鍵が信頼ポリシーにより拒否されたか、接続中に変更されました。切断し、サーバーとknown_hostsを確認してください。"
 
 msgid "Hover and secondary surfaces"
 msgstr "ホバー状態と補助領域"
@@ -631,6 +739,9 @@ msgstr "ローカルXサーバー"
 msgid "Language"
 msgstr "言語"
 
+msgid "Language changes apply after Save."
+msgstr "言語の変更は保存後に適用されます。"
+
 msgid "Language used by the AxSSH interface"
 msgstr "AxSSHの表示に使用する言語"
 
@@ -651,6 +762,12 @@ msgstr "明色"
 
 msgid "Line height"
 msgstr "行の高さ"
+
+msgid "List"
+msgstr "一覧表示"
+
+msgid "Live preview"
+msgstr "ライブプレビュー"
 
 msgid "Loading"
 msgstr "読み込み中"
@@ -681,6 +798,9 @@ msgstr "ローカルファイルを開く際のコピー上限（MiB）"
 
 msgid "Local files"
 msgstr "ローカルファイル"
+
+msgid "Local files · drop remote entries here to download"
+msgstr "ローカルファイル · リモート項目をここにドロップしてダウンロード"
 
 msgid "Local selection priority"
 msgstr "ローカル選択を優先"
@@ -721,6 +841,9 @@ msgstr "SFTPファイルサイズの上限（GiB）"
 msgid "Maximum file size (GiB)"
 msgstr "ファイルサイズの上限（GiB）"
 
+msgid "Maximum file size (GiB, 0 = unlimited)"
+msgstr "最大ファイルサイズ (GiB、0 = 無制限)"
+
 msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
 msgstr "外部編集でダウンロード／アップロードするファイルの上限；既定は4 MiB、範囲は1～64 MiB"
 
@@ -739,6 +862,9 @@ msgstr "ウィンドウを最小化"
 msgid "Modified"
 msgstr "更新日時"
 
+msgid "Modifier keys"
+msgstr "修飾キー"
+
 msgid "Mono (1)"
 msgstr "モノラル（1）"
 
@@ -751,8 +877,17 @@ msgstr "その他"
 msgid "Move Current Workspace to New Window"
 msgstr "現在のワークスペースを新しいウィンドウに移動"
 
+msgid "Move Tab Left"
+msgstr "タブを左へ移動"
+
+msgid "Move Tab Right"
+msgstr "タブを右へ移動"
+
 msgid "Move to line start after each wheel step in alternate-screen apps"
 msgstr "代替画面のアプリでホイール操作のたびに行頭へ移動"
+
+msgid "Move to line start when scrolling the alternate screen"
+msgstr "代替画面のスクロール時に行頭へ移動"
 
 msgid "Move workspace to new window"
 msgstr "ワークスペースを新しいウィンドウに移動"
@@ -766,6 +901,9 @@ msgstr "名前"
 msgid "Navigation and title surfaces"
 msgstr "ナビゲーションとタイトルの領域"
 
+msgid "New Connection"
+msgstr "新しい接続"
+
 msgid "New Group"
 msgstr "新しいグループ"
 
@@ -777,6 +915,9 @@ msgstr "新しいサーバー"
 
 msgid "New Server shortcut"
 msgstr "新しいサーバーのショートカット"
+
+msgid "New Server…"
+msgstr "新しいサーバー…"
 
 msgid "New group"
 msgstr "新しいグループ"
@@ -829,6 +970,9 @@ msgstr "1行に1パターン；*は任意の文字に一致"
 msgid "Open"
 msgstr "開く"
 
+msgid "Open / Save Workspace…"
+msgstr "ワークスペースを開く / 保存…"
+
 msgid "Open Recent"
 msgstr "最近使った項目を開く"
 
@@ -858,6 +1002,9 @@ msgstr "ローカルシェルを開く"
 
 msgid "Open log folder"
 msgstr "ログフォルダーを開く"
+
+msgid "Open replaces the current layout after saving it. Recovered terminals wait for explicit connection."
+msgstr "現在のレイアウトを保存してから置き換えます。復元されたターミナルは明示的な接続を待ちます。"
 
 msgid "Open saved connection"
 msgstr "保存した接続を開く"
@@ -906,6 +1053,12 @@ msgstr "パリティ"
 
 msgid "Password"
 msgstr "パスワード"
+
+msgid "Password / key passphrase (empty for agent)"
+msgstr "パスワード / 鍵のパスフレーズ（エージェント使用時は空欄）"
+
+msgid "Password / passphrase"
+msgstr "パスワード / パスフレーズ"
 
 msgid "Password authentication"
 msgstr "パスワード認証"
@@ -976,8 +1129,20 @@ msgstr "プロトコル"
 msgid "Provider"
 msgstr "プロバイダー"
 
+msgid "Queued ({0})"
+msgstr "待機中（{0}）"
+
+msgid "Quit"
+msgstr "終了"
+
+msgid "Quit AxSSH"
+msgstr "AxSSH を終了"
+
 msgid "RENDERING"
 msgstr "描画"
+
+msgid "Reading local directory…"
+msgstr "ローカルフォルダーを読み込み中…"
 
 msgid "Reduce terminal items and omit default background rectangles"
 msgstr "端末の描画要素を減らし、既定の背景矩形を省略"
@@ -1018,11 +1183,20 @@ msgstr "リモートファイル：{0} - 更新日時：{1}"
 msgid "Remote files"
 msgstr "リモートファイル"
 
+msgid "Remote files · drop local files or folders here to upload"
+msgstr "リモートファイル · ローカルファイルやフォルダーをここにドロップしてアップロード"
+
+msgid "Remote path"
+msgstr "リモートパス"
+
 msgid "Remote sample rate"
 msgstr "リモートのサンプルレート"
 
 msgid "Remove"
 msgstr "削除"
+
+msgid "Remove group (keep sessions)"
+msgstr "グループを削除（接続は保持）"
 
 msgid "Remove revoked record"
 msgstr "失効した記録を削除"
@@ -1045,6 +1219,9 @@ msgstr "レンダラー"
 msgid "Rendering backend"
 msgstr "描画バックエンド"
 
+msgid "Reopen editor"
+msgstr "エディターを再度開く"
+
 msgid "Report a bug"
 msgstr "不具合を報告"
 
@@ -1053,6 +1230,9 @@ msgstr "既定値に戻す"
 
 msgid "Reset filters"
 msgstr "フィルターをリセット"
+
+msgid "Reset filters to platform defaults"
+msgstr "フィルターをプラットフォームの既定値に戻す"
 
 msgid "Restart"
 msgstr "再起動"
@@ -1086,6 +1266,9 @@ msgstr "ワークスペースをメインウィンドウに戻す"
 
 msgid "Reuse GPU row layers; may increase graphics memory"
 msgstr "GPUの行レイヤーを再利用；グラフィックスメモリが増える場合があります"
+
+msgid "Revert"
+msgstr "元に戻す"
 
 msgid "Review before sharing"
 msgstr "共有前に確認"
@@ -1177,8 +1360,14 @@ msgstr "今後の接続用にSSHパスワードを保存"
 msgid "Save Workspace"
 msgstr "ワークスペースを保存"
 
+msgid "Save Workspace As…"
+msgstr "名前を付けてワークスペースを保存…"
+
 msgid "Save audio settings"
 msgstr "音声設定を保存"
+
+msgid "Save in the system application. Copies remain available after editing stops."
+msgstr "システムのアプリで保存してください。編集を停止してもコピーは利用できます。"
 
 msgid "Save password (optional)"
 msgstr "パスワードを保存（任意）"
@@ -1189,6 +1378,18 @@ msgstr "パスワードの保存先"
 msgid "Save session"
 msgstr "接続を保存"
 
+msgid "Save settings changes?"
+msgstr "設定の変更を保存しますか？"
+
+msgid "Saved"
+msgstr "保存済み"
+
+msgid "Saved connection"
+msgstr "保存済みの接続"
+
+msgid "Saved connection details; passwords and passphrases are entered when connecting."
+msgstr "接続情報を保存します。パスワードとパスフレーズは接続時に入力します。"
+
 msgid "Saved connections"
 msgstr "保存した接続"
 
@@ -1197,6 +1398,9 @@ msgstr "{0}に保存済み。"
 
 msgid "Saved password"
 msgstr "保存したパスワード"
+
+msgid "Saving…"
+msgstr "保存中…"
 
 msgid "Scrollback"
 msgstr "スクロールバック"
@@ -1288,6 +1492,9 @@ msgstr "セッションが終了しました"
 msgid "Session group"
 msgstr "接続グループ"
 
+msgid "Session list changed. Close and reopen this editor to use the latest version."
+msgstr "接続一覧が変更されました。最新の状態を使用するには、このエディターを閉じて開き直してください。"
+
 msgid "Session mask character"
 msgstr "接続情報のマスク文字"
 
@@ -1309,11 +1516,17 @@ msgstr "設定"
 msgid "Settings..."
 msgstr "設定…"
 
+msgid "Settings…"
+msgstr "設定…"
+
 msgid "Shared by uploads and downloads in each SFTP tab; 0 means unlimited"
 msgstr "各SFTPタブのアップロードとダウンロードで共有；0は無制限"
 
 msgid "Shortcuts"
 msgstr "ショートカット"
+
+msgid "Show All"
+msgstr "すべてを表示"
 
 msgid "Show a blinking cursor while the terminal is focused"
 msgstr "端末にフォーカスがあるときカーソルを点滅表示"
@@ -1335,6 +1548,9 @@ msgstr "スキップ"
 
 msgid "Skip matching names during SFTP uploads and downloads"
 msgstr "SFTP転送で一致する名前をスキップ"
+
+msgid "Skip platform metadata files"
+msgstr "プラットフォームのメタデータファイルをスキップ"
 
 msgid "Skipped"
 msgstr "スキップ済み"
@@ -1363,8 +1579,17 @@ msgstr "名前順に並べ替え"
 msgid "Sort by size"
 msgstr "サイズ順に並べ替え"
 
+msgid "Source and licenses"
+msgstr "ソースとライセンス"
+
 msgid "Speed"
 msgstr "速度"
+
+msgid "Split Columns"
+msgstr "列に分割"
+
+msgid "Split Rows"
+msgstr "行に分割"
 
 msgid "Split active terminal horizontally"
 msgstr "アクティブな端末を横に分割"
@@ -1411,6 +1636,10 @@ msgstr "システムの認証情報ストア"
 msgid "System icon"
 msgstr "システムアイコン"
 
+#. egui system icon appearance setting
+msgid "System icons follow theme"
+msgstr "システムアイコンをテーマに合わせる"
+
 msgid "TERMINAL"
 msgstr "端末"
 
@@ -1431,6 +1660,9 @@ msgstr "Telnetプロトコル"
 
 msgid "Telnet sends terminal traffic without encryption or host identity verification."
 msgstr "Telnetでは通信の暗号化とホストの本人確認が行われません。"
+
+msgid "Temporary; replaces this terminal. Credentials are not saved."
+msgstr "一時的な接続です。このターミナルを置き換えます。認証情報は保存されません。"
 
 msgid "Terminal"
 msgstr "端末"
@@ -1467,6 +1699,9 @@ msgstr "端末ペインの高さ"
 
 msgid "Terminal pane widths"
 msgstr "端末ペインの幅"
+
+msgid "Terminal preview"
+msgstr "端末プレビュー"
 
 msgid "Terminal scrollback lines"
 msgstr "端末のスクロールバック行数"
@@ -1516,6 +1751,9 @@ msgstr "信頼して続行"
 msgid "Trust new key"
 msgstr "新しい鍵を信頼"
 
+msgid "Trust once and connect"
+msgstr "今回のみ信頼して接続"
+
 msgid "Trusted (-Y)"
 msgstr "信頼あり（-Y）"
 
@@ -1525,11 +1763,17 @@ msgstr "非フォーカス時の更新頻度"
 msgid "Unfocused terminal refresh rate"
 msgstr "非フォーカス時の端末更新頻度"
 
+msgid "Ungrouped"
+msgstr "未分類"
+
 msgid "Unknown SSH host key"
 msgstr "未知のSSHホスト鍵"
 
 msgid "Unlock encrypted credentials"
 msgstr "暗号化された認証情報のロックを解除"
+
+msgid "Unsaved changes"
+msgstr "未保存の変更"
 
 msgid "Untrusted (-X)"
 msgstr "信頼なし（-X）"
@@ -1545,6 +1789,21 @@ msgstr "アップロード ({0})"
 
 msgid "Upload changes"
 msgstr "変更をアップロード"
+
+msgid "Upload file"
+msgstr "ファイルをアップロード"
+
+msgid "Upload saved changes automatically"
+msgstr "保存した変更を自動アップロード"
+
+msgid "Upload selected"
+msgstr "選択項目をアップロード"
+
+msgid "Use System default for the platform shell; otherwise enter an executable path."
+msgstr "標準のシェルを使う場合は System default、それ以外は実行ファイルのパスを入力します。"
+
+msgid "Use for upload"
+msgstr "アップロードに使用"
 
 msgid "Use platform default filters"
 msgstr "プラットフォームの既定フィルターを使用"
@@ -1567,8 +1826,15 @@ msgstr "ユーザー名"
 msgid "Uses the host system by default. Changes are saved immediately."
 msgstr "既定ではホストシステムを使用。変更は直ちに保存されます。"
 
+#. egui system icon appearance setting
+msgid "Uses the host system by default. Save applies the selection."
+msgstr "既定ではホストシステムを使用します。保存すると選択が適用されます。"
+
 msgid "Vault password"
 msgstr "保管庫のパスワード"
+
+msgid "Verify the fingerprint with the server owner before trusting it for this connection."
+msgstr "この接続で信頼する前に、サーバー管理者にフィンガープリントを確認してください。"
 
 msgid "Version {0}"
 msgstr "バージョン{0}"
@@ -1581,6 +1847,9 @@ msgstr "他のペインにフォーカスがあるときの可視端末の更新
 
 msgid "WORKSPACE"
 msgstr "ワークスペース"
+
+msgid "Waiting for server…"
+msgstr "サーバーを待機中…"
 
 msgid "Warning"
 msgstr "警告"
@@ -1611,6 +1880,9 @@ msgstr "X11"
 
 msgid "X11 forwarding"
 msgstr "X11転送"
+
+msgid "columns"
+msgstr "列"
 
 msgid "lines"
 msgstr "行"
