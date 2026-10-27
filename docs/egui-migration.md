@@ -149,8 +149,8 @@ frames and merges pending row damage; each frontend owns its scheduling policy.
 Shared `WorkerShutdowns` retains cleanup even when a tab or completion receipt
 is dropped, then drains or aborts and joins tasks at the exit deadline.
 Mouse transactions use the same model modes and 256-report wheel bound.
-Slint retains its title/clipboard identity and permission checks; egui continues
-to discard those effects. Broader application state extraction remains in E3.
+Slint retains its title/clipboard identity and permission checks; egui discards
+titles and routes clipboard effects through E7P below. Broader application state extraction remains in E3.
 
 The second E3 slice shares `TerminalViewport`: resize, history scrolling and
 returning to live output invalidate stale frames and selection coordinates as
@@ -204,8 +204,14 @@ SSH probes before authentication, offers trust once for unknown keys, and rechec
 the pinned fingerprint in the actual authenticated transport. Known-hosts changes,
 revocation and a probe/worker key race stay blocked. Prompt tokens are exact and
 single-use; confirmation and authentication retry require fresh credentials.
-No profile, known-hosts or credential writes occur. Quick SSH keeps X11 and remote
-microphone setup disabled until their settings/permission surface migrates.
+No profile, known-hosts or credential writes occur. Quick SSH defaults to X11 Off;
+E7X exposes explicit Off/-X/-Y selection and local settings. E7A adds a
+default-off microphone choice for the current SSH connection and its retries.
+It is not persisted in profiles/workspaces; replacement/disconnect clears it.
+Saved PCM rate/channels reach new workers through the settings watch. Existing
+SSH/audio owners keep trust, authentication, recording-demand, device-permission
+and bounded cancellation/join gates. Remote preparation failure preserves shell
+access; native audio acceptance remains open. Image paste is covered by E7I below.
 
 Optional reconnect consumes the shared five-attempt budget with 1/2/4/8/16-second
 delays. SSH password/passphrase retries pause for fresh input; agent and direct
@@ -261,8 +267,8 @@ Edit, Reopen, Upload changes, Stop and automatic-save controls. One retained loc
 job polls stable file changes; metadata-only snapshots never carry document bytes.
 The cache is isolated; copies survive close, while unpublished copies are cleaned.
 Exact edit/operation IDs and connection generations reject stale jobs and replies.
-The existing write worker enforces remote conflicts and atomic replacement. E7
-will migrate the configurable edit size limit; egui currently uses 4 MiB. Native
+The existing write worker enforces remote conflicts and atomic replacement. E7T
+now applies the configurable edit limit (default 4 MiB, range 1–64 MiB). Native
 application associations, live edits and remaining drag/drop parity need acceptance.
 
 ## E6 bounded drag/drop
@@ -274,8 +280,9 @@ retained blocking task prepares recursive uploads, revalidates before transport
 admission and is cancelled/joined at teardown. Shared discovery preserves relative
 paths and skips links/filtered names. Native coordinate lookup stays in the egui
 adapter; absent or stale coordinates never fall back to an active tab. Wayland
-requires a current-frame pointer event. Native drag-out promises, selection
-batches, complete SFTP parity and native drop acceptance remain pending.
+requires a current-frame pointer event. Selected rows now carry the current bounded
+selection through the existing batch upload/download intents; native drag-out promises,
+complete SFTP parity and native drop acceptance remain pending.
 
 ## E7/E8 menus, tabs and settings foundation
 
@@ -296,17 +303,314 @@ Tabs have stable IDs, horizontal scrolling, drag reordering, middle-click/explic
 close, context actions and a new-tab picker. Settings is unique, persists its
 identity/order, never owns a transport and cannot join a terminal split.
 
-Settings exposes System/Light/Dark, six shared palettes, terminal size/line height
+Settings exposes System/Light/Dark, six shared palettes plus Custom Light/Dark palettes,
+terminal size/line height
 and cursor blink, new-local-tab shell, sidebar/tab widths and three editable app
 shortcuts. Draft preview is local; Save uses the owner's bounded revision/request
 transaction and existing private atomic ConfigStore writes. Failed/stale writes
 retain drafts and saved values. Revert/Discard restore saved rendering; closing a
 dirty tab or window offers Save/Discard/Cancel, and opening another workspace
 requires resolving that draft first. Unexposed configuration domains are preserved.
-Full language/font-family, SFTP/media/X11 settings and multi-window migration remain
+Remaining interface translations, media settings and multi-window migration remain
 later E7/E8 work; native menus and layout/focus still require user acceptance.
 
+E7T adds terminal history size, default columns/rows and alternate-scroll Home
+behavior, plus SFTP connection concurrency, file size/bandwidth, external-edit
+limits and name filters. Copy/paste shortcuts are editable with semantic conflict
+checks. Drafts preview appearance only; after a successful disk write, workspace
+notifies workers through bounded latest-value watch channels. Default size/shell
+apply to new terminals; history and wheel settings update existing terminals.
+History changes revoke old selections and pending copy results. SFTP connection
+limits are captured on the next connection, with saved profile overrides taking
+precedence. Filters/edit limits apply to new operations; old upload preparation is
+cancelled and joined. Blocking edit jobs capture their admitted limit, and upload
+completion rechecks the current limit. Other settings remain E7R work;
+E7P handles Option/Meta and OSC 52 below, E7U global uploads and E7O local opening.
+
+E7B adds Appearance controls for terminal text brightness (60–120%, in 5-point
+steps) and bright ANSI colors for bold text. Both frontends share the existing
+HSL lightness calculation; egui applies it after inverse and before hidden,
+including underline/strikethrough, without dimming alpha or surfaces. Low ANSI
+foregrounds alone are promoted for bold; the bold font remains independent.
+The settings participate in row cache invalidation, so idle terminals preview
+and revert immediately. Failed saves retain the draft and saved values.
+Remaining display settings stay in E7R; GUI acceptance remains separate.
+
+E7R-Theme adds the Custom palette selector and separate 13-field Light/Dark drafts.
+egui uses stable role IDs and bounded hex inputs, then sends a temporary normalized
+`ThemeSettings` to `Context::set_visuals_of` for preview. Config remains the owner of
+hex parsing, brightness direction, WCAG contrast fallback, and persistence; failed
+saves retain both drafts and saved values.
+
+E6R-Pause adds per-transfer Pause/Resume for active downloads and gates Cancel
+by typed eligibility. Uploads, queued/conflict rows and terminal rows do not gain
+pause/resume support. The controller owns pending states, generation checks and
+worker acknowledgements; the UI does not infer behavior from status text or
+mark a request as completed when merely queued. A bounded scroll area keeps
+history controls accessible. Pause can wait for outstanding reads; resume stays
+within the current connection and never provides persistent restart recovery.
+Fixed-trust loopback tests cover byte preservation, stale generation, cancelling
+and closing while paused, alongside bounded history/late-event and localized
+widget regressions. Selected multi-drag, bulk remote mutation, native drag-out and native
+GUI/server acceptance remain E6R work.
+
+E6R-UploadSelect adds pane-local local-file/folder selection (at most 64 roots),
+Select All/Clear and Upload selected. A generation/local-directory/revision key
+clears stale selections, and stable path IDs plus per-frame guards prevent repeated
+pass toggles or duplicate intents. Preparing disables resubmission; selection stays
+local to this pane and does not change existing drag payloads.
+
+The owner validates unique UTF-8 paths (4096 bytes each, 256 KiB total), binds them
+to private listing snapshots and the remote directory request, then reuses the one
+retained blocking preparation task. Source checks run before scanning and after
+request construction: ordinary files use the shared opened-file fingerprint and
+canonical-parent validator; directory roots use no-follow metadata, type, length,
+mtime and canonical-parent observations. These do not freeze an entire tree or
+eliminate filesystem races. Listing metadata for directories stays private; local
+open still rejects directories. Local/remote navigation cancels preparation,
+policy/connection changes discard old results, and shutdown cooperatively cancels
+and joins the task. The existing discovery limits and final 64-file companion cap
+apply before worker admission/history creation; a preparation error rejects the
+whole batch. Prepared files share one batch UUID, native upload identity checks and
+existing per-file conflict confirmation. No automatic overwrite, new task type,
+channel, persistence or trust path is added. The egui surface now uses a blocking
+Modal for Keep both and apply-to-batch choices. Selected multi-drag now reuses the
+existing bounded selection and snapshot checks; batch mutation and native drag-out remain pending.
+
+E6R-Select adds pane-local remote path selection (at most 64), Select All/Clear and
+Download selected into the loaded local directory. Selection survives ordering
+and More pages, prunes missing/link/type-changed rows, and clears on disconnect,
+generation or directory-request changes. Stable path IDs and a separate per-frame
+selection guard prevent repeated-pass toggles; command admission remains once per
+frame. Existing drag payloads and single-entry mutation targets are unchanged.
+
+A single intent carries 1–64 unique paths with at most 256 KiB of UTF-8 path text.
+The owner rechecks the remote request and loaded local path/revision before any
+send, skips missing/link/filtered entries, and continues after per-root enqueue
+failures. One latest bounded summary reports root admission only (up to 64 errors,
+512 characters each); it is cleared on navigation/disconnect and never triggers
+selection changes. File completion/failure remains in the transfer rows. Existing
+root rows keep discovery cancellation; the first discovered file reuses the root
+UUID, and empty/fully filtered directories finish with DiscoveryFailed without
+creating local directories. Child transfers retain the experimental 64-row budget
+and excess cancellation. The shared OpenSftpFile entrance now checks its existing
+512 active/opening/queued/discovery slot budget before spawning a discovery,
+returning the existing failure event on overload. No new channel, task type, wire
+protocol, persistence or trust path is added. Keep both/apply-to-batch semantics are
+shared with the worker; selected multi-drag is now implemented in egui, while batch mutation
+and native drag-out remain pending.
+
+E6R-Mutate adds single-entry Rename/Delete with frozen path/type/size/mtime and
+connection/directory request checks. A single reserved receipt slot covers queued,
+running and completed-but-unconsumed work. Full/Closed does not reserve it; owner
+rejections and native write results retain an exact UUID result with a 512-character
+error limit. Closing abandons the receipt and cannot undo an admitted write;
+disconnect cancels/joins the existing worker and clears the slot. The UI owns only
+the modal draft, preserves it on failures and disables workspace/terminal actions
+while open. It rejects links and invalid names; Delete explicitly confirms a regular
+file or empty directory. Existing LSTAT/type/target-absence checks, ordinary RENAME
+and nonrecursive REMOVE/RMDIR remain in the shared worker. These observations do
+not provide an atomic remote identity guarantee. Success refreshes only the original
+still-visible directory request; navigation never jumps back. Bulk remote-file
+mutation, native drag-out and native GUI/server acceptance remain open; selected multi-drag
+now uses the existing bounded batch intents.
+
+E6R-Batch adds pane-local transfer selection by UUID, Select All/Clear, and batch
+Pause/Resume/Cancel. A generation-bound intent carries 1–64 distinct IDs; the owner
+rechecks every current row, skips missing/ineligible entries, commits each pending
+state only after that worker send succeeds, and continues after individual failures.
+One bounded latest summary reports queued/skipped/failed admission, never completion;
+at most 64 failures retain 512 characters each. Disconnect/replacement clears it.
+The UI prunes finished/missing selections and clears on generation change or disconnect.
+Standard selectable buttons admit one selection change per frame, including repeated
+passes; worker intents retain their own per-frame guard. No queues, tasks, trust,
+persistence or native worker protocols are added. Upload pause and cross-connection
+resume remain unsupported. Remote-file batch mutation and native acceptance remain separate work;
+selected multi-drag uses the existing selection and snapshot checks.
+
+E7R-Transfer completes the saved session/group JSON exchange and the two remaining
+shortcut editors. File > Import from Clipboard opens a modal for explicit paste
+and confirmation; File > Export Selected to Clipboard opens a saved server/group
+picker and Copy action, defaulting to the focused saved profile when available.
+The saved bindings default to Cmd/Ctrl+Shift+I and Cmd/Ctrl+Shift+E. Parsing,
+serialization and atomic persistence use the controller's bounded revision/receipt
+flow and a joined blocking task, reusing the default frontend's shared version-1
+format and sanitization. Imports merge without replacing settings or live panes;
+invalid input, stale revisions and failed writes preserve the catalog/draft.
+Exports are read-only, and closed/stale/unfocused completions never copy. Both
+frontends retain the 256 KiB/128-profile protocol bounds, including empty groups.
+The UI draft is capped at 256Ki characters and checked for byte length on submit.
+Unlike the default frontend's automatic clipboard read, the experiment requires
+explicit paste. File dialogs, directed group import and native acceptance remain.
+
+E7R-SFTP-Key adds View > SFTP and the sixth editable shortcut (default Ctrl+M).
+It focuses Remote path in the existing companion for the focused saved SSH pane,
+without connecting or listing. Local, Telnet, Serial, temporary SSH and Settings
+tabs disable this action; modal gates also apply. Disabled keyboard actions leave
+the chord available to the terminal. UUID revalidation, one-shot non-sizing focus
+and suppressing terminal refocus prevent stale or duplicate targeting. All eight
+persisted chords now participate in semantic alias/order and reserved-key checks
+(including Cmd/Meta as Ctrl on Windows/Linux);
+session import/export editors remain deferred until their controller actions exist.
+Successful Save updates routing; preview and failed saves retain the saved route.
+Native menu/focus acceptance remains open.
+
+E7R-Shells adds the saved/discovered shell dropdown alongside the custom executable
+field. Discovery runs once before the GUI on a joined blocking worker and remains
+Context-local metadata. Current selection takes priority within the existing
+32-entry, 256-character domain bounds, including unavailable executables. Opening
+Settings and preview keep persisted values unchanged; Save merges the cache into
+a submission copy, and failures preserve the draft. New local terminals consume
+the committed executable; active terminals keep running. Existing PO labels are
+reused. The old collapsed-group-length field currently has no UI consumer in
+Slint or egui and is retained for a future compact-sidebar contract, rather than
+exposed as an ineffective control. Native keyboard/PATH acceptance remains open.
+
+E7R-Icons adds a Local shell icon selector (Automatic plus the existing catalog)
+and a System icons follow theme toggle in Appearance. Draft preview/revert updates
+local Tab icons and system icon coloring; Save commits through the existing
+transaction and failures retain the draft. Sidebar uses saved override/validated
+cache metadata; split Tabs use the focused pane. The shared host identity service
+keeps Linux I/O on startup blocking work and uses the secondary os-release file
+only when the primary is missing. Version-locked resvg is an optional egui build
+dependency, producing bounded 48px pixels rather than decoding SVG in UI callbacks.
+Native/mask texture variants preserve alpha and are released on cache clear/drop.
+No remote discovery, session-level picker or native titlebar integration is added
+by this slice; generic fallback and native/high-DPI acceptance remain.
+
+E7R-FPS adds focused/unfocused refresh controls (1–120 FPS, defaults 60/4).
+Startup/restored panes and successful saves configure controller snapshot deadlines;
+preview and failed saves keep the running policy. A latest-value focus watch keeps
+presentation hints responsive under queue overload, generation changes and
+fallible hide cleanup. The UI refreshes this hint each admitted frame without
+queueing duplicate protocol reports; generation checks still guard
+DEC1004 protocol reports. Hidden/inactive terminals use the unfocused rate, idle
+workers have no periodic frame timer, and missed deadlines do not cause catch-up
+bursts. Synchronized-output holds remain intact. Parsing, protocol replies and
+status prompts are independent of this output ceiling; native frame rate and
+focus/performance acceptance remain open.
+
+E7Q adds the semantic-highlighting toggle and four status-color drafts in
+Appearance, reusing existing PO translations and config normalization.
+Both frontends share the existing bounded ASCII recognition rules. The terminal
+controller publishes per-run ranges/classes, reusing current source-row identities;
+Painter performs no matching and preserves character positions, program styles
+and decorations. Toggle/colors invalidate the row cache for idle preview/revert,
+and saved values remain unchanged on failure. Matching stays within an eligible
+run of at most 512 bytes; it does not join styles, wrapped rows or Unicode text.
+Link interaction, remaining settings and native GUI acceptance
+remain open.
+
+E7H adds the Workspace mask character and masked endpoint lines beneath saved
+session names, sharing the default frontend's pure formatter. Usernames and the
+second IPv4 octet follow existing rules; hostnames, IPv6 and serial ports remain
+visible. Preview normalizes a copy without changing profiles or saved settings;
+failed saves keep the draft. Full hover/accessibility details and raw endpoint
+search/edit/connection remain available. This is a presentation preference.
+
+E7L implements the language foundation and application menu/settings translations
+using eleven existing PO catalogs plus source English. All 675 previous keys are
+retained; 36 additions bring each catalog to 711 keys, with 84 used by the first
+egui slice. Literal Rust markers join Slint/search source keys. The same tooling
+generates/checks static egui tables while preserving context, format and translator
+comment rules. Language offers System and all bundled locales, saving canonical
+locale IDs and switching only after a successful write; preview/failure leaves
+the active language unchanged. System locale is captured before the GUI, and
+context-local lookup performs no file I/O. Menus, settings and Settings tab/window
+titles update while native action IDs, accelerators and Window/Help roles remain.
+Further translations and native acceptance remain E7R.
+
+E7F adds independent application/terminal font selectors using the shared bundled
+inventory and at most 256 choices, preserving unavailable selected names. Font
+discovery and required fallbacks load before GUI startup; subsequent selection
+reads run on one retained blocking worker with latest-value requests/results,
+24 MiB/file and 96 MiB/request bounds, cancellation and shutdown join. Preview,
+Save, Revert and Discard share the effective settings path. Missing fonts and
+unequal measured Latin advances warn and use JetBrains Mono without rewriting
+the choice. Four terminal style aliases support static/variable faces and retain
+CJK/symbol fallbacks. Applying a new font refreshes measured cells, row caches,
+selection and PTY dimensions. Native rendering/IME and performance remain E2V.
+
+E7W covers terminal connection fields/trust/authentication prompts, saved sessions,
+groups, Tab/pane controls and workspace file dialogs in all eleven catalogs.
+It reuses existing messages and adds 30 per locale, reaching 741 PO keys and 145
+egui keys. Stable IDs retain connection expansion and dialog identity across
+language changes. User data, fingerprints, paths, protocol IDs and technical
+status/errors stay intact; exact prompt tokens and confirmable gates remain in
+force. Other settings and media remain E7R work (X11 controls are covered by E7X), with native
+layout/keyboard acceptance still separate.
+
+E7S adds SFTP directory/transfer/conflict/external-edit labels, reusing existing
+messages and adding 15 per locale (756 PO messages, 167 egui keys). SFTP shares
+the terminal trust/authentication prompt, displaying target and fingerprints
+before explicit trust-once confirmation. Blocked keys offer no confirmation.
+Prompt/generation changes clear stale credentials; terminal and SFTP password
+widgets have separate scopes. Buttons admit once per frame, skip sizing passes
+and show enqueue errors. UUID transfer identities and raw file/path/status data
+remain stable; transport trust, conflict rules and cleanup stay unchanged.
+
+E7M implements saved-only mouse selection priority, automatic selection copy
+and right-click copy/paste. Shift forces local selection and Alt/Option overrides
+local priority; a local drag consumes the gesture, a cancelled click is discarded,
+and an unselected click may still reach a reporting TUI. Copy completions carry
+connection/viewport identity. Native paste requested by the app has a short-lived
+target ticket checked before any widget receives its contents, including across
+repeated passes. Direct OS paste keeps normal focused-widget routing.
+
+E7P adds saved-only Option/Meta and OSC 52 settings. The macOS native window
+keeps original Alt characters only while a terminal owns focus; settings/editors
+retain native Option text and IME commits remain unprefixed. OSC 52 defaults off;
+enabled writes and individually approved reads are bounded to 64 KiB. The
+controller owns exact request IDs, formatting, a 20-second deadline and
+revocation on permission/connection changes. A retained native-read service
+uses one blocking job and bounded request/result slots, preserving empty text
+and CRLF. Focus/viewport/navigation changes discard late results. Normal paste
+cannot answer a remote read. Native Option/IME/clipboard acceptance remains open.
+
+E7U exposes the existing global upload cap (1–32) and applies it after successful
+workspace loading and Save. Failed writes, stale edits and appearance preview
+keep the previous cap. All SFTP connections share the process-wide limiter;
+server overrides do not replace it. Running uploads retain their slots when
+the cap is lowered; queued/new uploads use the new capacity without reconnecting.
+Remaining media and native SFTP acceptance stay separate; X11 controls are covered by E7X.
+
+E7O shares the default frontend's directory/file validation and adds **Open** for
+ordinary local files plus the saved local snapshot limit. One cancellable,
+joined blocking job copies the validated handle into an isolated experimental
+cache before calling the system opener. Directory revision, identity, size and
+cancellation checks reject stale or replaced targets. Copies preserve the source;
+editing them does not write back to it. The default 512 MiB cap, zero/unlimited
+byte option, 128-file cap and stale cleanup reuse the existing cache engine.
+Local-directory navigation/settings/disconnect/close revoke unlaunched work; associated-application
+and GUI acceptance remain manual.
+
+E7X exposes SSH Off/-X/-Y and the local provider/custom path/startup/explicit
+local no-auth compatibility settings. New drafts default Off; saved sessions keep
+their explicit mode. Preview and failed saves preserve worker configuration;
+new SSH workers capture saved options, and existing connections apply them on
+reconnect. Known installation locations are read on a joined blocking worker
+before window creation, with no drawing-time I/O. The existing SSH worker keeps
+authenticated preparation, cookie checks, restricted -X authorization, bounded
+relays and shutdown cleanup. Rejected X11 requests preserve the shell. The
+microphone entry is covered by E7A; real device/X server/GUI acceptance remains
+open before a default switch.
+
+E7I adds clipboard images in connected Local/SSH terminals using existing media
+and same-connection SFTP. A joined background job converts premultiplied pixels
+and encodes bounded PNG. The controller owns preparation/files; a generation and
+viewport-bound UI ticket requires the original focused visible terminal before
+inserting a quoted path without Enter. New interaction, Cancel and connection
+changes revoke results; shutdown joins file work. Limits are 4096²/16 MiB/32 files,
+with one conversion and one preparation per terminal. egui prioritizes text when
+the clipboard has both representations. Telnet/Serial reject images; OSC 52 is
+still text only. No file picker or new dependency is required. Native clipboard
+and visual acceptance remain open; remote cleanup after network loss is best effort.
+The shared setup waits for an explicit server Success/Failure before enabling X11,
+with a 15-second deadline and at most 64 messages/64 KiB of preserved early output.
+Disconnect cancels that wait; queued requests alone never enable the dispatcher.
+
 ## FigCraft reference map
+
 
 The user-specified local FigCraft checkout is a read-only implementation reference
 at `a86897dc919b8ae7fb0142fe7e0034c10715f7d9`, using egui/eframe 0.36 and Rust 1.95.
@@ -360,8 +664,8 @@ E2 is the first usable milestone. Track platform builds throughout rather than
 deferring all Windows/Linux issues to E8. E2 adds only a minimal experimental
 local-terminal adapter over existing model/PTY APIs; E3 integrates it into shared
 control without retaining duplicate input encoding, protocol-response, or shutdown
-rules. Before E9, migrate PO key extraction
-and static table generation: deleting `.slint` now would remove valid catalog keys.
+rules. E7L adds egui source extraction and static tables. Before E9, migrate
+remaining Slint-only references: deleting `.slint` now would still remove needed catalog keys.
 `scripts/check_repository.py` and tests currently enforce Slint build/type entries;
 E1 teaches both frontend boundaries and E9 enforces the final egui architecture.
 

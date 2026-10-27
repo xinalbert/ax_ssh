@@ -118,17 +118,41 @@ Tokio receivers, locks, or unbounded terminal buffers to Slint.
 - Tests must inject deterministic trust and credentials; they must not disable
   host-key verification.
 
+## Standards-first Implementation
+
+- Before each implementation slice, search and read the applicable official
+  documentation, specifications, and primary reference implementations. Complete
+  this lookup before editing implementation code; do not implement first and
+  search afterward to justify the result.
+- Prefer versioned sources matching `Cargo.lock` and the supported platforms.
+  Compare newer guidance with the locked APIs explicitly; a search result is not
+  authorization to upgrade dependencies or change the architecture.
+- Compare the standard approach with the existing ownership boundaries. State
+  the chosen implementation, security/lifetime implications, and any necessary
+  deviation before coding. Distinguish a formal standard from an API example or
+  a project-specific decision.
+- Record the question, lookup date, source URLs, applicable versions, findings,
+  implementation decision, and unresolved gaps in
+  `docs/project-implementation-tracker/research.md`; reference the decision from
+  the current plan. Search snippets alone are insufficient: read the relevant
+  source sections. Local source inspection and tests complement this lookup.
+- Repeat a focused lookup when scope, platform behavior, or a key implementation
+  assumption changes. Keep implementation and verification scoped to the
+  researched decision, and report unavailable verification honestly.
+
 ## Change Workflow
 
 1. Read the relevant source, `docs/project-implementation-tracker/project-map.md`,
    and the project skill reference selected for the change.
-2. State the affected ownership boundary and security implications before
+2. Complete the Standards-first Implementation lookup, record its sources and
+   decision, and update the executable plan before editing implementation code.
+3. State the affected ownership boundary and security implications before
    changing cross-module contracts.
-3. Keep edits scoped. Update paired English/Chinese docs when architecture,
+4. Keep edits scoped. Update paired English/Chinese docs when architecture,
    commands, user behavior, or public contracts change.
-4. Update the implementation tracker for cross-module, long-running, or
+5. Update the implementation tracker for cross-module, long-running, or
    handoff-sensitive work. Do not create Worker records without authorization.
-5. Review the final diff for accidental reference-project coupling, leaked
+6. Review the final diff for accidental reference-project coupling, leaked
    secrets, unbounded queues/buffers, UI-thread blocking, and expanded APIs.
 
 ## Release Tag Constraints

@@ -1,5 +1,15 @@
 # 项目研究记录
 
+## 2026-10-25 E7 音频实施前标准核对与 G1 约束
+
+- 时间：2026-10-25 11:35 +0800
+- 检索问题：锁定 CPAL/PulseAudio 下，远端音频设置、实际录音需求、权限与 stream 清理应如何接线？如何将“先检索标准实现再施工”作为项目常规门禁？
+- 检索原因：用户要求继续音频/媒体迁移，并明确要求将施工前检索标准实现落入 AGENTS.md；本轮实现代码尚未修改。
+- 来源列表：[CPAL 0.17.3 官方 API/示例](https://docs.rs/cpal/0.17.3/cpal/)、[PulseAudio Audio Streams](https://freedesktop.org/software/pulseaudio/doxygen/streams.html)、[PulseAudio def.h/source state](https://distributions.freedesktop.org/software/pulseaudio/doxygen/def_8h.html)、[Apple requestAccess API 入口](https://developer.apple.com/documentation/avfoundation/avcapturedevice/requestaccess(for:completionhandler:))；本机锁定 CPAL、已有 audio.rs/automatic.rs 和 AudioSettings 作为项目事实。
+- 关键结论：CPAL 的 Host/Device/Stream 分层要求按设备支持配置创建 stream，回调属于音频线程，示例说明跨平台启动需显式 play；PulseAudio 区分 record stream、source 和 source-output，source 空闲仍可能采集，不能用“设备存在/运行”替代所属非 corked 录音流需求，stream 使用后需断开。以上为官方 API/行为依据，不把示例称作统一强制标准。Apple 入口正文依赖 JS，Markdown 链接抓取失败，未从入口推断未读到的权限细节；本轮沿用项目已核验的 AVFoundation 适配，不重写原生权限代码。
+- 对实施计划的影响：G1 在根 AGENTS.md 要求每个实施切片前外部检索并阅读官方/版本化依据，记录来源、适用版本、决策/偏离/缺口后再写实现，项目 skill 指向该门禁。音频切片优先复用现有 CPAL/rubato/标准 Pulse worker，仅增加保存格式到新 SSH worker 的应用链和明确的连接级转发选择；实际需求/权限/设备/有界 PCM 与取消仍归原 worker。连接级默认关闭、不持久化授权是本项目迁移决策，不声称由上述文档强制要求。
+- 未解决问题：真实 macOS TCC/Windows 麦克风权限与 Linux Pulse/pipewire-pulse 服务器、原生 GUI/设备仍需人工或目标平台验证；Apple 页面正文未抓取，不升级 CPAL 或扩展权限实现，附件入口留独立切片。
+
 ## 2026-10-23 E6 无 Slint 的 SVG 文件图标解码
 
 - 时间：2026-10-23 15:30 +0800
@@ -790,3 +800,222 @@
 - 关键结论：muda 0.19.3 的 AppKit/Win32 后端可直接绑定 NSApp/HWND；Windows accelerator 依赖消息循环 TranslateAcceleratorW，而 eframe 的 winit loop 不暴露该路由，因此本实现让 egui 处理 Windows 快捷键并用 muda 显示菜单。muda 的 Linux 后端要求 GTK 3/4 窗口及开发库；当前 eframe 是 winit X11/Wayland 窗口，接入 GTK 会引入第二套宿主运行时，所以 Linux 使用 egui MenuBar。MenuEvent 通过 bounded sync channel 转发到 UI。
 - 对实施计划的影响：新增 `muda` 仅在 macOS/Windows target dependency 且 default-features=false；Linux 不解析 muda/GTK。Settings/Tab 菜单共用 action 表，保留原生窗口边框；Windows/Linux 快捷键采用精确非重复消费，macOS accelerator 由 AppKit 处理。菜单与设置的 GUI、DPI、可访问性仍需各平台原生验收。
 - 未解决问题：当前机器只有 macOS SDK；Windows 完整 crate 构建需 Windows SDK/windows.h，Linux GTK 原生菜单未实现且不属于当前 winit 宿主边界。
+
+## 2026-10-24 E7P 原生 Option 输入接口核对
+
+- 时间：2026-10-24
+- 检索问题：如何避免为 Option 产生的特殊字符错误添加 Escape 前缀？
+- 检索原因：egui 的 Text 已经过平台输入法/键盘转换，必须在原生层保留 Alt 原始字符。
+- 来源列表：[winit 0.30.13 WindowExtMacOS](https://docs.rs/winit/0.30.13/winit/platform/macos/trait.WindowExtMacOS.html)；本机锁定 eframe 0.37.0 `epi.rs`、egui-winit 0.37.0 输入和 winit 0.30.13 macOS view 源码。eframe docs.rs Frame 页面本次加载失败，不作为已核验来源。
+- 关键结论：WindowExtMacOS 的 OptionAsAlt 会忽略 Option 重音转换并保留原始字符和 Alt 修饰；eframe 提供当前 winit window。策略需随终端焦点恢复，设置/编辑器继续使用平台文字输入。
+- 对实施计划的影响：macOS egui 对已有 winit 版本新增可选直接声明，不引入第二事件循环；原生策略状态同步到终端编码，IME commit 不加 Meta 前缀。缓存源码另确认 eframe RequestPaste 会归一化 CRLF 并忽略空文本，故 OSC 52 原始文本读取改用显式授权后的单个后台读取 job，不复用普通 Paste 事件。
+- 未解决问题：实际 Option/dead-key/IME 及多平台原生 GUI 验收仍独立保留。
+
+## 2026-10-25 E7A 续作：格式、临时授权与需求触发
+
+- 时间：2026-10-25 11:56 +0800
+- 检索问题：实验前端如何传递音频格式和连接级授权，保持现有设备权限、需求触发及清理边界？
+- 检索原因：接续未收口的 E7A；复核此前记录所引用但 research 中缺失的音频依据，先读官方正文，再补回归与文档。
+- 来源列表：[CPAL 0.17.3 使用及流启动](https://docs.rs/cpal/0.17.3/cpal/)、[PulseAudio 16.0 source-output 的 source/corked 字段](https://www.freedesktop.org/software/pulseaudio/doxygen/structpa__source__output__info.html)、[PulseAudio 16.1 module-pipe-source 实现](https://raw.githubusercontent.com/pulseaudio/pulseaudio/v16.1/src/modules/module-pipe-source.c)、[Tokio 1.53.3 watch 文档源码](https://raw.githubusercontent.com/tokio-rs/tokio/tokio-1.53.3/tokio/src/sync/watch.rs)、[egui 0.37.0 Ui 实现](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/ui.rs)。已读取相关正文：CPAL 配置/回调/play、Pulse 字段与 pipe-source 参数、watch 最新值/borrow_and_update、Ui 输入与 sizing。Tokio/egui docs.rs 页面不可访问，使用对应 tag 官方源码补足。
+- 关键结论：以上是官方 API 契约及参考实现，并非统一的远端麦克风协议标准。锁定 CPAL 0.17.3 支持按配置建流，部分后端建流即启动，不能套用新版统一暂停语义；设备访问必须继续留在录音需求之后。Pulse 的 source-output 提供所属音源及暂停状态；既有桥接以自有音源的非暂停流触发。pipe-source 接受 rate/channels/FIFO，watch 只保留最新值，适合非秘密格式配置。项目决定：UI 只改草稿，workspace 保存成功后发布格式；新 SSH worker 捕获该格式。连接选项默认关闭、不进入 profile/工作区，仅当前连接及已授权重试沿用；替换/主动断开清除。复用设备租约、有界 PCM、取消/join，认证与主机信任前不准备音源。
+- 对实施计划的影响：E7A 保持 in_progress，先核对现有接线，补全采样率/声道选择及保存失败、重连和撤销回归，更新双语说明，完成两前端完整门禁、组合检查和双 macOS target check/严格 Clippy；无依赖升级或新原生权限实现。
+- 未解决问题：真实 macOS TCC、Windows/Linux 设备与远端 Pulse/pipewire-pulse 行为、GUI 由原生环境和用户验收；未重新核验 Apple 权限实现，不将其记作本轮已读证据。附件/手动转写继续独立后续阶段。
+
+## 2026-10-25 E7I 剪贴板图片附件入口
+
+- 时间：2026-10-25
+- 检索问题：egui 图片粘贴如何接入原有私有 PNG/SFTP 附件，同时避免后台任务向已切换终端插入路径？
+- 检索原因：继续 E7R 图片入口；核对锁定事件、像素格式、阻塞任务取消和 SFTP 成功回执。
+- 来源列表：[egui 0.37.0 Event](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/data/input/event.rs)、[egui-winit 0.37.0 clipboard](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui-winit/src/clipboard.rs)、[eframe 0.37.0 WGPU paste dispatch](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/eframe/src/native/wgpu_integration.rs)、[ecolor 0.37.0 Color32](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/ecolor/src/color32.rs)、[Tokio 1.53.3 blocking task](https://raw.githubusercontent.com/tokio-rs/tokio/tokio-1.53.3/tokio/src/task/blocking.rs)、[image 0.25.10 PngEncoder](https://docs.rs/image/0.25.10/image/codecs/png/struct.PngEncoder.html)、[SFTP v3 draft §6.3–6.6](https://datatracker.ietf.org/doc/html/draft-ietf-secsh-filexfer-02#section-6.3)。已读取对应正文并核对本机锁定源码。Open Group 单引号正文两版本均返回 403，未作为已读证据；保持项目现有单引号转义并用真实 shell 回归验证。
+- 关键结论：egui/eframe 是 API/参考实现，文本表示优先，无文本时产生 Arc<ColorImage>；Color32 为预乘 alpha，后台须转回非预乘 RGBA。Tokio 已开始的 blocking job 不能 abort，取消必须保留并 join。PNG 编码接收指定颜色类型的像素；复用项目有界 encoder。SFTP v3 文档是过期草案而非正式 RFC；WRITE 和 CLOSE 都必须等 STATUS，既有上传已遵循此约定。
+- 对实施计划的影响：新增 E7I，先计划后代码。egui 适配器持有单个有界像素转换 job、焦点/终端/视口票据和取消状态，后台编码后发送至 controller；controller 拥有每终端单个附件准备任务、私有文件和同连接 SSH 请求，成功后仅发布 ready token，界面复核原焦点/可见 pane/连接/视口再确认插入。PNG 不经过 PTY，无自动换行；限 4096²/16 MiB/32 附件，Telnet/Serial 拒绝。取消撤销 token，disconnect/replace/close/exit join 后清理；远端复用已有 worker 的会话末清理。无需新依赖或文件选择器；OSC 52 保持独立文本流程。
+- 未解决问题：上游原生剪贴板读取及首次 ColorImage 构建在 eframe 内发生，应用只能在事件后限制尺寸；egui 文本优先与默认前端图片优先有差异，明确记入双语使用说明。真实 OS 剪贴板/焦点和 GUI 交用户验收，远端断网清理仍尽力而为；其它原生平台/MSRV 本机不可验证。
+
+## 2026-10-25 E7H 会话侧栏遮罩设置
+
+- 时间：2026-10-25 16:30 +0800
+- 检索问题：怎样复用默认前端的会话地址遮罩，在 egui 提供单字符草稿、实时预览和原始连接数据隔离？
+- 检索原因：E7R 对照发现 egui 只有完整 endpoint 悬停提示，缺少遮罩地址行和 Workspace 遮罩字符控件；先核对 API 再施工。
+- 来源列表：[egui 0.37.0 TextEdit](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/widgets/text_edit/builder.rs)、[egui 0.37.0 Response](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/response.rs)、[Rust 1.95.0 Ipv4Addr](https://raw.githubusercontent.com/rust-lang/rust/1.95.0/library/core/src/net/ip_addr.rs)。已阅读 singleline/char_limit/id_salt、on_hover_text 的 AccessKit description 行为及 octets 的四字节/稳定版本契约，并对照本机锁定 egui 源码；Rust 版本化 HTML 不可访问，采用官方 tag 正文。
+- 关键结论：这些是官方 API 契约而非地址脱敏的正式标准。TextEdit 可限制输入字符数，仍须复用 config 的规范化以处理空白/非法草稿；稳定 ID 不随语言改变。on_hover_text 同时发布可访问性描述，完整 endpoint 仍会出现在悬停/辅助技术中。默认规则只遮用户名中段和 IPv4 第二段，域名、IPv6、串口不改；旧使用文档的 192.*.202 示例与源码不符，应纠正为 192.*.1.202，保持现有行为。
+- 对实施计划的影响：新增 E7H；将既有纯格式化函数移至共享 controller 子模块并由默认适配器 re-export，仅导出一个有意供两 binary 使用的函数。egui 列表增加遮罩地址，保留原完整悬停详情/搜索/编辑/连接；Workspace 草稿字符限一，显示前用既有 WorkspaceSettings normalizer，预览关闭恢复保存值，保存失败不发布。仅 UI 表示与纯格式化跨层，无 transport、凭据、持久 schema 或任务生命周期变更。复用两条既有 PO 键；验证协议/Unicode/原值不变、全部语言/预览/失败恢复和两前端门禁。
+- 未解决问题：列表遮罩不是秘密保护边界，完整地址仍可搜索、编辑并由提示/辅助技术读取；名称是用户数据，保持原样。真实 GUI/辅助技术交用户验收；MSRV 1.95 与其它原生平台仍依赖 CI。
+
+## 2026-10-25 E7B 文字亮度与粗体亮色实施前核对
+
+- 时间：2026-10-25 16:56 +0800
+- 检索问题：egui 终端如何应用已有文字亮度/粗体亮色设置，同时保留反显、淡色、隐藏和装饰颜色顺序，且不误改透明度？
+- 检索原因：E7R 外观对照发现两个已保存字段没有 egui 控件及 Painter 消费；本条在实现代码修改前记录。
+- 来源列表：[xterm SGR](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html)（Patch #411，已读 SGR 1/2/7/8 与颜色段）、[xterm boldColors](https://invisible-island.net/xterm/manpage/xterm.html#VT100-Widget-Resources)（已读 boldColors/boldFont/boldMode）、[egui 0.37.0 Color32 官方源码](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/ecolor/src/color32.rs)（已读 alpha、to_srgba_unmultiplied/gamma_multiply）、[egui 0.37.0 Slider 官方源码](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/widgets/slider.rs)（已读整数、clamping 与 step_by）。本机 Cargo.lock、config normalizer、Slint terminal_render 及回归作为项目事实。
+- 关键结论：SGR 区分 bold/faint/inverse/hidden；xterm 的 0–7 映射至 8–15 是可选 boldColors 策略，不是所有终端必须采用的形式标准。Color32 使用预乘 alpha，gamma_multiply 同时缩放 alpha，不能替代现有 HSL 亮度。Slider 支持 5 点步长；范围 60–120、默认 100 和 dim 0.70 是既有项目策略。
+- 对实施计划的影响：新增 E7B，先提取默认前端已有 HSL 纯算法至 controller/text_colors，仅导出一个 RGB 数组函数，默认适配保持行为。egui Appearance 加两控件并复用已有 PO；先提升低 ANSI 索引，再反显，再对可见文字/下划线/删除线应用亮度及 dim，最后 hidden；背景/光标/选区不参与。设置纳入行缓存键，无 PTY 输出也即时预览/还原；保存仍归 workspace 原子事务。无新依赖/schema/任务或安全授权。
+- 未解决问题：两前端主题 ANSI 配色差异、semantic/custom theme/刷新设置仍属后续 E7R；本切片只共享亮度算法，不扩大颜色协议支持。GUI/辅助技术由用户验收，MSRV 1.95 与其它原生平台依赖 CI。
+
+## 2026-10-25 E7R-Theme 自定义调色板实施前核对
+
+- 时间：2026-10-25 18:16 +0800
+- 检索问题：egui 0.37 如何把已有 Light/Dark 自定义主题草稿映射到全局视觉，同时保持 CSS hex 解析边界、egui 主题隔离和可读性保护？
+- 检索原因：E7R 对照发现 Slint 已有 26 个自定义调色板输入，而 egui 只有主题/调色板选择，无法编辑 `ThemePaletteKind::Custom`；需要在施工前确认锁定 API 和颜色格式边界。
+- 来源列表：[egui 0.37.0 Context 源码](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/context.rs)（已读 `set_visuals_of`/`set_theme` 的 Light/Dark 主题槽位）、[egui 0.37.0 Color32 源码](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/ecolor/src/color32.rs)（已读 sRGBA 预乘 alpha、非预乘转换和 gamma-space 操作）、[CSS Color 4 §5.2](https://www.w3.org/TR/css-color-4/#hex-notation)（已读 3/4/6/8 位 hex 语法）、[WCAG 2.2 §1.4.3](https://www.w3.org/TR/WCAG22/#contrast-minimum)（已读普通文字 4.5:1、大文字 3:1 对比度要求）。对照 Cargo.lock 的 egui/eframe 0.37.0、本地 `ThemeSettings::normalized` 与 `ThemePalette::normalize_for_brightness`。
+- 关键结论：`Context::set_visuals_of` 是 egui 官方的按 Light/Dark 槽位设置 Visuals API；应用应在 UI 帧前应用当前保存/草稿主题，不从 Painter 或窗口回调改全局状态。Color32 内部使用预乘 alpha，编辑字段应读取普通 sRGBA；但 config 的自定义主题已允许 `#RRGGBB`/`#RRGGBBAA`，egui 主题中的文字/表面颜色应使用其规范化结果。CSS 允许 3/4/6/8 位，但项目 config 的主题规范化是更窄的可读性策略，不能在 egui 侧放宽。WCAG 对比度是可访问性依据；项目现有 `ThemePalette::normalize_for_brightness` 已在保存/规范化时保护表面、文字、边框、状态和终端颜色。
+- 对实施计划的影响：新增 E7R-Theme。egui Appearance 将在选择 Custom 时展示 Light/Dark 两组稳定 ID 的 13 个 hex 字段，使用 `TextEdit::char_limit` 限制输入；预览调用 `ThemeSettings::normalized` 生成临时 `ThemeSettings`，不改变 workspace/config。`egui_app::theme::Theme` 接收规范化后的主题并通过 `set_visuals_of` 应用两个槽位，当前模式继续由 `set_theme` 选择。保存仍交给现有 catalog 原子事务，失败保留原草稿。非法/低对比输入显示可读规范化结果，空字段不成为全局主题颜色；不新增 schema、依赖、transport、任务或权限。
+- 所有权与偏差：主题领域/config 继续拥有颜色 schema、归一化和 contrast 规则；egui 只负责草稿编辑和 `ThemeSettings` 的临时解析。egui 文本字段允许 alpha 以复用现有 config；没有在 UI 引入 CSS 颜色名或 3/4 位短式，以保持两前端保存契约一致。W3C/WCAG 是可访问性标准，egui API 只是实现 API，不构成颜色标准。
+- 未解决问题：真实系统高对比度/辅助技术和窗口视觉仍交用户验收；默认 Slint 的 Theme token 与 egui Visuals 并非一一对应，自定义 palette 仅覆盖现有 13 个共享角色。
+
+## 2026-10-25 E7Q 语义高亮实施前核对
+
+- 时间：2026-10-25 17:24 +0800
+- 检索问题：如何将默认前端日志级别/HTTP 高亮和四类颜色迁移到 egui，避免 UI 正则处理、终端颜色覆盖及无界缓存？
+- 检索原因：E7R 对照发现已保存 semantic 字段未在 egui 消费；本条与执行计划先于实现修改。
+- 来源列表：[OpenTelemetry Logs Data Model](https://opentelemetry.io/docs/specs/otel/logs/data-model/#field-severitynumber)（当前 1.62.0，已读 SeverityText/SeverityNumber 与映射）、[RFC 5424 §6.2.1](https://www.rfc-editor.org/rfc/rfc5424.html#section-6.2.1)（已读 severity 表）、[RFC 9110 §15](https://www.rfc-editor.org/rfc/rfc9110.html#section-15)（已读 100–599 与五类语义）、[regex 1.13.1 官方性能/非可信输入](https://docs.rs/regex/1.13.1/regex/#untrusted-input)（已读编译复用、captures_iter 的 O(m*n²) 上界）、[epaint 0.37.0 LayoutJob/Section 官方源码](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/epaint/src/text/text_layout_types.rs)（已读字节范围顺序/覆盖及 section 排字）。Cargo.lock、默认 highlighting/eligibility、config 规范化和现有语义回归为本地依据。
+- 关键结论：RFC/OTel 规定状态类别/级别含义，不规定 UI 颜色；四类配色/同义词/HTTP 诊断文本上下文是既有项目策略，HTTP/2/3 文本不是 wire status line。regex 必须复用编译对象且限制输入和匹配迭代；默认 512 字节、ASCII 一字节一格、默认前背景及非 inverse/dim/hidden eligibility 保持。egui section byte range 必须有序无缺口，固定网格每字符偏移继续保留。
+- 对实施计划的影响：E7Q 提取现有识别及 eligibility 至共享 controller；默认适配保留原 split/装饰行为。egui 在 controller publish 时计算可见行每 run 的范围/类别，无正文副本，按源 Arc 身份复用，仅保留当前可见行；预计算与开关无关以支持即时草稿预览，绘制回调不编译/匹配正则。Painter 用范围改变每字 section 前景再应用既有亮度，保留布局/背景/显式装饰/原终端风格；开关与规范化四颜色进入缓存键。控件复用既有译文，稳定 ID 与短文本上限；配置 schema/SSH/权限/worker 取消所有权保持。
+- 未解决问题：仅同一个合格终端 run 内识别，不跨样式边界/折行/Unicode；宽/组合文字保留原样。链接交互/链接颜色、自定义主题和其它显示设置另属 E7R；真实 GUI/辅助技术及其它原生平台/MSRV 仍待验收。
+
+
+## 2026-10-25 E7R-FPS 实施前核对
+
+- 时间：2026-10-25 20:57 +0800；本条与计划先于 Rust 修改。
+- 检索问题：egui 后台唤醒、Tokio 定时取消和最新焦点通知如何配合已有解析任务，实现前台/后台输出快照限频而不延迟协议处理？
+- 检索原因：config/Slint 已有 focused/unfocused FPS，而实验 controller 固定 16 ms 发布、egui 未提供控件；需先核对锁定 API 的计时和唤醒契约。
+- 来源列表：[egui 0.37 Context 官方源码](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/context.rs)（已读 request_repaint、request_repaint_after、回调锁约束）、[Tokio 1.53.3 Sleep 官方源码](https://raw.githubusercontent.com/tokio-rs/tokio/tokio-1.53.3/tokio/src/time/sleep.rs)（已读 sleep_until 与取消）、[Tokio 1.53.3 Interval 官方源码](https://raw.githubusercontent.com/tokio-rs/tokio/tokio-1.53.3/tokio/src/time/interval.rs)（已读立即首 tick、默认 Burst 和 Skip）、[Tokio 1.53.3 Watch 官方源码](https://raw.githubusercontent.com/tokio-rs/tokio/tokio-1.53.3/tokio/src/sync/watch.rs)（已读 latest-value、borrow_and_update 与关闭约束）。docs.rs 版本页访问失败后改读官方版本 tag 正文；不依赖检索摘要。对照锁文件、Slint TerminalPresentationPolicy、config 60/4 默认及 1–120 规范化范围。
+- 关键结论：eframe 的 repaint 回调允许后台任务唤醒 UI；request_repaint_after 是延迟重绘请求，不能作为精确输出限频器。sleep_until 在等待中不做工作，可由 select 取消；绝对 deadline 避免持续输出反复延后。watch 只保留最新值，适合性能性质的焦点提示；不跨 await 保留 borrow。官方 API 不规定产品 FPS，60/4 与 1–120 是项目既有策略。
+- 对实施计划的影响：替换 controller 固定 16 ms ticker，以最近一次实际发布和保存 FPS 计算 deadline；只在有脏内容时等待，合并同步输出 hold，错过期限后只发布当前帧。状态/用户动作可即时发布，字节解析/协议响应继续处理，因此设置约束的是输出快照而非全应用帧率。焦点独立 watch 避免命令队列满或旧代次让后台终端滞留前台策略；DEC1004 命令仍保持现有代次/有界约束。复用 UI 已有 focus/suspend 通知和 workspace 保存事务，不增加任务或依赖。
+- 未解决问题：Slint 的持续输出自适应降频/隐藏路由不直接移植，egui 使用可配置的输出快照上限；未聚焦及隐藏终端统一后台频率。真实 GUI 帧率、功耗和原生焦点仍待用户验收；其它平台/MSRV 交既有 CI。
+
+
+## 2026-10-25 E7R-FPS 焦点生命周期补充核对
+
+- 检索问题：隐藏/鼠标释放失败或连接代次重置时，如何保证呈现焦点提示反映当前 UI，同时不重复发送 DEC1004？
+- 检索原因：最终检查发现 suspend 在取消远端鼠标错误后提前返回，generation 变化会清除 UI 的 focused 标志；仅依赖布尔变化通知不足以覆盖这些路径。此补充先于修正代码。
+- 来源列表：[egui 0.37 Response 官方源码](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/response.rs)（2026-10-25 已读 has_focus/gained_focus/lost_focus/request_focus/surrender_focus，has_focus 同时检查原生窗口和 widget 焦点）、[Tokio 1.53.3 Watch 官方源码](https://raw.githubusercontent.com/tokio-rs/tokio/tokio-1.53.3/tokio/src/sync/watch.rs)（复用本轮 latest-value/关闭与短 borrow 核对）。
+- 关键结论：呈现焦点是当前 UI 状态；egui 的 widget/native 焦点与连接代次无关。只有焦点变化时发送协议报告仍合适，但不能用该变更缓存推断最新呈现提示已经送达。
+- 对实施计划的影响：保留 focus(bool) 的既有有界协议行为，增加明确的公开呈现提示方法作为 library 到 binary 的窄接口，不写 transport。UI 每个准入帧发布提示，suspend 在可能失败的鼠标释放之前先清除此提示；不会增加协议报告。提示和协议仍各自受既有所有权/代次边界约束。增加重复提示不入命令队列及旧 UI 代次提示测试，再重跑门禁。
+- 未解决问题：这是状态正确性修正，不对原生焦点/功耗作验收结论；GUI 和其它平台边界保留。
+
+
+## 2026-10-25 21:52 +0800 E7R-Icons 实施前核对
+
+- 检索问题：如何复用既有系统图标目录，匹配 Slint alpha colorize、本地 OS 身份/覆盖与 egui 草稿事务，且不在 UI 解析 SVG/读取系统文件？
+- 检索原因：已存 system_icons_follow_theme/local_shell_icon_override 在 egui 未消费，Sidebar/Tab 仍为通用字形；需要确认锁定资源/颜色 API 与构建 gate。
+- 来源列表：[resvg 0.48.1 render 官方源码](https://raw.githubusercontent.com/linebender/resvg/v0.48.1/crates/resvg/src/lib.rs)、[usvg Options](https://raw.githubusercontent.com/linebender/resvg/v0.48.1/crates/usvg/src/parser/options.rs)、[ImageHrefResolver](https://raw.githubusercontent.com/linebender/resvg/v0.48.1/crates/usvg/src/parser/image.rs)、[tiny-skia 0.12 Pixmap](https://raw.githubusercontent.com/linebender/tiny-skia/v0.12.0/src/pixmap.rs)、[egui 0.37 Image/Button](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/widgets/image.rs)、[Button 实现](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/widgets/button.rs)、[epaint ColorImage](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/epaint/src/image.rs)、[TextureHandle 生命周期](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/epaint/src/texture_handle.rs)、[Cargo build scripts](https://doc.rust-lang.org/cargo/reference/build-scripts.html)、[Cargo optional dependencies](https://doc.rust-lang.org/cargo/reference/features.html#optional-dependencies)、[os-release 规范](https://www.freedesktop.org/software/systemd/man/latest/os-release.html)。已读正文/API；本地对照锁文件、Slint SystemPlatformIcon、config 规范化及原 local_platform/cache 逻辑。
+- 关键结论：resvg 输出 sRGB 预乘 RGBA，可直接映射 ColorImage::from_rgba_premultiplied；Image tint 为乘色，需白色 alpha mask 才能复现单色轮廓。TextureHandle 最后引用 drop 时释放。usvg 默认允许本地 image href，构建必须禁用 string/data resolver；Cargo 生成物置 OUT_DIR 并声明 rerun 输入，不能写源目录或用 host OS 判断 target 平台。os-release 优先 /etc 再 /usr/lib，不执行 shell；原代码保留 ID 精确匹配/不继承 ID_LIKE 与 8KiB 限额，UI 只读启动缓存。48px 与最多 128 项是本项目资源预算，不是外部规范。
+- 对实施计划的影响：私有 build 模块消费 catalog.json 指定的 SVG/PNG（限定仓库内路径、2MiB 输入；PNG 8192 边长/32Mi 像素，覆盖现有 8001×3151 素材），生成 48×48 premultiplied bytes 与静态目录；增加同锁定版本的 egui 可选 resvg build-dependency，无新运行时 decoder。UI 每个 owner 最多 128×2 native/mask 纹理，最小化/clear/退出释放；图标选择只用 canonical ID。提取已有纯平台映射到库，Linux 启动 blocking 发现；Sidebar 使用已校验 profile cache/override，Tab 以当前聚焦 pane 决定 local/remote icon。Appearance 编辑本地覆盖与主题轮廓，预览/还原立即显示，保存沿用事务；新文案不得声称即时落盘。
+- 未解决问题：本轮不新增远端探测/会话级图标编辑器，已有 override/cache 可显示；原生视觉/高 DPI/辅助技术由用户验收，其它平台/MSRV 交 CI。无 SSH 信任/凭据/权限/schema 变更，无多 agent/Worker。生成器仅调整共享输出路径，按 Python code style 保留行为。
+
+- E7R-Icons 身份读取补充决策（实现前）：官方 os-release 规定只有 /etc/os-release 缺失才回退 /usr/lib；原读取器对所有错误都回退。本轮提取时增加可注入读取器，保留 8KiB/ID 不继承规则，修正为仅 NotFound 回退，其它错误使用通用 Linux；补严格来源优先测试。不执行内容或新增网络探测。
+
+
+## 2026-10-25 23:28 +0800 E7R-Shells 实施前核对
+
+- 检索问题：怎样迁移已有 shell 发现/选择缓存，保留自定义失效项和满列表当前选择，且不在 UI 查 PATH/执行程序或因发现而自动保存？
+- 检索原因：egui 只有原始路径输入，未消费 known_shells/后台 discover_shells；原审计将兼容组名字段与未提供的列表增删页混为未迁移，需要先对照真实实现。
+- 来源列表：[egui 0.37 ComboBox 官方源码](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/containers/combo_box.rs)（已读 from_id_salt/selected_text/show_ui）、[egui 0.37 TextEdit](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/widgets/text_edit/builder.rs)（已读 singleline/id/char_limit，按字符限制）、[Tokio 1.53.3 spawn_blocking](https://raw.githubusercontent.com/tokio-rs/tokio/tokio-1.53.3/tokio/src/task/blocking.rs)（已读池上限、启动后不可 abort、shutdown 等待及 bounded work 约束）。版本与 Cargo.lock 匹配；本地对照 discover_shells、TerminalSettings::merge_known_shells/normalize_shell_settings、Slint Settings 异步候选和 egui 事务。
+- 关键结论：标准选择控件应给稳定 ID 并保留当前值，自定义执行路径继续用有界单行输入；UI 显示原始 shell 名/路径，不翻译用户值。blocking 任务一旦开始不能靠 abort 取消，因此启动前单任务必须 await 完成，不丢弃 join。32 项、256 字符、ASCII 大小写去重与 System default 是项目契约，不是通用 shell 标准。原默认前端是发现/选择缓存，没有独立候选增删页；组名长度只有兼容传递，当前两前端均未消费。
+- 对实施计划的影响：复用现有 discover_shells，在 GUI 建立前 blocking 发现并 join；失败仅警告并给空发现集，保留已保存/自定义选择。Context 本地 Arc 候选先经 domain 规范化；UI 候选副本以当前选择、已知项、新发现排序，复用 domain 限额和去重，满列表也保留当前值。打开设置/预览/发现不改草稿缓存或保存值；Save 对提交副本合并候选，成功后 config/workspace 应用到新终端，失败保留草稿，既有 worker 不重新启动。控件复用已有两条 PO，避免创建无效组名控件；兼容字段留待紧凑侧栏决策。
+- 未解决问题：原生 UI/键盘/平台 PATH 检测由用户/CI 验收；其它平台/MSRV 仍未在本机可运行。单次发现不提供动态重扫/列表删除，也不执行 shell 校验；选中失效项在明确新建终端时按现有 resolver 报错。无依赖/schema/平台 cfg/SSH 安全变化，无多 agent/Worker。
+
+
+## 2026-10-26 05:34 +0800 E7R-SFTP-Key 实施前核对
+
+- 检索问题：如何把已保存 SFTP 快捷键接到现有 companion 的实际操作，同时保证精确 pane/控件焦点、不偷本地终端 Ctrl+M、不重复执行或自动认证，并补齐八项保存键的冲突检测？
+- 检索原因：当前仅五项设置键可编辑，SFTP companion 已实现但无菜单/快捷键入口；导入/导出还没有实验 controller 操作，不能先增加无效编辑入口。
+- 来源列表：[egui 0.37 Response](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/response.rs)（已读 has_focus/request_focus/scroll_to_me）、[egui 0.37 Modifiers](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/data/input/modifiers.rs)（已读 matches_exact 与 command 平台语义）、[Muda 0.19.3 MenuItem](https://raw.githubusercontent.com/tauri-apps/muda/muda-v0.19.3/src/items/normal.rs)（已读 set_enabled/set_key_accelerator）。版本匹配 Cargo.lock；本地对照共享菜单表、现有 native adapter、ShortcutSettings 八字段与 SFTP companion 连接契约。
+- 关键结论：Response 请求焦点必须在控件创建后、Context 锁闭包外执行；用稳定 ID，且禁止 sizing pass/禁用状态产生副作用。精确匹配不吞重复或额外 Alt/Shift。Cmd/Meta 是项目现有解析别名；冲突需按解析后的键比较而非字符串。原生菜单可沿用同表和已有同步适配，不增加平台 API。焦点定位不是外部协议标准，是本项目对 companion 的交互决策。
+- 对实施计划的影响：View 增加既有 PO 标签 SFTP，使用保存的 open_sftp（默认 Ctrl+M），只在当前已保存 SSH pane/ready/无模态下启用；UUID 请求同帧验证并只消费一次，Remote path 使用稳定 ID/可访问名称，抑制同帧 terminal focus。快捷键页保留五个旧索引后追加 SFTP，所有八字段参与解析/语义与固定菜单保留键校验；导入/导出不添加入口。预览不改变路由，成功 Save 后生效，失败保留草稿。无新任务/channel/网络/凭据/持久化契约。
+- 未解决问题：临时 SSH 没有保存 profile，既有 companion 无法通过 Connect 使用它，因此本次不启用此入口；不自动连接/认证/List。原生菜单/焦点/键盘由用户验收，Windows/Linux 与 MSRV 1.95 由 CI 补证，Intel 只做交叉 check/Clippy。无多 agent/Worker。
+
+- E7R-SFTP-Key API 补充核对（修正前）：锁定版 TextEdit builder 无 accessible_name；对照上述 Response 官方源码的 labelled_by 文档和本地同版本实现，使用控件 Response.labelled_by(可见 label.id)，符合标准标签关联方式，不增加自定义无障碍名称接口。
+
+- E7R-SFTP-Key 平台语义补充（修正前）：上述 Modifiers 官方定义 Windows/Linux 的 command 与 ctrl 同值，且 matches_exact 将两者视作同一物理键模式；保存前比较不能只用未归一的 KeyboardShortcut 结构相等。决定仅在非 macOS 校验键中把 Cmd/Meta 合入 Ctrl，macOS 保留二者独立；用显式平台参数的私有纯函数在宿主同时验证两种语义，不改变菜单/终端输入映射。
+
+
+## 2026-10-26 05:46 +0800 E7R-Transfer 实施前核对
+
+- 检索问题：如何复用既有 Slint 会话/分组 JSON 协议，保证未知格式拒绝/脱敏/新 UUID/冲突命名/失败原子性，并把有界后台结果安全交给显式 egui Copy？
+- 检索原因：egui 尚无导入导出，规则被 UI binary 私有持有；现有 controller 事务可复用，不能重写另一套格式或在绘制回调解析/写盘。
+- 来源列表：[Tokio 1.53.3 spawn_blocking](https://raw.githubusercontent.com/tokio-rs/tokio/tokio-1.53.3/tokio/src/task/blocking.rs)（已读 bounded work/不可 abort/运行时等待）、[egui 0.37 TextBuffer](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/widgets/text_edit/text_buffer.rs)（字符索引/char_limit 与字节不同）、[egui 0.37 Context](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/context.rs)（对照本地锁定源码 copy_text 输出命令）、[Serde container attributes](https://serde.rs/container-attrs.html)（已读 deny_unknown_fields；现有 envelope 使用该属性，profile 继续既有兼容规则）。egui/Tokio 与 Cargo.lock 匹配，Serde 文档用于现有锁定 derive 属性，不升级依赖。
+- 关键结论：有限 CPU/文件任务适用 spawn_blocking，启动后不可取消，必须 await/join；char_limit 是字符数，提交前仍需字节上限；剪贴板写入应只由当前有效请求结果触发 Context.copy_text，不读取系统剪贴板，也不向 terminal 注入 JSON。deny_unknown_fields 只约束 envelope，不能宣称所有嵌套兼容字段都严格拒绝。
+- 对实施计划的影响：提取项目既有纯规则到共享库，保留 format axssh-session-export/version1、256 KiB、128 profiles、空组、Copy 命名和脱敏（nil 输出 UUID、新导入 UUID，清除 credential refs/vault marker/host trust/detected OS）。共享规则在候选副本上执行，成功验证/写盘后才发布；controller 增 import/export catalog 意图及最多 256 KiB 的脱敏结果，沿用 64 总容量/精确请求和旧 revision 拒绝。egui 使用显式粘贴导入对话框（256Ki 字符、提交 256KiB）和目标选择/Copy 导出对话框，关闭/旧请求结果只消费丢弃，背景 terminal 全禁用；全部八键可编辑。使用既有 PO 标签，必要时只补确需的新提示，不建文件选择器或自动 clipboard read。
+- 未解决问题：默认前端原自动读取剪贴板与 egui 显式粘贴有交互差异，需双语说明和原生验收；系统 keyring/vault 不迁移，不自动连接、不导出密码/信任。其它平台原生链接/运行、Intel 运行与 MSRV 1.95 交 CI；无多 agent/Worker。
+
+- E7R-Transfer 对话框补充核对（改用 Modal 前）：已读 [egui 0.37 Modal 官方实现](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/containers/modal.rs)，Modal backdrop 阻断背景输入，should_close 处理 Close/Esc/背景点击并尊重 popup；普通 Window 本身不是模态。采用 Modal，保留显式 Close，并在父 sizing pass 不创建/提交/消费回执，避免独立 Area 不继承父 sizing 标记。
+
+
+## 2026-10-26 06:23 +0800 E6R-Pause 实施前核对
+
+- 检索问题：如何把既有下载暂停/继续接入实验 owner/UI，正确区分能力与等待回执，在队列满、迟到 Progress、断开和旧连接命令下不误报状态或泄漏任务？
+- 检索原因：实验快照只有 status 字符串/conflict，UI 无 Pause/Resume；共享 SFTP-only worker 已有命令和回执，但 ActiveSftpTransfer::is_pausable 仅 Download 为真，不能把上传也展示为可暂停。
+- 来源列表：[Tokio 1.53.3 bounded mpsc try_send](https://raw.githubusercontent.com/tokio-rs/tokio/tokio-1.53.3/tokio/src/sync/mpsc/bounded.rs)（已读立即返回、Full/Closed 与值未发送）、[Tokio 1.53.3 Notify](https://raw.githubusercontent.com/tokio-rs/tokio/tokio-1.53.3/tokio/src/sync/notify.rs)（已读通知无数据、单 permit/登记与丢唤醒说明）、[egui 0.37 Ui](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/ui.rs)（已读 stable scope/UUID push_id、disabled/sizing 行为，适配标准 add_enabled Button）。docs.rs 入口不可用，采用版本化官方源码并对照本地同锁定版本实现；未升级依赖。
+- 关键结论：try_send 成功仅代表入队，不能视作已经暂停；必须等本项目 Paused/Resumed 回执，失败不得进入等待态。Notify 只是唤醒，已有 TransferCancellation 的原子 flag/循环复验才是状态，继续复用，不添加第二套暂停实现。暂停/继续不是 SFTP wire 标准能力，而是本项目下载 chunk 调度；既有 in-flight 请求可能先结束，连接断开不可续传。标准禁用控件仍需 owner 权限/代次复验与每帧去重。
+- 对实施计划的影响：给传输快照增加阶段与下载暂停能力，pending 状态不被 Progress 冲掉，terminal 阶段吸收迟到非终态事件；新任务在既有 64 history 中只回收终态。上传在发送前全量登记，未知 child Queued 仅来自共享 worker 的递归下载，Started/Progress 不凭空创建新记录。Pause/Resume/Cancel 在当前 generation/connected/UUID/能力/阶段复验后发给原 worker，成功才进入等待状态。UI 复用 Pause/Resume 两条 PO；不扩框架、协议、权限、凭据或持久配置。
+- 未解决问题：本轮只实现单项下载控制，批量选择、远端重命名/删除、原生拖出继续保留；原生 GUI/真实服务器暂停延迟由用户验收。自动回归用固定信任 peer、读取闸门与独立 SystemRelease FIFO 回执作为命令处理 barrier；不以 sleep 猜测暂停成功。其它平台/MSRV/Intel 原生运行仍需 CI，无多 agent/Worker。
+
+- E6R-Pause 控件可达性补充（改动前）：已读 [egui 0.37 ScrollArea 官方实现](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/containers/scroll_area.rs) 的 max_height/默认按需滚动条及裁切；当前传输历史直接铺满最多 64 行，尾部暂停/继续可能被 pane 裁切。决定沿用当前目录区域的标准纵向 ScrollArea，新增独立稳定 ID，历史区域最多 160px、空列表自收缩，不改变 64 条预算或终端输入规则。
+- E6R-Pause 能力来源补充：本地共享 worker 的 upload_queued_event 明确发送空 remote_path；新记录只对 Queued 且 remote_path 非空授予下载暂停能力，未知上传即便未预登记也保守拒绝。不是根据显示 name/status 或服务器文案推断。
+
+
+## 2026-10-26 07:25 +0800 E6R-Batch 实施前核对
+
+- 检索问题：怎样在既有 64 行/64 命令预算内实现批量选择/控制，处理旧选择和发送中途失败，并明确“入队”与实际完成的区别？
+- 检索原因：默认前端按活动列表过滤选择，但 request_selected_transfer_actions 先发送全部再更新 UI，发送中途失败可能掩盖前面的已入队项；实验端应复用能力规则并显式记录部分成功，不能直接复制该处理顺序。
+- 来源列表：[egui 0.37 Button](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/widgets/button.rs)（已读 selectable/selected 与 disabled 标准按钮）、[egui 0.37 Ui](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/ui.rs)（对照本地 selectable_label、stable push_id/UUID）、[Tokio 1.53.3 bounded mpsc](https://raw.githubusercontent.com/tokio-rs/tokio/tokio-1.53.3/tokio/src/sync/mpsc/bounded.rs)（已读 try_send 的 Full/Closed 与成功只代表入队）。版本匹配 Cargo.lock，不升级依赖。
+- 关键结论：标准选择按钮只展示传入 selected 值，UI owner 可在 clicked 后按 frame 单次提交；disabled 仍须业务 owner 资格复验。多个 try_send 不是原子事务，后项失败不能撤销先项；所以每项成功后马上更新 pending 状态，失败继续收集，不能宣称整个 batch 已完成。批次合并/最新结果是项目决策，不是 SFTP wire 标准能力。
+- 对实施计划的影响：一个有界 batch command（1–64 unique UUID）沿用 generation，复验 current connected/每项 typed eligibility；缺失或不适用计 skipped，发送失败保留原阶段并收集最多 64×512 字符错误，已成功项保留等待态。快照只保留最近汇总，不引入须可靠消费的每请求结果队列或 UI pending ticket，重连/断开清空。每 pane 独立选择、活动列表 pruning、全选/清空、每帧/sizing/禁用 guard 与 UUID 控件；复用既有批次标签，新增 Queued ({0}) 译文明确只入队。最新结果无副作用、不会迟到触发命令。
+- 未解决问题：批量远端文件操作、原生拖出和真实 GUI/多服务器仍后续；上传不可暂停，取消不回滚已完成文件。其它平台/Intel 原生运行与 MSRV 1.95 交 CI，无多 agent/Worker。
+
+
+## 2026-10-26 20:37 +0800 E6R-Mutate 实施前核对
+
+- 检索问题：怎样复用既有 remote Rename/Remove，在确认框关闭/导航/队列失败/早到或迟到回执下保留单项结果，避免误作用于新条目？
+- 检索原因：默认 rename 复验窗口/原始单选/目录 readiness，delete 直接发既有写操作；egui 尚无行入口，现 edit_event 会把未知 Failed 也当外部编辑错误，须先按 UUID 路由新操作。
+- 来源列表：[SFTP v3 草案 02](https://www.ietf.org/archive/id/draft-ietf-secsh-filexfer-02.txt)（已读 6.2、6.5、6.6、6.8：名称/REMOVE/RENAME/RMDIR/LSTAT）、[egui 0.37.0 Modal](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/containers/modal.rs)（已读 backdrop、top modal、Esc/popup 和独立 Area）、[Tokio 1.53.3 bounded mpsc](https://raw.githubusercontent.com/tokio-rs/tokio/tokio-1.53.3/tokio/src/sync/mpsc/bounded.rs)（try_send Full/Closed 与成功仅入队）。russh-sftp 3.0.1 docs.rs 入口不可用，沿用 checked-in execute_sftp_write 及锁定 API，不新增原生 API。
+- 关键结论：v3 草案为历史协议定义而非已发布 RFC，RENAME 已有目标应失败，REMOVE 不删目录，RMDIR 不递归且非空应失败；现 worker 已做 lstat/类型/目标不存在/超时，并仅使用常规 rename，不改语义。独立 egui Modal 不继承父 sizing/disabled，须在根展示前 guard，终端原始输入另受 workspace blocked 控制。异步命令错误必须有精确请求结果，不能依赖可合并快照；单保留槽是本项目的有界串行决策。
+- 对实施计划的影响：typed action + 私有 frozen target；client 在短锁内 try_send 并登记单槽，不持锁 await，队列失败不占槽。owner 复验代次/目录 request/可见条目 type/size/mtime，只在 worker 接纳后登记 pending；精确 Completed/Failed 写结果，导航不回跳；关闭标记放弃，断开清空。重命名沿用 trim/512 字符/禁斜杠反斜杠/控制字符规则；UI 明确确认单项 Delete，保留失败草稿并阻断快捷键/终端输入。
+- 未解决问题：本地可见元数据与 lstat 不能建立服务器原子身份保证；本轮不扩展身份协议、递归删除或覆盖重命名。不增批量远端选择/原生拖出；GUI/真实服务器、其它平台/Intel 运行与 MSRV 交后续验收。无多 agent/Worker。
+
+- E6R-Mutate 控件边界补充（改动前）：已读 [egui 0.37.0 Label](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/widgets/label.rs) 的 truncate 与默认 elided tooltip；4096 字符路径若直接换行可能挤走确认按钮，改用标准单行截断/悬停完整文本，错误区保留最高 120px 标准滚动；行操作以 path push_id 保持排序后的对象身份。
+
+
+## 2026-10-26 21:54 +0800 E6R-Select 实施前核对
+
+- 检索问题：怎样迁移路径多选和批量下载，兼顾目录递归、部分发送失败、旧选择/本地目标变动和有界发现任务？
+- 检索原因：默认路径 checkbox/全选不含范围选择，默认 queue_remote_downloads 逐项发根；实验现有 queue_download 给目录预建可取消 root 行；完整核对表明目录首文件复用 root UUID，空/全过滤目录返回 DiscoveryFailed，应保留根行/发现取消。共享 OpenSftpFile 入口尚未使用已有 available_sftp_transfer_slots，批次放大后须补齐同一个 512 槽预算。
+- 来源列表：[egui 0.37.0 Button](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/widgets/button.rs)（已读 selectable/selected 与禁用语义）、[egui 0.37.0 Ui](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/ui.rs)（稳定 push_id/作用域，与既有 UI 路由对照）、[Tokio 1.53.3 bounded mpsc](https://raw.githubusercontent.com/tokio-rs/tokio/tokio-1.53.3/tokio/src/sync/mpsc/bounded.rs)（已读 try_send Full/Closed，成功仅入队）、[SFTP v3 草案 02](https://www.ietf.org/archive/id/draft-ietf-secsh-filexfer-02.txt)（已读 6.7 READDIR/EOF/CLOSE、6.8 LSTAT）。本地 Cargo.lock 与 checked-in worker/discovery 为实际版本/生命周期依据，不升级依赖。
+- 关键结论：v3 草案不是正式 RFC，递归/批次/选择不是 wire 能力，继续复用本项目有界发现和传输；常规根返回同 UUID，目录首文件复用 root UUID、其余子项使用新 UUID，空/全过滤目录返回根 DiscoveryFailed，根入队不能宣称文件完成。标准 selectable 只展示 selected 值，owner 按 clicked/frame 更新可避免多 pass 重复翻转；路径 ID 不能依赖列表下标。多个 try_send 不构成原子事务，保留先前成功并报告后项失败。
+- 对实施计划的影响：一条有界 paths 意图绑定 generation/remote request/local revision，owner 重验整个目标再逐项处理；失效/链接/过滤跳过，失败不建行不回滚，最新摘要导航/断开清空。保留根行与发现阶段取消、首子项复用身份和空目录失败，子文件仍受 64 行/超额取消。共享发现入口使用既有 512 active/pending/queued/discoveries 总预算并发既有 DiscoveryFailed，使重复批次不能累积无界发现任务；无新事件、队列或持久配置。UI 选择仅当前 pane/目录最多 64，保留明确的单项修改确认。
+- 未解决问题：本轮不迁移批量修改/多选拖放/本地多选上传与原生拖出，空目录沿用不创建本地目录。真实 GUI/文件管理器/服务器与其它平台/MSRV/Intel 运行另验；自动测试用固定信任 peer，不绕过验证，无多 agent/Worker。
+
+- E6R-Select 实施中校正：完整读到 discover_initialized_download_requests 末尾后确认空目录返回错误，经既有 DiscoveryFailed 结束根行；初始“根行无法结束”的判断撤销，已恢复原 queue_download 行登记，不改变发现阶段 Cancel。研究影响仍是路径选择/部分入队和共享入口预算，未新增 wire/事件。
+
+
+## 2026-10-26 22:29 +0800 E6R-UploadSelect 实施前核对
+
+- 检索问题：怎样把本地多选接入现上传准备，防止旧目录/文件替换/取消后发布，保留有界阻塞任务与冲突语义？
+- 检索原因：现 upload_roots 接受多根，local_source 仅承载一个拖入 path/revision；local_files 私有目录快照目前只保留普通文件，选中目录也需保留元数据并在后台验证。
+- 来源列表：[Tokio 1.53.3 blocking](https://raw.githubusercontent.com/tokio-rs/tokio/tokio-1.53.3/tokio/src/task/blocking.rs)（已读 spawn_blocking 有界工作、开始后不能 abort、shutdown 等待）、[egui 0.37.0 Button](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/widgets/button.rs)（selectable/disabled/truncate）、[Rust 1.95.0 fs](https://raw.githubusercontent.com/rust-lang/rust/1.95.0/library/std/src/fs.rs)（metadata/symlink_metadata、mtime/TOCTOU）。版本化 HTML 不可用，使用官方源码并对照本地共享 validators/native 上传 identity；不升级依赖。
+- 关键结论：spawn_blocking 不能靠 abort 取消，应沿用单任务/协作 flag/退出 join；源对象验证只能作为观测，不能宣称消除 TOCTOU。普通文件复用 validate_local_file_for_open 的打开后指纹与 canonical parent；目录不能假设 File::open(directory) 跨平台可用，因此用 symlink_metadata 类型/长度/mtime/归属检查，后台发现仍过滤链接并有硬上限。标准 selectable 的点击由 owner 每帧提交，路径稳定 ID 不依赖行下标。
+- 对实施计划的影响：新增有界 UploadSelected 绑定当前可见路径，私有来源 enum 扩展到 selection snapshot，保留单项拖入语义；扫描前与构造请求后复验来源，owner 提交前再检验 local revision/源快照与远端 request/generation。目录快照留在 library，local open 明确拒绝目录；本地/远端导航撤销准备，已接纳上传继续由 worker 所有。UI 只展示选择与 Preparing/现传输行，冲突仍明确逐项，不把扫描等同上传成功。
+- 未解决问题：目录元数据不是原子内容快照，原生 worker 仍只上传发现并校验的普通文件；不新增树级原子保证。新按钮不改变现拖放载荷、Keep both/应用批次仍须完整界面对照；GUI/其它平台/MSRV/Intel 运行交后续，未使用多 agent/Worker。
+
+## 2026-10-26 E6R-UploadConflict 实施前核对
+
+- 检索问题：如何在锁定 egui 0.37.0 中实现上传冲突的 Keep both 与“将本次选择应用于上传批次”，让模态对话框阻断背景输入、关闭行为可预测，并保证多 pass/禁用状态不会重复提交意图？
+- 检索原因：默认 Slint 已有冲突对话框和批次复选框；实验 egui 目前只提供 Overwrite/Skip，controller 的 `Command::ResolveConflict` 仍固定传 `apply_to_batch = false`，而 worker 已实现 KeepBoth 与同 batch 策略，必须先对齐版本化 UI API 与现有所有权边界。
+- 来源列表：[egui 0.37.0 Modal](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/containers/modal.rs)（已读 `show` 的前景层/遮罩/背景输入阻断以及 `ModalResponse::should_close` 的 Esc、遮罩、关闭响应语义）、[egui 0.37.0 Checkbox](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/widgets/checkbox.rs)（已读点击直接切换布尔值、禁用响应与稳定控件信息）、[egui 0.37.0 Button](https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/widgets/button.rs)（已读 selectable/disabled/小按钮行为）；Tokio/russh 的实际批次决策则核对 Cargo.lock 对应项目源码 `src/ssh/worker/sftp.rs` 与 `src/ssh/worker.rs`。
+- 关键结论：`Modal::show` 是 egui 0.37 的标准阻断容器，使用稳定 UUID 派生 ID；冲突窗口只持有 UI 临时 `apply_to_batch` 草稿，点击三种决定按钮后由 owner 一次提交 `resolve_conflict_with_batch`，遮罩/Esc 默认按 Slint 规则提交 Skip 并清除窗口；复选框不写配置、不触发网络。controller 保留旧 `resolve_conflict` 兼容调用，新增带布尔参数的最小方法并原样传给既有 worker；worker 继续拥有 batch policy、KeepBoth 编号命名和有界 pending 决策。
+- 对实施计划的影响：扩展 `Command::ResolveConflict` 为携带 `apply_to_batch`，handler 不复制批次逻辑；egui `TransferControls` 增加单个 pending conflict UUID、临时勾选值和稳定 Modal，行内按钮只负责打开窗口，窗口按钮才发送决策。测试覆盖 KeepBoth、checkbox、单次提交、多 pass、关闭/禁用与跨 generation 清理，再执行默认/egui/组合和双 macOS target 门禁。
+- 未解决问题：真实 GUI 的视觉尺寸、键盘/辅助技术顺序和真实服务器冲突延迟仍由用户/平台验收；KeepBoth 的最终编号由 worker 按现有远端路径规则决定，不新增 wire、依赖、持久化 schema 或多 agent/Worker。
+## 2026-10-27 E6R-SelectedDrag 实施前标准核对
+
+- 检索问题：egui 的 Local files/Remote files 已选路径如何实现同一 pane 内的多项拖放，同时保留一次性提交、连接代次和目录快照边界？
+- 检索原因：当前按钮批量上传/下载已经存在，但拖动已选行仍只提交单项；需要先按锁定 egui 版本确认 payload 与释放语义，再复用 controller 的批量边界。
+- 版本与日期：2026-10-27；Cargo.lock 锁定 egui 0.37.0，当前 Rust edition 2024/MSRV 1.95 约束不变。
+- 来源列表：
+  - egui 0.37.0 `Response::dnd_set_drag_payload`、`dnd_hover_payload`、`dnd_release_payload`：<https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/response.rs>
+  - egui 0.37.0 `Ui::dnd_drag_source`、`Ui::dnd_drop_zone`：<https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/ui.rs>
+  - egui 0.37.0 `DragAndDrop` payload 所有权与取消规则：<https://raw.githubusercontent.com/emilk/egui/0.37.0/crates/egui/src/drag_and_drop.rs>
+- 关键结论：官方 API 要求 payload 为 `Any + Send + Sync`，拖动开始时由 source 写入 Context；释放 API 只在当前 response 命中指针且本帧发生释放时取走 payload。`dnd_drop_zone` 适合绘制独立 drop 区，但当前两栏已经使用带 native 坐标和裁剪矩形的 `Response`，继续用 response 级 API 可保持既有 Wayland/坐标门禁。payload 应为拥有的数据，不能借用选择 map；egui 不替 owner 复验连接、目录或文件身份。
+- 既有实现对照：`src/egui_app/sftp_drop.rs` 已将单路径 payload 绑定 pane/generation/revision，并在 owner 侧调用 `upload_local_drop`/`download_drop`；controller 已有 `upload_selected`/`download_selected` 的 1–64 路径限制、目录 request/revision 复验、逐根 skip/failure 摘要和后台准备任务。
+- 对实施计划的影响：把 payload 扩展为有界拥有的路径列表；当拖动的行属于当前选择时携带该选择的稳定路径快照，否则保留单项路径行为。目标侧按列表长度选择既有 selected API 或单项 API；不在 UI 读文件、不新增 task/channel/schema/wire 协议，所有本地元数据和远端目录复验继续由 controller/worker 执行。保留原生文件管理器拖入和 egui 原生拖出未实现。payload 只在当前 egui Context 内短暂存在；pane/generation 不匹配拒绝，controller 再检查 request/revision 和已列出的条目；失败不清除选择，也不绕过 SSH/SFTP trust。路径列表最多 64 项且通过现有 controller 边界验证。
+- 未解决问题：系统文件管理器 file promise、真实平台拖放视觉/辅助技术与真实 SFTP 服务器验收仍不由本切片证明。

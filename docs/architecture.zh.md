@@ -18,11 +18,120 @@ egui/eframe 0.37.0 使用 WGPU，目前没有等价 Slint 软件/damage 回退�
 UI 只接收带行 revision 的可见快照并通过有界 facade 提交意图，不接收 PTY 句柄或 Tokio receiver。
 每个输出字节按序解析，只合并展示状态；event loop 返回后 await 清理，再停止 runtime。
 
+E6R-Pause 为实验 SftpTransferView 增加类型化阶段与下载暂停能力。owner 在转发既有
+SFTP-only worker 的 Pause/Resume/Cancel 前，复验 generation、连接、UUID 和当前资格；
+只有 bounded send 成功才进入 Pausing/Resuming/Cancelling。Progress 不覆盖等待阶段，
+Paused/Resumed 回执更新字节数，终态吸收迟到事件。上传不可暂停，排队/冲突不允许暂停或继续；
+断开将活动行结束，新任务由 worker 接纳后才回收完成/失败历史，保持 64 行且迟到进度不复活
+已回收身份。
+
+egui 在 UUID 作用域、最高 160px 的滚动区使用标准启用/禁用按钮，每帧至多一次意图，
+sizing/禁用状态无副作用。暂停等待下载 chunk 边界，in-flight 读取可能先结束；继续仅针对同一
+活 worker，不保存偏移量或跨连接恢复。暂停中取消/关闭仍保留原有任务 join。信任、认证、
+transport 协议与配置不变；原生验收独立保留。
+
+E6R-UploadSelect 接通每 pane 最多 64 个本地文件/目录根选择、Select All/Clear 和
+Upload selected；选择绑定连接代次/本地目录/revision，旧选择清空，path 稳定 ID 与每帧准入避免
+重复 pass 翻转或重复提交。准备中禁用再次上传，选择不改变现有拖放载荷。
+
+owner 验证唯一本地 UTF-8 路径（每项 4096 字节、总 256 KiB），绑定私有目录快照与远端目录请求，
+复用单个保留 blocking 准备任务。扫描前与请求构造后检查来源：普通文件复用打开后的指纹和
+canonical parent 校验，目录根观测 no-follow 元数据/类型/长度/mtime/父目录归属，不冻结整棵树或
+宣称消除文件系统竞态。目录元数据不进入 UI，local open 仍拒绝目录；本地/远端导航撤销准备，
+策略或连接变化拒绝旧结果，退出协作取消并 join。沿用发现硬上限，实验端最终最多 64 文件，
+准备失败整批拒绝，worker 接纳前不创建 history。文件共享一个 batch UUID，保留 native identity
+复验和逐项冲突确认，不自动覆盖，不加任务类型/channel/持久化/信任路径。egui 已使用阻断
+Modal 提供 Keep both 和应用到批次；选中多项拖放已复用选择与快照复验，批量修改/原生拖出仍保留。
+
+E6R-Select 增加每 pane 最多 64 个远端路径选择、Select All/Clear 和 Download selected，
+下载到已加载的本地目录。选择可保留排序/More 分页，消失/链接/类型变化项剔除，断开、连接代次
+或目录请求变化清空；稳定 path ID 和独立每帧选择准入避免重复 pass 翻转，worker 意图仍每帧一次。
+既有拖放载荷和单项修改目标不受选择影响。
+
+单意图包含 1–64 唯一路径，总 UTF-8 文本最多 256 KiB；owner 在任何发送前复验远端请求和本地
+目录/revision，失效/链接/过滤项跳过，逐根入队失败继续。最近一份摘要仅表示根项接纳（最多 64 项
+错误，每项 512 字符），导航/断开清除，不据此改选择；完成/失败仍看传输行。沿用根行与发现取消，
+首子文件复用 root UUID，空/全过滤目录经 DiscoveryFailed 结束且不创建本地目录；子文件保持实验
+64 行/超额取消。共享 OpenSftpFile 入口在启动发现前也检查既有 512 active/opening/queued/
+discovery 总槽预算，超限用既有失败事件，不新增 channel、task 类型、wire 协议、持久化或信任路径。
+Keep both/应用冲突到批次已由 egui 阻断 Modal 对齐 worker 语义；选中多项拖放已接通，批量修改和原生拖出仍保留。
+
+E6R-Mutate 接通单项 Rename/Delete，冻结 path/type/size/mtime 并复验连接代次与目录请求。
+单个保留结果槽覆盖排队、执行和未消费结果，Full/Closed 不占槽；owner 拒绝和原生写回执均按
+精确 UUID 留结果，错误最多 512 字符。关闭确认框放弃结果，不回滚已接纳的写入；断开仍取消/
+join 原 worker 并清槽。UI 只持模态草稿，失败保留，打开时阻断工作区/终端操作；拒绝链接和
+非法名称，Delete 明确确认普通文件或空目录。沿用共享 worker 的 LSTAT/类型/目标不存在检查、
+普通 RENAME 和非递归 REMOVE/RMDIR，这些观测不构成远端原子身份保证。成功仅刷新仍可见的
+原目录请求，导航不回跳。远端文件批量修改/选中拖放、原生拖出和 GUI/真实服务器验收仍保留。
+
+E6R-Batch 增加每 pane 的 UUID 传输选择、Select All/Clear 和批量 Pause/Resume/Cancel。
+带 generation 的单条意图包含 1–64 个唯一 ID，owner 对每项当前资格复验，缺失/不适用跳过，
+仅发送成功的项目进入等待状态，单项失败仍继续处理其它项。一份有界最新汇总只报告入队/跳过/
+失败，不表示执行完成；最多 64 项失败，每项错误最多 512 字符。断开/替换清除汇总。
+UI 剔除终态/消失选择，换代次或断开清空；标准 selectable button 每帧只更新一次选择，
+重复 pass 不反复切换，worker 意图另有每帧准入。不增加队列、任务、信任、持久化或原生 worker
+协议。上传暂停、跨连接继续仍不支持；远端文件批量修改/选中拖放与原生验收独立保留。
+
+E7R-Transfer 将既有会话/分组 JSON 交换规则提取到 `src/session_transfer.rs`，两前端
+共用 version1 envelope、256 KiB/128 profile 上限、导入新 UUID、冲突命名、空组，以及
+凭据引用/host trust/探测系统身份清除规则。config 继续拥有 schema/原子写入；实验 workspace
+以 catalog revision/精确回执串行处理 Import/Export，解析/序列化/写盘在 await 的 blocking
+任务执行。失败不发布候选、不修改设置或现有终端 owner；导出不写盘或递增 revision，只返回
+脱敏 JSON。沿用 64 条队列/回执总预算，文本最坏约 16 MiB。
+
+egui 只持有模态草稿/目标/请求 ID。导入须显式粘贴并确认，草稿最多 256Ki 字符（最多 1 MiB），
+提交前按 256 KiB 字节检查，再克隆进命令；导出选择保存会话/分组后 Copy。只有对话框仍打开、
+窗口聚焦且 revision/请求匹配的回执能写系统剪贴板。关闭后消费丢弃迟到导出；已接纳的导入仍完成
+原子事务。剩余两项快捷键编辑已接通，共八项。不新增自动剪贴板读取、连接、信任或凭据迁移；
+原生文件选择器、定向分组导入和平台验收保留。
+
+E7R-SFTP-Key 在共享 UI action 表中统一 SFTP 菜单资格与键盘路由，只允许当前 Tab
+聚焦的已保存 SSH pane 接收。UI 持有的 UUID 请求在当前快照复验、非 sizing pass 单次
+消费，焦点交给 companion 稳定 ID 的 Remote path，终端同帧不抢回焦点。命令不触发
+连接、认证或目录请求，不增加 worker 操作。快捷键页在既有五项后追加 SFTP；包括待迁移
+会话导入/导出在内的八个保存键都做解析后别名/顺序冲突及保留键校验；Windows/Linux
+校验时将 Cmd/Meta 合入 Ctrl，macOS 保留 Command/Control 区别。路由只读取保存值，
+预览与失败保存均不改变它。
+
+E7R-Shells 在启动 blocking worker 中用既有 resolver 一次性发现本地 shell，GUI 创建前
+await/join，任务失败时回退空发现集。Context 局部不可变快照交由 TerminalSettings 规范化；
+Terminal 页采用稳定 ID 的候选下拉框并保留 256 字符自定义输入，shell 名/路径作为数据原样显示。
+候选按当前值、已保存、新发现排序，在 32 项上限下仍保留失效/自定义选择；控件不查 PATH 或
+启动进程。
+
+发现、打开设置和预览不制造脏缓存或写盘。Save 在提交副本中通过 domain 合并候选，再走
+workspace 原子事务；失败保留原草稿/保存值，成功后用于后续新建本地终端，现有 transport
+不会重启。兼容字段 collapsed_group_label_chars 继续保留，但当前两前端均无绘制消费；
+紧凑侧栏需要独立迁移契约。本切片未增加候选删除或动态重扫流程。
+
+E7R-Icons 将既有平台身份映射共享到 `src/system_icons.rs`，`app/system_icons.rs` 保留默认适配。
+Linux 在启动 blocking worker 中一次性发现，最多读 8 KiB，仅当 `/etc/os-release` 缺失时读取
+后备来源，其它读取错误保留通用 Linux。`build/system_icons.rs` 仅在 egui feature 下将仓库图标
+目录栅格化为 OUT_DIR 中的 48px sRGB 预乘像素；可选 build 依赖沿用锁定 resvg 0.48.1。
+构建限制输入/PNG 尺寸，拒绝路径越界、SVG 外部/嵌入图片、重复 ID 和空图。默认 Slint 不启用
+此生成器，egui-only 构建仍不包含 Slint。
+
+每个 egui owner 最多缓存 128×2 个原色/mask 纹理；白色透明度轮廓随当前 UI 文字色着色。
+最小化/清缓存或 owner 销毁释放句柄。Sidebar 使用 profile 显式覆盖或目的地有效的发现缓存，
+Tab 按当前聚焦 pane 选择，Local 使用本机身份或本地覆盖；不根据标题猜测系统。
+Appearance 控件编辑 `system_icons_follow_theme` 与 `local_shell_icon_override`，预览/还原只影响
+UI，Save 仍走现有 catalog 原子事务。本轮不增加远端探测或会话图标编辑器，临时/未知目标保留
+通用字形；原生视觉/高 DPI 单独验收。
+
+E7R-FPS 用 `controller/terminal_session/refresh.rs` 的脏输出 deadline 替换实验前端固定
+16 ms ticker。成功保存的 focused/unfocused 设置（默认 60/4，规范化为 1–120 FPS）限制
+合并输出快照的发布频率。最新值 focus watch 跟随终端键盘及原生窗口焦点（含隐藏/suspend），
+独立于 transport 代次。窄接口 `TerminalClient::presentation_focus` 在每个准入 UI 帧刷新，
+并在可能失败的鼠标释放之前清除，不入协议队列；DEC1004 字节仍走有界且按代次校验的命令队列。worker 仅在脏时等待，
+绝对期限与同步输出 hold 合并，错过期限只发布当前帧；解析/协议响应继续立即处理，状态/安全
+提示允许即时发布。预览不改运行策略；workspace 新建/恢复及成功保存后通过已有 settings watch
+应用频率。这是输出发布上限，不保证应用实际帧率或性能。
+
 E3 首切片已由两个前端共用 `controller/input.rs`、`output.rs`、`presentation.rs` 和
 `shutdown.rs`：有界鼠标事务、owned 解析效果、准入终端帧和保留的清理任务。
 `TerminalFrames` 在同步输出期间保留上一准入帧，并在消费前合并脏行。
 展示期限、标题策略、OSC 52 权限/连接代次校验和协议响应路由仍由应用层负责；
-实验前端继续禁用标题和 OSC 52 操作。
+实验前端继续禁用标题操作；OSC 52 由下述 E7P 控制器权限流程处理。
 
 E3 第二切片新增 `controller/viewport.rs`。两个前端统一通过 `TerminalViewport` 执行
 字符尺寸调整、历史滚动和返回实时输出；视口变化同时丢弃待消费帧并推进一次非负选区代次，
@@ -43,7 +152,8 @@ transport 适配和重连期限。先 join 旧 transport 再替换，丢弃旧�
 和重新输入的 Zeroizing 凭据；known_hosts 中变更/撤销的密钥不能被覆盖。
 认证 transport 再次核对 probe 固定的密钥，拒绝期间换钥；只有当前提示能授权重试。
 共用五次重连预算，控制器持有 1/2/4/8/16 秒的可取消期限，SSH 密码/私钥口令重新索取。
-系统 known_hosts 仅读取，不写入。临时连接关闭 X11 和远端麦克风初始化，默认 Slint
+系统 known_hosts 仅读取，不写入。新建临时连接默认 X11 Off，E7X 提供明确的 Off/-X/-Y
+选择和本机 X server 设置；E7A 增加默认关闭的连接级麦克风选择，见下文。默认 Slint
 设置保留原行为。其余工作区/安全/设置编排随对应功能提取（E3R），不提前搬无关应用模块。
 
 E5 新增 `controller/workspace.rs` 及 catalog/layout/persistence 私有子模块，由单个运行时任务
@@ -65,7 +175,7 @@ E6 外部编辑在两套前端间共用 `src/remote_edit.rs` 和 `src/file_ident
 共享服务负责最多八个编辑、保存/回执状态机、私有副本、有界 handle 读取和平台可观察文件身份。
 默认适配保留原监听器与动态 Settings 流程；实验 companion 持有单个本地任务，GUI 外检查
 元数据，仅在文件变化且稳定或明确上传时读取。独立缓存保留停止/断开后的副本，未发布副本清理。
-E7 设置迁移前使用默认 4 MiB 编辑上限。快照只传元数据，任务带连接代次/编辑 UUID；停止、
+E7T 使用已保存的 1–64 MiB 编辑上限（默认 4 MiB）。快照只传元数据，任务带连接代次/编辑 UUID；停止、
 断开和退出撤销 editor launch permit，已接纳的本地任务在退出前 join。既有 SFTP 写入仍执行
 size/mtime 冲突检查和原子 rename，失败后明确重试。轮询/可观察 fingerprint 无法检测任意同元数据
 内容改写，不提供三方合并。
@@ -79,7 +189,7 @@ Wayland 只接受当前帧 PointerMoved；不使用活动 Tab 或旧 hover 猜�
 检查目标连接/request/目录和本地来源快照，导航、断开、取消或关闭不发布旧结果，退出 join。
 拖入根最多 64；共享发现保持扫描 4096 项、512 文件、256 目录、16 层和 512 KiB 路径预算，
 实验界面另限制最多 64 个准备文件/传输历史行。沿用默认过滤和 worker 文件大小上限。
-原生拖出 file promise、选择批次、完整 SFTP 交互对照及原生 GUI 验收仍为 E6 待办，
+原生拖出 file promise、完整 SFTP 交互对照及原生 GUI 验收仍为 E6 待办，
 其它前端的既有原生拖放路径保留。
 
 下文 Slint 专属所有权继续描述默认应用。
@@ -90,7 +200,7 @@ E6 为实验前端增加 `controller/sftp_session.rs`。每个远程 workspace p
 凭据仅以新的 zeroizing 输入留在 worker 命令路径，按 request ID 丢弃过期目录页，
 并只发布有界目录/传输快照。下载和取消仍由 worker 持有；关闭 pane 或替换工作区时，
 终端与 SFTP companion 分别取消并 join。
-egui 表面还可提交有界的正规文件上传，并在冲突时明确选择 Skip 或 Overwrite；
+egui 表面还可提交有界的正规文件上传，并在阻断冲突 Modal 中明确选择 Skip、Keep both、Overwrite 或应用到批次；
 既有 worker 在报告完成前继续校验源文件 identity、限制和原子发布。
 本地目录发现也属于 companion 的 blocking worker，只返回有界条目 DTO，
 两套前端共用 `src/file_icons.rs` 的有界类型 key、24×24 自有 RGBA、128 项缓存与
@@ -147,6 +257,142 @@ winit 事件循环及 egui 菜单。Workspace 持有单例 Settings Tab、保存
 版本/请求事务；config 仍独占 schema/原子文件。草稿不进入工作区快照，Settings
 Tab 不分配 transport。支持控件及平台验收边界见 [迁移计划](egui-migration.zh.md)。
 
+E7B 通过 `controller/text_colors.rs` 共享既有前景 HSL 算法，边界仅含 RGB 数组，
+不含 UI 类型。Slint 保留适配；egui 拥有外观控件、颜色顺序及行缓存失效。
+解析、transport、schema 与任务生命周期不变。
+
+E7Q 在 `controller/semantic.rs` 共享语义识别和 run 资格。egui 终端 owner 在发布可见行时
+计算范围/类别，按源行 `Arc` 的精确身份复用注解，仅保留当前行。识别不依赖保存的开关，
+因此外观草稿可即时预览。Painter 消费范围，不执行正则，只改变每格前景并应用一次文字亮度；
+网格位置和程序装饰保留。开关/颜色变化会使静止行缓存失效。
+
+E7R-Theme 为 egui Appearance 增加 Custom 选择器和 Light/Dark 各 13 个角色的独立调色板草稿。
+稳定角色 ID 和有界十六进制字段让编辑只留在 UI；预览前 Workspace 构造临时
+`ThemeSettings::normalized`，再交给现有 egui 主题映射器。颜色语法、明暗方向、对比度修复和
+原子持久化仍由 config 拥有，因此无效或低对比度草稿不会直接进入 egui visuals，保存失败时
+两侧草稿和已保存值都保留。
+
+E7H 将既有侧栏纯格式化共享至 `controller/session_labels.rs`，默认适配器 re-export，
+egui 显示遮罩地址。`egui_app/settings/workspace.rs` 仅持有单字符草稿，预览对副本调用
+config 规范化，workspace 仍只在原子保存后发布设置。搜索/编辑/连接继续使用原始 profile，
+完整悬停/辅助技术详情保留，无新 transport 或任务状态。
+
+E7T 将 Terminal/SFTP 草稿控件拆入 `egui_app/settings/`。workspace 只在原子保存成功后，
+通过每 worker 只保留一个最新值的 watch 发布非秘密设置。终端初始化使用保存的列/行和历史上限，
+运行中更新历史/备用屏滚轮策略，历史变化撤销旧视口选区与待消费复制；重新连接仍使用最新设置。
+SFTP 连接捕获全局默认/服务器覆盖策略，过滤与编辑上限用于后续操作；保存时取消旧上传准备，
+任务继续由 companion join。编辑 blocking job 捕获接纳上限，完成回传再次使用当前上限。
+预览不触发 worker/网络/磁盘操作；媒体权限继续后续迁移，X11 选项见下文 E7X。
+
+E7U 由 workspace owner 在成功启动及原子提交后应用已保存的
+`sftp_transfers.global_uploads`，配置既有进程级上传 limiter，所有 SFTP 连接共用。
+服务器覆盖仍只影响每连接策略；加载/写入失败、旧编辑和预览不改变全局限额，
+无关的 catalog 提交不重复应用。降低限额时已运行上传保留 permit，排队/新上传使用
+可用容量，无需重连。UI 仅保留草稿；私有启动回调支持测试观察策略变化，避免并行
+fixture 改写进程全局状态。
+
+E7X 增加非秘密的 X11 provider/路径/启动/兼容草稿。workspace 只在原子保存成功后，经终端
+只保留最新值的有界 settings watch 发布配置；新 SSH worker 捕获当前已保存选项，已有 worker
+保持原配置直至重连。Off/-X/-Y 属于 profile，编辑保存的端点时保留明确选择。
+已知 provider 安装位置在 native window 创建前由 blocking worker 发现并 join，绘制只读该有界
+启动快照。既有 SSH owner 继续拥有 host-key/认证、本机授权、cookie 校验、有界 relay 和取消/join；
+Trusted 仍等待通过认证的 X11 setup 才准备本机，Untrusted 保留受限授权要求且不得回退 no-auth。
+当前 worker 的启用/不可用事件只更新状态并保持 shell，替换前丢弃旧接收器防止迟到提示。
+真实 X server/GUI 验收独立保留；音频入口由 E7A 单独实现。
+共享 `ssh/shell_setup.rs` 将 russh 请求返回视为队列准入，在启用 dispatcher 前以 15 秒期限等待
+服务端明确 Success/Failure。该路径的 PTY 请求不索取回执，防止被误认成 X11 决策；最多接纳
+64 消息/64 KiB 早到终端输出，并在后续 shell 字节前原样交付，通道关闭/超量则明确失败。
+拒绝或超时保持 X11 关闭但仍可打开 shell，worker 在 setup 等待期间继续接纳断开。
+
+E7A 在 `egui_app/settings/audio.rs` 编辑远端 PCM 格式草稿。workspace 只在保存成功后经既有
+settings watch 发布采样率/声道，新 SSH worker（包括重试）捕获格式；预览或保存失败不改变格式。
+旧转写路径继续保存在配置中，没有新增入口。`TerminalConnectionOptions` 携带默认关闭的
+明确麦克风选择，旧 connect API 保持关闭；选择不序列化到 profile/工作区，只沿用至当前
+连接的重试，替换/主动断开或表单切换协议时清除。既有 SSH/audio owner 在信任与认证后
+准备 Linux PulseAudio/pipewire-pulse 音源，仅自有音源上的非暂停录音流触发本机权限与采集。
+准备失败保持 shell；原有有界 PCM、设备租约和 shutdown join 继续负责采集生命周期。
+真实音频/GUI 验收仍独立保留。
+
+E7I 将 `PasteImage` 接入 `egui_app/image_paste.rs`：单个有界 blocking 任务反预乘 Color32
+并通过共用 media 限额编码 PNG。UI 票据记录终端代次、视口 revision、焦点/可见 pane、DPI/字体
+revision 及 40 秒期限，新交互撤销。controller 附件 owner 每终端只准备一张，持有 Local 私有文件
+或原 SSH worker 的上传回执；ready token 不暴露路径，UI 复核后才经模型 paste encoder 插入 shell
+转义路径，不加换行。取消同步撤销共享授权，包括已排队确认。Local 文件写入/删除均后台执行并
+保留 join，断开/替换/退出等待并清理；SSH 上传与远端清理沿用原 worker 生命周期。保留 4096²
+像素、16 MiB PNG、32 文件上限；无新连接/秘密/schema/终端内联图像协议。事件送达前的原生
+剪贴板解码归 eframe，它优先文本。
+
+E7O 将有界目录快照和普通文件校验共用为 `src/local_files.rs`，默认应用模块仅保留薄适配。
+条目私有保存文件 fingerprint，校验拒绝替换/变化文件、链接和目录外路径；名称/路径要求
+UTF-8，egui 保留实际路径空白，仅发布最多 250 条普通文件/目录行。
+`controller/sftp_session/local_open.rs` 持有一个绑定连接/目录 revision 的 blocking job，
+从已验证句柄复制到实验 `sftp-open` 缓存，检查撤销标记后才调用注入的原生 opener。
+本地目录导航、设置、断开和关闭取消未启动操作，未使用副本清理，退出 join；30 分钟期限请求
+取消但不丢弃 join。取消结果不覆盖新的 SSH 提示或断开状态；复制前后复核可观察文件身份。
+UI 快照不含句柄或正文，本地打开不要求 SSH 认证；已启动的外部应用保留自身生命周期。
+
+本地快照上限保存后生效，默认 512 MiB，0 取消单文件/缓存字节限制；既有引擎仍限制
+128 个受管文件，创建副本时清理超过 24 小时的旧文件。字节配额至少 1 GiB，随较大的
+单文件上限提高；预览不改变策略，实验副本不会写入默认前端缓存。
+
+E7L 的 `egui_app/i18n.rs` 只拥有当前 Context 的已解析语言和静态字符串查找；
+UiLanguage/系统语言匹配继续由 config 持有，系统 locale 在进入 GUI 前取得。
+设置页只编辑语言草稿，App 使用 workspace 已保存快照中的语言，写盘失败或外观预览不切换。
+`scripts/translation_catalog.py` 合并 Slint、egui `tr!`/`mark!` 与搜索源键；生成器由同一 PO
+输出 `egui_app/i18n/catalog.rs`，保留 context 和格式校验。运行时不读 PO，不翻译用户/终端/错误内容。
+应用菜单/设置/关闭确认及 Settings 标题使用静态译文；原生菜单仅 set_text，不重建 action ID、
+事件队列或 accelerator，Window/Help 角色保留。每个 Context 的语言状态独立，其余设置仍属 E7R。
+
+E7W 将静态翻译扩展到终端连接字段、主机密钥/认证提示、会话编辑/分组、Tab/pane 操作和
+工作区文件窗口。优先复用 PO 条目，每个语言新增 30 条，总计 741 条，egui 使用 145 条。
+连接折叠栏和窗口显式使用稳定 ID，切换语言保留身份。指纹、目标、会话/分组名、路径、
+协议标识及技术状态/错误原样显示。信任控件仍服从 controller 的 confirmable 和精确 prompt token，
+翻译不能授权被阻止的密钥或保存凭据；运行时仅查找 Context 本地静态表，不读取文件。
+
+E7S 将 SFTP 组合移入 `egui_app/workspace/sftp.rs`，与终端共用
+`egui_app/connection/prompt.rs` 的信任/认证提示。两者原样显示目标与观测/预期指纹，
+仍服从 controller 的 confirmable gate 和精确 prompt token。SFTP 在连接代次或提示身份
+变化时清除凭据草稿，密码控件与终端字段分开作用域。按钮跳过 sizing pass、每帧只准入一次，
+发送失败显示错误；传输控件使用 UUID。文件/传输/外部编辑固定文案进入同一静态目录，
+每个语言 756 条 PO，egui 使用 167 条键。路径、名称及技术状态/错误保持原始数据，
+信任策略、文件操作和 worker 所有权仍在原层。
+
+E7M 增加成功保存后生效的本地选择优先、选中自动复制和右键复制/粘贴。
+`terminal/input/mouse.rs` 独占远端按键或本地手势：Shift 本地选择，Alt/Option 覆盖本地优先；
+本地优先下未形成选择的单击可在释放时转发按下/释放。取消不转发延迟点击，焦点/视口变化
+取消手势和未完成语义选择。完成选区继续由模型复制，结果携带连接/视口身份；视口命令在
+展示发布前即撤销旧结果。外观预览不改变这些输入策略。
+
+`egui_app/clipboard.rs` 将菜单/右键粘贴绑定到可见且聚焦的原始终端、连接和视口。
+票据只保留元数据与有界 facade，不含剪贴板正文；控件接收原生粘贴前检查焦点、导航、连接
+和视口，重复 pass 保留同一判定。锁定的 eframe 0.37 WGPU 在绘制后读取 RequestPaste，
+将结果放入下一输入帧；空请求两帧后过期。普通系统粘贴仍跟随聚焦控件。
+
+E7P 的 macOS `native_input.rs` 仅在终端拥有键盘焦点且已保存 Option/Meta 开关时设置
+winit 0.30.13 OptionAsAlt；编辑器和设置恢复原生 Option 文字，IME commit 不添加 Meta 前缀。
+可选直接依赖复用锁定版本。
+
+`controller/terminal_session/clipboard.rs` 持有保存后的 OSC 52 权限、一个有界写入和一个
+读取 formatter/UUID，读取 20 秒过期。每个请求必须明确 Allow；拒绝、超时、撤权、替换和
+断开清理待处理状态。普通快照/日志不含剪贴板正文，原始协议响应通过既有原子分块路径发送，
+不经过 paste 编码或添加 bracket 标记。`egui_app/remote_clipboard.rs` 只在 Allow 后由保留的
+单个 blocking job 读取，队列和完成槽各一项；保留空文本/CRLF，结果限制 64 KiB，交付前
+复核焦点/可见 pane、连接/视口、窗口几何/DPI/字体、权限和请求身份。未授权提示可跨越布局
+变化；Allow 时捕获视口 revision，模型发送前复核，即使新视口尚未发布也会拒绝旧结果。
+取消/迟到结果丢弃，退出取消并 join；
+普通粘贴事件不能满足远端读取。
+
+E7F 将不依赖 UI 的字体目录、名称校验、运行时资源路径和有界选项提取至 `src/font_resources.rs`。
+Slint 保留原有注册器；egui 的发现和读取由 `egui_app/fonts/loader.rs` 负责，进入 event loop
+前完成发现及必需 CJK/符号回退加载。单个保留的 worker 接收最新选择，每文件最多 24 MiB、
+每请求最多 96 MiB，仅发布当前请求的不可变定义，GUI 应用定义时不读文件。预览、还原与放弃
+使用有效设置，只有成功保存改变持久值。缺失字体或实测 Latin 字宽不等时回退至嵌入
+JetBrains Mono，不修改所选名称。四种终端别名使用实际样式字面或可变 weight/slant 坐标，
+仅在必要时合成斜体。字体代次使行缓存、选择几何和 PTY 尺寸失效，字符占格继续由模型决定。
+窗口关闭后取消读取并 join 保留的 blocking job；原生字体/IME/视觉验收仍开放。
+以上上限用于显式选择加载。eframe 既有按需系统字形 provider 继续补充其它文字/emoji，
+其首次缺字可能阻塞的行为与资源生命周期仍需 E2V 审查。
+
 ## 共同应用流程
 
 - 会话复制、导入和分组变更共用串行 blocking 事务：短时间持应用状态锁取得 profiles/groups，
@@ -201,7 +447,7 @@ Tab 不分配 transport。支持控件及平台验收边界见 [迁移计划](eg
 | `src/app/workspace.rs` 与 `src/app/workspace/` | 私有 workspace facade，以及按职责拆分的 Tab 生命周期、Session Editor 事务和 profile/group 管理接线 | 生成类型声明、传输实现、持久化 schema 或更宽的公共 API |
 | `src/app/{connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs`、`src/app/{connection,view,sftp_bridge,terminal_bridge}/` | 私有 application bridge 功能接线与内聚的 snapshot/Slint 映射模块，包括协议分发、SSH 信任/认证、直连 worker、串口发现、SFTP 意图、detached opener 调度、pane model 和 settings/options 映射 | 生成类型声明、传输实现或持久化 schema |
 | `src/file_icons.rs` 与 `src/file_icons/platform/` | 有界的进程内文件图标 key/cache 和自有 RGBA fallback；受 cfg 限定的平台 resolver | Slint model、SFTP session、任意路径检查或持久化缓存状态 |
-| `src/app/local_files.rs` | 无 UI 状态的有界本地目录元数据、上传树发现和 regular file 重验 | Slint 类型、文件修改、持久化或 SSH handle |
+| `src/local_files.rs`、`src/app/local_files.rs` | 共享有界目录元数据和普通文件重验；默认前端仅 re-export/上传适配 | Slint 类型、持久化、SSH handle 或原生 opener 调度 |
 | `src/app/state.rs` 与 `src/app/state/` | 与 UI 无关的工作区 Tab、逐 Tab 终端/worker 状态、attempt 转换及测试 | Slint component/model 类型或 russh 协议细节 |
 | `src/app/{input,session_groups,terminal_render,credential_tasks}.rs` | 可测试的输入/分组/渲染映射、主题化终端默认色和阻塞式凭据 task 边界 | 窗口所有权、传输 handle 或可变 UI 状态 |
 | `src/app/diagnostics.rs` | 脱敏键盘分类、固定 diagnostics route/action 字段和专用 tracing target | 原始终端/剪贴板文本、路径、profile 标签、主机、凭据或传输状态 |
@@ -467,8 +713,8 @@ resize 生命周期仍由 `TerminalPane` 保留。指针 callback 同时携带�
 SFTP browser 启动阶段的 companion 会把有界路径保留在该运行时 Tab，待正常流程就绪后处理；没有
 companion 时，新 SFTP Tab 只在运行期保存初始路径，随后仍执行独立且正常的 SSH 认证。目标文本和该
 初始路径都不会持久化、写日志，或作为完整终端缓冲传给 Slint。
-私有终端渲染映射只在显式启用后，对可见、默认样式的普通 cell 添加有界语义色。
-私有 `src/app/terminal_render/highlighting.rs` 使用带命名捕获的单个 `regex` matcher，首次创建窗口前
+终端渲染适配器只在显式启用后，对可见、默认样式的普通 cell 添加有界语义色。
+共享 `src/controller/semantic.rs` 使用带命名捕获的单个 `regex` matcher，首次创建窗口前
 预编译一次；有序、不重叠的字节 span 替代逐字节分类数组。
 等级名称依据 [OpenTelemetry](https://opentelemetry.io/docs/specs/otel/logs/data-model/#severity-fields)
 和 [RFC 5424 等级表](https://www.rfc-editor.org/rfc/rfc5424#section-6.2.1)：
@@ -853,7 +1099,7 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     名称与连接详情保留在 tooltip 和无障碍标签中，不在窄栏常驻显示。
     应用将 Local 终端来源映射到 `std::env::consts::OS`，同时用于侧栏入口和主窗口/独立窗口
     标签；不支持的本机系统保留终端 glyph。运行时标签名称和所选 shell 名称不决定系统身份，
-    Linux 上在启动时通过单个 blocking worker 有界读取 `/etc/os-release`，不可用时尝试
+    Linux 上在启动时通过单个 blocking worker 有界读取 `/etc/os-release`，仅缺失时尝试
     `/usr/lib/os-release`，每个来源最多读取 8 KiB；缓存规范图标标识后通过 UI dispatch 更新
     Local Shell 入口及全部路由窗口的标签。无需 shell 命令或合成 release；本机发行版按
     `ID` 识别，不按 `ID_LIKE` 继承母发行版图标。远端 release 中可识别的发行版/版本名
@@ -866,7 +1112,7 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     标签模型比较包含 release 和 platform 字段，使 Connected
     之后返回的系统信息能更新既有行而不替换 model。
     系统图标（包括 Local Shell）默认使用资源原始彩色；schema 版本 34 新增默认关闭的
-    `settings.appearance.system_icons_follow_theme`，只在配置文件中编辑。config 独占该布尔值，
+    `settings.appearance.system_icons_follow_theme`，默认前端只在配置文件中编辑（egui 已在 Appearance 暴露）。config 独占该布尔值，
     应用映射到 Theme 的只读展示属性，同时控制侧栏和标签栏的 Image `colorize`；关闭时使用
     transparent 保留资源颜色，开启时使用当前主题的正文/强调色。Settings 预览与保存从当前
     AppState 保留该隐藏配置。文件夹、终端和通用服务器等界面符号仍使用主题色。
@@ -1180,7 +1426,7 @@ Modified 降序（最新优先），并在远端后续分页到达或本地页�
 两个目录标题栏还只会通过既有 clipboard callback 发出当前已受限路径；复制按钮不读取目录，也不会接触
 SFTP worker。
 
-远端仍使用有界 SFTP 浏览器，`src/app/local_files.rs` 仅在 Tokio blocking 边界读取本机目录元数据。
+远端仍使用有界 SFTP 浏览器，`src/local_files.rs` 经默认 `src/app/local_files.rs` 适配，仅在 Tokio blocking 边界读取本机目录元数据。
 本地结果带 Tab 内请求 identity，迟到读取不会覆盖较新的路径；blocking 读取在进入 Slint 前构造有界快照，
 每个可接受名称限制为 256 字符，名称/路径文本总预算为 2 MiB，路径为 4 KiB；无法读取的条目与预算截断分开计数。
 移除原先固定 250 条的读取上限，application state 再把完整有界快照按每页 250 条释放给 UI，

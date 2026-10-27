@@ -43,7 +43,7 @@ Import validates the complete layout before replacing it and joins old workers.
 Recovered terminals, including local shells, wait for explicit **Connect**.
 Terminal output/history, credentials, unsaved connection/editor drafts and
 trust-once pins are omitted. Temporary remote targets need to be entered again;
-save a session to recover its connection details. Unsupported SFTP/settings or
+save a session to recover its connection details. Settings tabs can be restored; unsupported SFTP or
 detached-window workspaces are rejected; invalid startup files are preserved.
 
 For unknown SSH keys, verify the displayed target and fingerprint with the server
@@ -54,6 +54,71 @@ Changed/revoked known-hosts keys and keys changing after probing remain blocked.
 retry** makes up to five attempts (1/2/4/8/16 seconds); SSH password/key passphrase
 retries ask again rather than saving credentials.
 
+Choose **View > SFTP** or press **Ctrl+M** to focus **Remote path** in the
+current saved SSH pane's companion. Change this binding under **Settings >
+Shortcuts**, then Save to apply it. This action does not connect or list files;
+use the companion's explicit connection and trust/authentication controls. It is
+disabled for local, Telnet, Serial, temporary SSH and Settings panes. Use **File > Import from Clipboard** (`Cmd+Shift+I`, `Ctrl+Shift+I` elsewhere),
+paste AxSSH session JSON into the modal and confirm **Import from Clipboard**.
+Use **File > Export Selected to Clipboard** (`Cmd+Shift+E`, `Ctrl+Shift+E`
+elsewhere), select a saved server or group, then **Copy**. Both bindings are
+editable in Settings. Exports omit credentials, host trust and detected OS;
+imports assign new identities and resolve name/group collisions. The limit is
+256 KiB and 128 servers, with empty groups supported. Import preserves settings
+and open terminals and never connects automatically; errors retain the draft.
+Closing after confirming an import does not cancel an accepted atomic write.
+Closing an export or changing the catalog/window focus before completion drops
+its clipboard result. The experimental import uses explicit paste; the default
+frontend continues to read the clipboard directly.
+
+In the transfer list, **Pause** is enabled for a running download and **Resume**
+for an acknowledged paused download. Pending requests keep their waiting status;
+in-flight reads can finish before the pause is acknowledged. **Cancel** remains
+available for queued/running/paused work, including pending pause/resume. Uploads
+cannot pause. Finished rows have no active controls, and the bounded history
+scrolls; older finished rows are reclaimed when new requests are admitted.
+Resume is limited to the current connection. Disconnect/close cancels the worker
+and cleans partial downloads; this does not provide persistent resume support.
+
+In **Local files**, load a directory, choose files/folders with **Select …**,
+**Select All** or **Clear**, then use **Upload selected** for the current remote
+directory. At most 64 roots and 64 discovered files are accepted by the experiment.
+Preparation runs in the background and skips links/saved filters; a validation,
+limit or scan error rejects that preparation without queueing a partial batch.
+Changing either directory or disconnecting cancels preparation. **Cancel upload
+preparation** stops scanning; after admission, use the transfer controls. Replacing
+a selected file or changing the listing requires a refresh/reselection. Conflicts open a per-file dialog with **Skip**, **Keep both**, and **Overwrite**. **Apply this choice to this upload batch** applies the selected decision to the remaining files from that upload/drop intent; a new batch asks again. Dragging a selected row carries the current selection; an unselected row carries only itself.
+
+In **Remote files**, use each row's **Select …** button, **Select All** or **Clear**
+to choose up to 64 files/folders. Load a local directory with **Browse local**, then
+use **Download selected**. The batch uses that loaded directory, skips links and
+saved transfer filters, and reports queued roots, skipped roots and enqueue failures.
+Queued roots can still fail during discovery or download; follow the transfer rows
+for completion. Directory downloads preserve relative paths; empty or fully filtered
+directories report failure and create no local directory. Existing local files are
+not overwritten. Navigation/reconnect clears selection, and moving the local target
+before admission rejects the stale batch. An admitted download keeps its captured
+target. Selection does not change the existing single-entry drag or Rename/Delete.
+
+Use **Rename** on a remote row to enter a new name, or **Delete** to open an
+explicit confirmation. Links cannot be modified. Rename keeps the same parent
+and rejects an existing target; names are limited to 512 characters and cannot
+contain separators or control characters. Delete removes a regular file or an
+empty directory, without recursive deletion. Failed submissions/server operations
+retain the rename draft for retry. Closing a pending dialog does not undo an
+already admitted operation. Navigation or reconnect dismisses an outdated draft;
+a late success never redirects the current directory. Selected multi-file drags
+and bulk modification remain pending.
+
+Click an active transfer row to select it, or use **Select All** / **Clear**.
+**Pause selected**, **Resume selected** and **Cancel selected** apply to eligible
+selected transfers; completed/missing or ineligible rows are skipped. The latest
+summary reports **Queued**, **Skipped** and failed submissions; each row still waits
+for its worker acknowledgement. A failed submission does not undo earlier queued
+controls. Selection stays within this pane and connection, and disappears when
+rows finish, the connection changes or disconnects. This selects transfers, not
+remote files; upload pause remains unavailable.
+
 Saved SSH panes include an independent **SFTP companion**. Enter fresh credentials
 and connect it separately, then list remote or local directories and transfer files.
 Choose **Edit externally** on a regular remote file to create a private copy and
@@ -61,8 +126,8 @@ open the system-associated application. Saves upload automatically by default;
 turn off **Upload saved changes automatically** to use **Upload changes** instead.
 **Reopen editor** reuses the copy; **Stop editing**, disconnect and close stop
 observation while keeping the displayed copy path available for recovery. At most
-eight files per companion and 4 MiB per file are supported in this experimental
-surface. Remote size/mtime conflicts reject the upload and retain both versions;
+eight files per companion are supported, with a default 4 MiB per-file limit,
+adjustable to 1–64 MiB in **Settings > SFTP**. Remote size/mtime conflicts reject the upload and retain both versions;
 there is no force-overwrite or three-way merge in the edit flow. Experimental edit
 copies use the separate `ax_ssh_egui` cache. No file content is persisted in workspace
 snapshots. An already launched external application retains its own lifetime. Stopping an
@@ -74,14 +139,158 @@ it, or a remote row onto **Local files** to download it into the loaded local
 directory. Files/folders dropped from the OS file manager upload only when the
 pointer is inside **Remote files**. These are copy operations; source files stay
 in place. Load the local directory before downloading with drag/drop. Directory
-uploads preserve relative paths, skip links and default filtered names, and accept
+uploads preserve relative paths, skip links and saved filtered names, and accept
 at most 64 roots/files per batch. **Cancel upload preparation** cancels scanning;
 once queued, cancel individual transfers. Navigation or reconnect during preparation
 discards that batch. Wayland drops need a current pointer event; absent coordinates
-are rejected. Native dragging from egui out to the file manager and selection
-batches are not implemented yet.
+are rejected. Native dragging from egui out to the file manager is not implemented yet.
 
-X11, microphone forwarding, settings, translations and detached windows
+**Settings** provides themes/terminal appearance, shell, history size, default grid
+size, alternate-scroll line-start behavior, workspace widths, selected application
+shortcuts and SFTP configuration. **Live preview** previews appearance; **Save**
+applies behavior settings. **Revert** restores saved values, and closing a dirty
+page offers Save/Discard/Cancel. Default size/shell apply to new terminals.
+SFTP connection concurrency, file-size and bandwidth limits apply on the next
+connection, with saved server overrides taking precedence. Filters and edit limits
+apply to subsequent operations after saving; SFTP setting changes revoke old upload preparation.
+**Global simultaneous uploads** sets a shared upload cap of 1–32 across all SFTP
+connections. It applies at startup and after Save, without reconnecting. Lowering
+the cap lets active uploads finish; queued/new uploads wait for available slots.
+Preview and failed saves preserve the saved cap. Per-server overrides do not
+change this global limit.
+
+In **Settings > Appearance**, **Text brightness** adjusts terminal text from
+60–120% in 5-point steps; 100% preserves its colors. **Bright colors for bold
+text** maps the first eight ANSI foreground colors to their bright counterparts,
+while retaining the bold font. Both support Live preview and Revert, including
+idle terminals. Brightness also affects text decorations and faint text; terminal
+backgrounds, selections and cursors keep their colors.
+
+In **Settings > Terminal > Local shell**, choose a saved/discovered executable
+from the dropdown or type a custom name/path in the text field. Candidates are
+found once at startup and merged with saved choices; discovery never launches a
+shell. The current choice remains available even if it cannot be found or the
+32-entry list is full. Custom input accepts up to 256 characters. Opening Settings
+and Live preview keep the saved shell and cache unchanged. Save commits both;
+a failed Save keeps the draft. The choice applies to new local terminals, while
+existing terminals keep running. An unavailable executable reports an error when
+you explicitly open a new local terminal. Dynamic rescanning/list deletion are
+not part of this picker.
+
+In **Settings > Appearance**, **Local shell icon** offers **Automatic** and the
+bundled system choices. Automatic uses the host OS, independently of the shell or
+Tab title. **System icons follow theme** switches from original colors to a
+silhouette in the current text color. Both support Live preview and Revert; Save
+commits the selection, and a failed Save keeps the draft. Local Tab icons update
+immediately during preview; split Tabs use their focused pane. Saved remote
+profiles display their explicit override or valid discovery cache in Sidebar/Tab;
+unknown or temporary connections keep a generic symbol. This slice does not add
+remote discovery or a session-level icon picker.
+
+**Focused refresh rate** and **Unfocused refresh rate** accept 1–120 FPS,
+defaulting to 60 and 4. Save applies these output snapshot ceilings to existing
+and new terminals; Live preview and failed saves keep the running rates. A
+terminal uses the focused rate while it has keyboard focus in an active window;
+other terminals, including hidden tabs, use the unfocused rate. Idle output does
+not schedule periodic frames. Input, protocol replies and status prompts remain
+responsive independently; these controls do not cap the whole application FPS.
+
+**Enable semantic highlighting** colors log levels and contextual HTTP status
+codes. The four fields accept opaque `#RRGGBB` colors; empty or invalid values
+use the terminal ANSI defaults. Live preview and Revert update idle terminals;
+a failed Save keeps the draft and previous saved values. Only default-style
+ASCII runs up to 512 bytes qualify: explicit foreground/background colors,
+inverse, faint and hidden text keep their program styles. Matching does not
+cross style or wrapped-row boundaries, and bare numbers are not HTTP statuses.
+
+In **Local files**, choose **Open** beside a regular file to open a private copy
+with its associated application; folders still navigate. The source stays
+unchanged, and edits to the copy do not write back. **Settings > SFTP > Local
+file open snapshot (MiB)** defaults to 512 MiB; Save applies the limit. Zero
+removes file/cache byte caps, while the 128-file bound and 24-hour stale cleanup
+remain. Copies use the separate experimental cache. Local-directory navigation, settings changes,
+disconnect or close cancel work that has not launched; replaced files and stale
+directories are rejected. Already launched applications keep running independently.
+Filters accept one name pattern per line with `*`, ignore invalid/duplicate entries
+and retain up to 64 patterns. Blank lines survive editing; saving displays canonical values.
+
+**Settings > Terminal > MICROPHONE** selects the remote PCM sample rate
+(8–192 kHz) and channels (1/2/4/6/8). Save applies the format to the next SSH
+connection or retry; preview and failed saves preserve the saved format.
+Before connecting SSH, explicitly enable **Allow microphone forwarding for this
+connection** in its connection form. It defaults off and is omitted from saved
+sessions/workspaces. Authorized retries keep the choice; disconnect, replacement
+or switching protocol clears it. After trust and authentication, Linux needs
+PulseAudio or pipewire-pulse. Idle connections do not request local microphone
+permission; a recording program using the owned remote source triggers capture.
+Unavailable remote audio still permits normal SSH shell use. Native device and
+permission behavior still require platform acceptance; manual transcription controls have not migrated.
+
+Image paste is available in connected Local Shell and SSH terminals. Use the
+normal Paste shortcut or menu with an image-only clipboard: egui gives text
+priority when both text and an image are present. PNG encoding runs in the
+background (4096 × 4096 pixels, 16 MiB maximum), followed by a private local file
+or upload over the current authenticated SSH connection; the server needs SFTP.
+Only the quoted path is pasted, without Enter. Keep the original terminal focused
+until completion. New input, focus/pane/viewport changes, Cancel, disconnect or
+close revoke pending insertion. One conversion and one image per terminal may
+be pending; each connection retains at most 32 files until disconnect. Cancelled
+remote uploads stay tracked for connection-end cleanup; network loss can leave
+`.axssh-attachment-*` files. Telnet/Serial reject images. OSC 52 remains text only.
+Native clipboard behavior and visual acceptance still need platform testing.
+
+**Settings > Language** selects System, source English or any of the eleven
+bundled translations. Click **Save** to apply; failed saves keep the draft and
+previous language, and **Live preview** never switches language early. System uses
+the locale captured at startup. This slice covers application menus, settings/
+close confirmation, the Settings tab and About entry. Terminal connection/trust
+prompts, saved sessions/groups, Tab/pane controls and workspace dialogs also use
+the selected language. Language changes preserve connection expansion and dialog
+identity. Session names, addresses, fingerprints, paths and technical errors remain
+unchanged. SFTP labels and external-edit controls also follow the selected
+language. SFTP trust prompts display the target and fingerprints, offer explicit
+trust once only when permitted, and request fresh input when the prompt changes.
+Directory/transfer buttons show queue failures; repeated layout passes do not
+repeat their commands. Other settings still await migration.
+
+**Settings > Terminal** also offers **Local selection priority**, **Copy selection
+on select**, and **Right-click copy or paste**. Save to apply; preview and failed
+saves keep the current behavior. In a reporting TUI, Shift selects locally;
+with local priority enabled, Alt/Option forwards mouse gestures. An unselected
+click still reaches the TUI, while dragging selects locally. Automatic copy runs
+when selection completes and makes local right-click paste; otherwise right-click
+copies a selection or pastes when there is none. TUI reporting retains priority
+unless you choose a local gesture. Changing panes, prompts or viewport while an
+app-requested paste is pending cancels that paste.
+
+On macOS, **Option acts as Meta** sends original Option-modified keys as
+Escape-prefixed input while a terminal is focused. Editors keep normal native
+Option text; IME commits remain ordinary text. **Allow remote OSC 52 clipboard
+access** defaults off. Once saved on, remote writes can update the default text
+clipboard. Each remote read shows **Allow / Deny**, expires after 20 seconds,
+and is cancelled by disabling access, changing focus/viewport or disconnecting.
+Allow reads in the background, preserving empty text and line endings, with a
+64 KiB limit. Ordinary paste never authorizes a remote read.
+
+**Settings > Appearance** selects the application and terminal font independently.
+Bundled fonts appear first, followed by system monospace families. **Live preview**
+applies the draft after a background load; **Revert** or Discard restores saved
+fonts. Missing fonts or unequal terminal Latin advances show a warning and use
+JetBrains Mono, retaining your choice for a later installation. CJK/symbol
+fallbacks remain available. Font changes refresh terminal cells and selection.
+
+The SSH connection form and saved-session editor provide **X11 forwarding**:
+Off (the new-draft default), Untrusted (`-X`) and Trusted (`-Y`). **Settings > X11**
+selects the local provider, a Custom executable path, startup policy and explicit
+loopback no-authority compatibility. Known installation locations are a read-only
+startup snapshot. Click Save to apply settings to subsequent SSH workers; reconnect
+existing connections to use changed options. Preview and failed saves preserve
+the saved policy. Trusted mode prepares the local server only after a valid remote
+X11 setup; Untrusted requires restricted authorization and never falls back to
+no-auth. An unavailable/rejected X11 setup leaves the SSH shell usable. Closing or
+disconnecting joins the existing relay cleanup. Real X server/GUI acceptance is pending.
+
+Microphone forwarding, remaining settings, translations and detached windows
 remain later stages. Native GUI/device/performance acceptance is pending; see the
 [migration plan](egui-migration.md).
 
@@ -572,8 +781,18 @@ action with their existing tooltip and accessible name.
 
 The sidebar masks usernames and IPv4 addresses by default: a username keeps its
 first and last two characters when available, and `192.168.1.202` becomes
-`192.*.202`. Change the single mask character in **Settings > Workspace**.
+`192.*.1.202`. Change the single mask character in **Settings > Workspace**.
 Hostnames remain visible so they can still be distinguished at a glance.
+
+The experimental egui frontend also shows the masked endpoint beneath each saved
+session name. Its Workspace mask setting supports Live preview; turning preview
+off or discarding restores the saved character. Empty or invalid drafts display
+the default `*`. Save applies config normalization, and failed saves retain the
+draft. This is a list display preference: hover details and accessibility
+descriptions still contain the full address, search accepts the original endpoint,
+and editors/connections use the unchanged profile. IPv6 addresses and serial ports
+remain visible.
+
 New-session editors and terminal sessions share the workspace tab bar, while
 Settings opens as a separate workbench view. The `+` at the right end of that
 bar lists every saved connection with its system icon, name, and masked endpoint,
@@ -1012,6 +1231,12 @@ Custom exposes separate Light and Dark semantic colors. During the immediate
 preview and on persistence, invalid hex values or colors that would hide text,
 essential borders, focus/status states, or terminal text are replaced with
 readable defaults for that side.
+
+The egui settings page shows the two Custom editors only after selecting
+**Custom**. Each field accepts `#RRGGBB` or `#RRGGBBAA`; preview uses the same
+normalization as Save, so an invalid or low-contrast draft is repaired before it
+reaches application controls. The saved settings remain unchanged until Save
+succeeds.
 
 **Compact terminal rendering** is enabled by default and removes redundant run
 wrappers and default-background items. Disable it only to compare the legacy item

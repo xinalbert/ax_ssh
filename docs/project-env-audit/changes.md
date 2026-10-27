@@ -1275,3 +1275,361 @@
 - 影响文件：`Cargo.toml`、`Cargo.lock`、`build.rs`、`.github/workflows/ci.yml`、`src/egui_main.rs`、`src/egui_app/`、`src/controller/`、相关规范、双语文档和环境记录。
 - 环境事实：egui-only 图不含 Slint/softbuffer；1.95 两前端 check 通过，默认 909 项测试通过；27 项 Python 回归、675 × 11 翻译和生成资源校验通过。新 egui 完整验证和目标命令收尾见实施记录。
 - 剩余边界：本机 ARM64 macOS；其它平台交原生 CI；原生 GUI/IME/字体/性能未验收，实验 WGPU 无等价软件回退，默认 Slint 保留。没有运行 GUI、外部账号或真实 SSH/凭据操作。
+
+## 2026-10-24 E7T 实施前环境复核
+
+- 目的：核实继续 egui 设置迁移的实际环境。
+- 改动范围：`docs/project-env-audit/current.md`、egui/controller 设置应用链。
+- 执行内容：读取 Cargo/CI 与现有环境记录；确认 rustc/Cargo 1.97.1、Python 3.10.20，以及 macOS ARM64/Intel targets；纠正旧快照中的 1.99、Python 3.14、Windows target 和仅本地原型范围。
+- 验证结果：允许开工；离线 check 缺少 eframe，locked 联网恢复进行中；未升级依赖。
+- 风险/待办：Rust 构建/测试取决于锁定依赖可用性；Windows/Linux、真实设备、GUI 和性能仍需独立验证。
+
+## 2026-10-24 E7T 缓存恢复与本机门禁完成
+
+- 目的：确认缺包恢复后本轮实现可复现。
+- 改动范围：环境快照及终端/SFTP 设置链，未调整依赖版本、Cargo.lock 或工具链。
+- 执行内容：Cargo 获取已有锁定依赖后，切回 locked/offline 运行两前端 check/严格 Clippy/test/build、组合 all-features/all-targets check 及静态校验。
+- 验证结果：macOS ARM64 默认 930、egui 538 项测试通过；两前端构建和检查、组合检查、79 项 controller 聚焦回归、27 Python 与翻译/文档/skill/tracker/diff 通过。
+- 风险/待办：其它平台、显式 target/MSRV 本轮未重跑；新设置 GUI、真实设备与性能仍需独立验收。不以当前宿主结果代替原生 CI。
+
+## 2026-10-24 E7L 语言迁移环境复核
+
+- 目的：继续 egui 语言与翻译工具迁移前确认环境。
+- 改动范围：Python 翻译工具、egui 菜单/设置、环境快照。
+- 执行内容：核对当前 Cargo/metadata/PO 工具与上轮结果；rustc 1.97.1、Python 3.10.20 保持一致，Cargo 锁定依赖已有缓存，Python 使用标准库及既有 rustfmt。
+- 验证结果：允许开工，不增加依赖，不改变 Cargo/MSRV/CI；本轮最终验证另记。
+- 风险/待办：原生菜单/GUI 与其它平台验收独立保留；运行时不解析或读取 PO 文件。
+
+## 2026-10-24 E7L 完整门禁完成
+
+- 目的：验证语言/菜单/设置迁移和静态翻译工具。
+- 改动范围：egui 界面、Python 翻译工具、共享 PO 与生成表；未增加依赖或升级工具链。
+- 执行内容：两前端 locked/offline check/严格 Clippy/test/build、组合 check，及 egui aarch64-apple-darwin 显式 check/Clippy/build；翻译生成/PO/脚本/文档校验。
+- 验证结果：默认 930、egui 542 项 Rust tests，31 Python 和 711×11 PO 检查通过；全部构建门禁通过，egui 图仍无 Slint/softbuffer。
+- 风险/待办：Windows/Linux/Intel macOS 和 MSRV 未重跑；原生菜单/字体/文案长度及真实平台验收保留，不以无窗口回归替代 GUI 确认。
+
+## 2026-10-24 E7F 字体迁移环境复核
+
+- 目的：确认字体迁移使用现有依赖与资源。
+- 改动范围：共用字体资源目录、egui 字体后台任务和设置链。
+- 执行内容：核对现有 fontdb 0.24.0、egui/epaint 0.37.0、内置四个字体族及许可证；rustc/Cargo 1.97.1、Python 3.10.20 保持一致。
+- 验证结果：允许开工，已有 Cargo 缓存可用；不新增依赖/字体，不调整 MSRV/CI。
+- 风险/待办：后台任务、资源上限和真实字体布局回归待本轮验证；原生显示/字体质量由用户验收。
+
+## 2026-10-24 E7F 字体门禁完成
+
+- 目的：确认共用资源目录和 egui 字体选择不改变工具链/依赖/构建隔离。
+- 改动范围：共用字体元数据、egui 后台加载、草稿与终端网格；Slint 注册器沿用。
+- 执行内容：两前端 locked/offline check/严格 all-targets Clippy/test、egui build、组合 check、依赖图及脚本/静态生成/文档检查。
+- 验证结果：默认 930、egui 553 项 Rust 测试与 31 Python 通过；711×11 PO/生成表通过，egui 图无 Slint/softbuffer。四家族实际字体、取消/join、过期结果、失败草稿和网格联动有确定性回归；不新增依赖、schema 或字体。
+- 风险/待办：本轮未重跑显式 target/MSRV 或其它平台；原生显示/IME/性能和既有按需系统缺字 provider 的首次等待与生命周期仍需 E2V 验证。
+
+## 2026-10-24 E7W 翻译迁移环境复核
+
+- 目的：确认连接/工作区文案使用现有静态目录和生成工具。
+- 改动范围：egui 前端固定文案、现有 PO 与生成表；不触及 transport 或持久化 schema。
+- 执行内容：读取环境记录、manifest、前端/翻译入口；核对 rustc/Cargo 1.97.1、Python 3.10.20 和 Rust 1.95.0 声明。
+- 验证结果：允许开工，依赖/工具链无变更，沿用现有 locked/offline 验证及标准库 Python 工具。
+- 风险/待办：文案长度/键盘焦点和原生信任提示仍需用户验收；本轮不验证其它平台或真实远端。
+
+## 2026-10-24 E7W 文案门禁完成
+
+- 目的：验证共享 PO 扩展和 egui 连接/工作区文案保持构建及行为边界。
+- 改动范围：前端固定文案、稳定控件 ID、现有 PO/静态表和三项回归；控制层、依赖和 schema 不变。
+- 执行内容：两前端 locked/offline check/严格 all-targets Clippy/test、egui build、组合 check 和脚本/生成/文档校验。
+- 验证结果：默认 930、egui 556 项 Rust 测试通过，17 项相关 Python、741×11 PO/静态生成、Markdown/skill/tracker/fmt/diff 通过。保留原 711 条及元数据，最终 egui 使用 145 条静态源键；默认 Slint 也重新经 Cargo 编译验证。
+- 风险/待办：本轮未重跑显式 target/MSRV 或其它平台；原生文案长度/焦点和实际 SSH/设备/性能仍需独立验收，不以无窗口文字/指针回归代替用户视觉确认。
+
+## 2026-10-24 E7S 环境复核
+
+- 目的：确认 SFTP 文案及前端共享提示使用现有依赖和静态翻译链。
+- 改动范围：egui 前端及 PO/生成表，不改变 worker、schema 或构建配置。
+- 执行内容：核对环境快照、Rust/Slint/egui 规范、SFTP facade 和 UI；rustc/Cargo 1.97.1、Python 3.10.20 保持一致。
+- 验证结果：允许开工；沿用 locked/offline 两前端及组合门禁，不增加依赖。
+- 风险/待办：共享提示须验证指纹和精确 prompt token，UI 操作须有跨 pass 去重；原生字体/焦点仍需用户验收。
+
+## 2026-10-24 E7S SFTP 门禁完成
+
+- 目的：验证共享 SSH 提示、SFTP UI 意图边界和静态文案保持两前端构建/行为契约。
+- 改动范围：前端私有模块提取、提示/秘密清理、按钮每帧准入/错误反馈及 PO/静态表；worker/transport、依赖和 schema 不变。
+- 执行内容：两前端 locked/offline check/严格 all-targets Clippy/test、egui build、组合 check，及生成/脚本/文档/skill/tracker/fmt/diff 校验。
+- 验证结果：默认 930、egui 558 项 Rust 测试通过；17 项相关 Python 和 756×11 PO/静态生成通过，egui 使用 167 条源键。原 741 条及元数据保留，默认 Slint 经 Cargo 重新编译验证。
+- 风险/待办：未重跑显式 target/MSRV 或其它平台；原生 SFTP 文案长度/焦点、真实传输/SSH/设备和性能仍需独立验收，无窗口指针/文字回归不替代用户视觉确认。
+
+## 2026-10-24 E7M 环境复核
+
+- 目的：确认终端选择/复制设置沿用当前字段、输入与模型接口。
+- 改动范围：egui 交互和配置草稿、controller 复制结果身份；不改持久化 schema 或依赖。
+- 执行内容：核对 Cargo edition 2024/MSRV 1.95.0、当前 Rust/Cargo 1.97.1、Python 3.10.20，以及既有 Slint 输入/终端配置与 egui/controller。
+- 验证结果：允许开工，缓存可用；继续两前端 locked/offline 验证，不新增库或升级版本。
+- 风险/待办：须覆盖真实输入字节、reporting 手势/取消、过期复制与失败保存；原生鼠标/剪贴板和其它平台需独立验收。
+
+## 2026-10-24 E7M 鼠标与复制门禁完成
+
+- 目的：验证保存后的交互配置、鼠标手势所有权及复制/粘贴身份不破坏两前端边界。
+- 改动范围：egui 输入/设置/短期粘贴元数据票据、controller 复制结果身份和回归；持久化 schema、依赖、工具链和构建入口不变。
+- 执行内容：两前端 locked/offline check/严格 all-targets Clippy/test、egui build、组合 check，及脚本/生成/文档/skill/tracker/fmt/diff 校验。
+- 验证结果：默认 930、egui 562 项 Rust 测试通过；新增真实 PTY/UI 手势/复制/定向粘贴和 controller 连接/视口复制身份回归通过，保存失败仍使用保存值。17 项相关 Python、756×11 PO/静态生成通过，复用已有条目后 egui 使用 173 个源键；无新原生依赖。
+- 风险/待办：未重跑显式 target/MSRV 或其它平台；实际系统鼠标/剪贴板与原生 GUI 仍待独立验收。票据依据固定 eframe 0.37 WGPU 的同步读取/下一输入帧路径；Option/Meta 和远端 OSC 52 权限继续后续切片，OSC 52 仍禁用。
+
+## 2026-10-24 E7P 环境复核
+
+- 目的：核对原生 Option 策略和 OSC 52 的可实现边界。
+- 改动范围：egui/controller，macOS egui 直接声明已有 winit 0.30.13，不改 schema 或升级版本。
+- 执行内容：读取环境、Cargo/CI、缓存中的 eframe/egui-winit/winit 源码及现有 Slint/model 权限路径；运行 rustc/Cargo/Python/已安装 target 查询。
+- 验证结果：允许开工；Rust/Cargo 1.97.1、Python 3.10.20，ARM64/Intel macOS targets 可用；延续两前端 locked/offline 与严格 Clippy，依赖声明后更新 root lock 条目。
+- 风险/待办：原生 Option/IME 与真实系统剪贴板需要手动验收；其它平台仍依赖原生 CI。读取仅显式同意后触发，拒绝/超时/重连/关闭权限必须不返回正文。
+
+## 2026-10-25 E7P 原生输入与权限门禁完成
+
+- 目的：确认原生 Option 策略和有界授权读取保持两前端与平台边界。
+- 改动范围：macOS egui 可选直接声明现有 winit 0.30.13；复用 arboard/模型/配置，新增可取消并 join 的单个读取 job，不改版本或 schema。
+- 执行内容：两前端 locked/offline check/严格 all-targets Clippy/test、egui build、组合检查；ARM64/Intel macOS 两前端显式 target check/Clippy；验证依赖图、脚本/目录/生成/Markdown/skill/tracker/fmt/diff。
+- 验证结果：默认 930、egui 571 项测试通过；原始空文本/CRLF 协议、单次/拒绝/超时/快速撤权/旧视口、真实 Allow 多 pass 和关闭 join 回归通过。17 项 Python、756×11 PO/生成通过，egui 使用 181 键，独立依赖图无 Slint/softbuffer/Skia。当前 rustup 无 1.95 工具链，未重跑 MSRV。
+- 风险/待办：Intel 仅交叉 check/Clippy，未运行 Intel 程序；其它平台完整链接/原生 GUI/权限与真实 Option/dead-key/IME、系统剪贴板仍需独立验收，未自主截图。
+
+## 2026-10-25 E7U 环境复核
+
+- 目的：核对全局上传设置能否沿用现有 schema 和 limiter。
+- 改动范围：egui SFTP 控件、workspace 加载/提交配置点与回归，不改 native/transport/持久化 schema。
+- 执行内容：读取 Cargo/环境/架构/地图、SFTP 字段、UI 与全局 limiter；轻量确认 rustc/Cargo 1.97.1、Python 3.10.20。
+- 验证结果：允许开工；沿用 locked/offline 两前端门禁，无新增依赖或版本升级，既有原生/MSRV 缺口保持。
+- 风险/待办：配置必须在原子写成功后应用，测试不得并行改写进程全局状态；真实多连接调度和 GUI 验收独立保留。
+
+## 2026-10-25 E7U 全局上传设置门禁完成
+
+- 目的：验证已保存全局上传上限的应用链与现有 permit 语义。
+- 改动范围：SFTP 草稿控件、workspace 加载/提交策略及测试注入，复用既有 limiter；无 native/依赖/构建/CI 变化。
+- 执行内容：两前端 locked/offline check/严格 all-targets Clippy/test、egui build、组合检查，及聚焦/脚本/译文/文档/skill/tracker/fmt/diff 校验。
+- 验证结果：默认 930、egui 573 项完整测试通过；14 项 workspace、permit 和两项设置回归通过。17 项 Python、756×11 PO/静态生成、183 个 egui 源键通过；配置回归注入私有回调，不降低并行测试使用的进程实际上限。
+- 风险/待办：本轮未重跑显式 target/MSRV 或其它平台；实际多连接上传调度及 GUI 仍需独立验收，不以无窗口或注入回归替代用户视觉/真实传输确认。
+
+## 2026-10-25 E7O 环境复核
+
+- 目的：确认可共享现有本地文件校验与缓存，并保持实验数据隔离。
+- 改动范围：Rust 库/默认适配、实验 companion 与 UI；沿用已有文件身份、缓存限额和 open 依赖。
+- 执行内容：读取环境/Cargo/架构/地图、默认校验/快照/原生打开和实验后台编辑生命周期；确认 Rust/Cargo 1.97.1、Python 3.10.20。
+- 验证结果：允许开工；无 schema/依赖/工具链升级，继续 locked/offline 两前端门禁，原生/MSRV 缺口保持。
+- 风险/待办：链接/替换/目录过期及未完成复制不能启动关联应用；后台任务须保留取消/join，实验缓存不得写入默认缓存；测试使用注入 opener，原生验收独立保留。
+
+## 2026-10-25 E7O 安全打开门禁完成
+
+- 目的：确认共享目录/文件校验、实验独立快照和保存限额在两个前端及可用 macOS target 上保持可编译/可测试。
+- 改动范围：共享 Rust 本地文件模块、默认薄适配、实验 companion/控件与回归；复用既有缓存和 open 依赖，无工具链/schema/依赖/CI 变化。
+- 执行内容：完成两前端 locked/offline check/严格 all-targets Clippy/test、egui build、组合 all-features/all-targets check，及 ARM64/Intel macOS 两前端显式 target check/严格 all-targets Clippy；完成聚焦/脚本/译文/文档/skill/tracker/fmt/diff 校验。
+- 验证结果：默认 932、egui 587 项完整测试通过；14 项 local_open、9 项共享校验、全语言 Open 实际点击/重复 pass 和两项设置回归通过。17 项 Python、756×11 PO/生成与 185 个 egui 源键通过，单个后台快照任务取消/清理和关闭 join 经注入 copier/opener 确认，不自主启动外部应用。
+- 风险/待办：Intel 只有交叉 check/Clippy；Windows/Linux 原生链接/运行、Intel 链接/运行和 Rust 1.95 尚未验证。非法 UTF-8 文件名测试限 Linux，宿主未运行；真实关联应用、设置 GUI 和其它原生输入/设备验收保留。
+
+## 2026-10-25 E7X 环境预检
+
+- 目的：继续迁移 SSH X11 连接模式与本机 X server 设置。
+- 改动范围：实验连接/设置/controller，复用既有 X11Settings、XServerPlan 和 SSH worker；无 schema/依赖/工具链/CI 变更。
+- 执行内容：核对 Cargo/锁文件、CI、工具链、地图和既有认证/relay 生命周期；本机 Rust/Cargo 1.97.1、Python 3.10.20，已安装 ARM64/Intel macOS target。
+- 验证结果：允许开工；已知安装位置发现仅文件系统/平台只读查询，可在窗口创建前 join；协议回归使用固定信任 loopback，不执行真实 xauth/启动器，不读取真实录音设备。
+- 风险/待办：MSRV 1.95 无本机工具链，Windows/Linux 原生门禁和真实 XQuartz/GUI 仍需 CI/手动验收；麦克风/附件留后续，不根据迁移顺带开启录音。
+
+## 2026-10-25 E7X 全部门禁完成
+
+- 目的：验证 X11 连接/设置和共享服务端确认在两前端及可用 macOS target 上的编译、行为与清理边界。
+- 改动范围：实验 controller/控件和非秘密设置、共享 SSH setup 与取消；不更改 schema、依赖、工具链或 CI。
+- 执行内容：完成两前端 locked/offline check/严格 all-targets Clippy/test、egui build、组合检查、ARM64/Intel macOS 两前端显式 target check/严格 Clippy，以及聚焦/脚本/译文/文档/skill/tracker/fmt/diff 校验。
+- 验证结果：默认 934、egui 593 项完整测试通过；24 项 X11、两项设置事务及 28 项 terminal_session 聚焦回归通过，确认请求入队不等于服务端接受、拒绝后 shell 可用、Off 不请求、认证前无请求、等待时断开可 join。17 项 Python、756×11 PO/生成和 207 个 egui 键通过，复用 22 个已有键。发现位置只在启动前后台读取并 join，UI 无文件系统/协议工作。
+- 风险/待办：Intel 仅交叉 check/Clippy，无链接/运行；Windows/Linux 原生门禁和 Rust 1.95 未在本机验证。真实 XQuartz/受限授权/X11 应用与 GUI 待独立验收，实验麦克风保持关闭，不以 loopback/无窗口测试替代设备或视觉确认。
+
+## 2026-10-25 G1 / E7A 环境预检
+
+- 目的：将施工前标准检索落入根规则并继续音频格式/权限入口迁移。
+- 改动范围：项目规范、实验 UI/controller 与现有 AudioSettings/Pulse worker 接线；不改依赖、schema、工具链或原生采集/权限实现。
+- 执行内容：核对 Rust/Cargo 1.97.1、Python 3.10.20、两 macOS target、Cargo/CI 与既有格式/采集租约/需求触发/PCM/关闭边界；已按用户要求检索官方 CPAL 0.17.3/PulseAudio，研究及版本决策落盘。
+- 验证结果：允许开工，G1 的 Markdown/skill/tracker/diff 和 Cargo check 通过；实际录音设备测试使用既有注入边界，新增连接测试用固定信任 loopback，测试不触发真实 xauth/provider/麦克风。
+- 风险/待办：Rust 1.95 工具链及 Windows/Linux SDK 不在本机；真实 TCC/远端 Pulse/设备/GUI 待原生验收，Apple JS 正文抓取失败不作为已读证据，继续沿用已有权限实现。
+
+## 2026-10-25 E7A 续作验证完成
+
+- 目的：完成音频设置/连接级授权及既有 worker 生命周期接线的环境与验证记录。
+- 改动范围：实验 controller/UI、回归和双语文档；依赖/schema/工具链/CI 无本轮新增变化，原生音频实现继续复用。
+- 执行内容：先核对 CPAL 0.17.3/PulseAudio/Tokio 1.53.3/egui 0.37 官方正文并落 research，再补全格式点击、授权撤销、保存失败恢复与等待音源准备时断开 join 回归，运行全部门禁。
+- 验证结果：默认 934、egui 597 项完整测试、两前端 locked/offline check/严格 all-targets Clippy/test/build、组合检查、双 macOS target 两前端按 CI 原命令 check/严格 Clippy 均通过。17 项 Python、56 Markdown/入口、PO/生成、215 egui 源键、116 图标、fmt/skill/tracker/diff 通过；测试无真实设备访问。
+- 风险/待办：Intel 仅交叉 check/Clippy；MSRV 1.95、Windows/Linux 原生链接运行和真实 TCC/设备/远端 Pulse/GUI 保留独立验收。下一附件切片仍先检索官方标准及版本依据，无多 agent/Worker、自主截图、提交/推送/发布。
+
+## 2026-10-25 E7I 图片附件预检与验证
+
+- 目的：接续图片粘贴入口，复用锁定媒体与 SSH 实现，验证原目标插入/取消和文件清理。
+- 改动范围：egui 图片事件/后台转换、controller 附件任务/票据/文件所有权、回归及双语说明；无新依赖、schema、工具链、CI 或原生权限代码。
+- 执行内容：先研究官方 egui/eframe/ecolor 0.37、Tokio 1.53.3、image 0.25.10 及 SFTP v3 草案正文，再实现单任务、取消保留占位、最终原子确认和退出 join；复用 PrivateMediaFile 与同连接 SFTP。
+- 验证结果：默认 934、egui 606 项完整测试，两前端 check/严格 all-targets Clippy/test/build、all-features/all-targets、双 macOS target 两前端 CI 原命令 check/严格 Clippy 通过；7 项附件控制/真实 PTY/固定信任 SSH 回归和 2 项 egui 像素/多 pass/失焦回归通过。17 项 Python、56 Markdown/入口、PO/生成、215 egui 源键、116 图标、skill/tracker/fmt/diff 通过。
+- 风险/待办：上游在事件送达前读取/解码原生剪贴板，应用只能事后限额；egui 文本优先，双语说明已记录。Windows/Linux 原生运行、Intel 链接运行、MSRV 1.95、真实系统剪贴板/GUI 仍待 CI/用户验收，断网远端清理尽力而为。无多 agent/Worker、应用截图、提交/推送/发布。
+
+## 2026-10-25 E7H 侧栏遮罩预检与验证
+
+- 目的：继续 E7R，对齐会话列表遮罩与 Workspace 单字符设置。
+- 改动范围：共享纯 endpoint 格式化、默认薄适配、egui 控件/显示及回归/双语说明；无依赖/schema/工具链/CI/平台 cfg 变化。
+- 执行内容：先读环境及 Cargo/CI，确认 Rust/Cargo 1.97.1、Python 3.10.20 与双 macOS target，官方 egui 0.37/Rust 1.95 tag 正文先于计划及代码；config 原子保存与规范化继续复用。
+- 验证结果：默认 935、egui 610 项完整测试，两前端 locked/offline check/严格 all-targets Clippy/test/build 和组合 check 通过；聚焦协议/Unicode/原值保持、全语言 UI/保存失败恢复、17 项 Python、756×11 PO/生成、217 egui 源键、56 Markdown/入口、116 图标、skill/tracker/fmt/diff 通过。
+- 风险/待办：遮罩仅列表表示，完整提示/辅助技术与原始搜索/连接保留；GUI/辅助技术交用户验收。本轮未重跑显式 target，MSRV 1.95/其它原生平台仍交 CI；无多 agent/Worker、自主截图、提交/推送/发布。
+
+## 2026-10-25 E7B 文字颜色预检与验证
+
+- 目的：继续 E7R，对齐亮度/粗体亮色控件与实际绘制。
+- 改动范围：共享既有 HSL、默认薄适配、egui 控件/颜色顺序/缓存和双语说明，无依赖/schema/工具链/CI/平台 cfg 变化。
+- 执行内容：环境确认 Rust/Cargo 1.97.1、Python 3.10.20，先读取 xterm 与锁定 egui 0.37 官方正文再记录计划/实施；既有原子保存与预览所有权保持。
+- 验证结果：默认 472 library + 464 binary = 936、egui 547 library + 67 binary = 614 项完整测试通过；两前端 locked/offline check、严格 all-targets Clippy、test/build、组合 all-features/all-targets check 和 fmt/diff 通过。四项新增回归覆盖纯 HSL 边界、ANSI/alpha、真实模型静止行缓存/装饰、全语言键盘逐档控件；两项保存事务扩展通过。17 项 Python、56 Markdown/入口、756×11 PO/生成（含 header 为 757）、222 egui 源键、116 图标、skill/tracker 通过。
+- 风险/待办：GUI/辅助技术交用户验收；本轮未重跑显式 target，MSRV 1.95 与其它原生平台交 CI。E7R 的语义/自定义主题/其它显示设置继续开放；无多 agent/Worker、自主截图、提交/推送/发布。
+
+
+## 2026-10-25 20:57 E7R-FPS 施工前预检
+
+- 目的：补 Theme 双前端全量门禁，继续前台/后台输出快照刷新率迁移。
+- 改动范围：controller 调度/焦点提示、workspace 保存策略、egui 控件和双语文档；无依赖/schema/工具链/CI/平台 cfg 变更计划。
+- 执行内容：核对 Cargo/锁文件/CI、既有环境及本机 Rust/Cargo 1.97.1、Python 3.10.20 与双 macOS target；先查 egui 0.37/Tokio 1.53.3 官方版本源码，后写计划。
+- 验证结果：可开工；完整基线和实现后门禁待执行。
+- 风险/待办：本机无 Rust 1.95，Windows/Linux SDK 及其它平台运行不具备；原生 GUI/焦点/性能由用户验收，不自主截图，无多 agent/Worker。
+
+
+## 2026-10-25 21:27 E7R-FPS 最终验证
+
+- 目的：完成前台/后台刷新率迁移并补 Theme 完整自动基线。
+- 改动范围：controller 输出 deadline/焦点 watch、workspace 保存应用链、egui 控件/焦点生命周期及双语文档；无依赖/schema/工具链/CI/平台 cfg 变化。
+- 执行内容：先环境/官方版本源码核对和计划，再实现并聚焦验证；最终焦点复核补读 Response 契约后修正逐准入帧/隐藏优先提示，协议路径保持。
+- 验证结果：默认 480 library + 458 binary = 938、egui 562 library + 71 binary = 633 项完整测试通过；两前端 locked/offline check、严格 all-targets Clippy、test/build、组合 all-features/all-targets check 及 fmt/diff 通过；17 项 Python、56 Markdown/入口、756×11 PO/生成（含 header 为 757）、271 egui 源键、116 图标、skill/tracker 校验通过。新增七项回归，覆盖定时/同步输出/损伤保持/实时解析、重复提示和过载/旧代次、固定信任 SSH 协议响应、全语言键盘控件；保存事务扩展通过。
+- 风险/待办：无显式 target/MSRV 复验；真实 GUI/焦点/帧率与其它原生平台/Intel 链接、Rust 1.95 仍需 CI/用户验收。无多 agent/Worker、自主截图或提交/推送/发布。
+
+
+## 2026-10-25 21:52 +0800 E7R-Icons 施工前预检
+
+- 项目边界：独立 Rust 桌面应用，默认 Slint/实验 egui 分进程；现有环境记录已读并刷新本轮范围。
+- 运行/测试环境：Cargo.lock、Cargo.toml、build.rs 与五目标 CI 为依据；本机 Rust/Cargo 1.97.1、Python 3.10.20，双 macOS target 已确认；1.95 未安装，无其它平台原生 SDK/运行证据。
+- 变更计划：共享系统身份与 egui 图标呈现，增加已锁定 resvg 0.48.1 的可选 build 依赖，不改 schema/工具链/CI；真实 GUI/高 DPI 仍需用户验收。
+- 开工判定：允许开工。先记录官方核对/计划，再改代码，最终跑两前端完整门禁、组合检查和文档/生成/skill/tracker 验证。
+
+
+## 2026-10-25 22:28 +0800 E7R-Icons 最终验证
+
+- 目的：完成本地图标覆盖/主题轮廓及真实图标呈现迁移。
+- 改动范围：共享系统身份、Linux 严格来源优先、egui 可选 build 栅格化、UI 有界纹理和保存事务；现有锁定 resvg 增加 build 角色，无新包版本/schema/工具链/CI 或 SSH 权限变化。
+- 执行内容：环境及官方依据先于计划/代码，聚焦/组合回归后执行两前端完整门禁与双 macOS target CI check/strict Clippy；更新双语/许可、地图、月度记录和当前态。
+- 验证结果：默认 484 library + 455 binary = 939、egui 566 library + 79 binary = 645 项完整测试通过；两前端 locked/offline check、严格 all-targets Clippy、test/build、组合 all-features/all-targets check 通过；ARM64/Intel macOS 两前端 CI 原 target check/严格 all-targets Clippy 全部通过；Intel 仅交叉编译，未链接/运行；17 项 Python、56 Markdown/入口、758×11 PO/生成（含 header 为 759）、275 egui 键、116 图标/5 生成文件、skill/tracker/fmt/diff 通过。egui normal/build graph 确认无 Slint/softbuffer；116 图标可见/预乘/目录一致、资源拒绝、透明度/复用/释放、身份/聚焦 pane、全语言控件及实际 Sidebar/Tab 预览/还原通过。新增 9 项测试，原 3 项身份用例随模块迁入库。
+- 风险/待办：Linux/Windows 原生 SDK/运行和 MSRV 1.95 未具备；Intel 只检查未链接/运行。原生 GUI/高 DPI/a11y 交用户，无多 agent/Worker、自主截图、提交/推送/发布。
+
+
+## 2026-10-25 23:28 +0800 E7R-Shells 施工前预检
+
+- 项目边界：独立 Rust 桌面应用；现有环境/current 与 implementation 地图已读取并刷新本轮范围。
+- 运行/测试：Rust/Cargo 1.97.1、Python 3.10.20、双 macOS target 确认；MSRV 1.95/其它平台 SDK 与运行环境未具备。Cargo/lock/五目标 CI 仍为依据。
+- 范围：仅 egui shell 选择/发现/事务，无依赖/schema/平台 cfg/工具链/CI 变更；组名长度为兼容字段，后续需紧凑侧栏契约。
+- 开工判定：允许开工；官方版本源码/计划先于实现，最终执行两前端完整门禁、组合及文档校验。GUI/原生 PATH/辅助技术验收保留，无多 agent/Worker。
+
+
+## 2026-10-25 23:40 +0800 E7R-Shells 最终验证
+
+- 目的：完成已知 shell 选择/发现/缓存与保存链路，纠正兼容组名字段旧审计。
+- 范围：egui 启动发现/候选控件和事务提交副本、四项回归及双语文档；无依赖/schema/平台 cfg/工具链/CI 或 SSH 安全变化。
+- 执行内容：先环境/官方 API/计划再实施，发现任务在 GUI 前 await/join，失败不阻止手工选择；UI 读取有界快照，Save 复用 domain/workspace。
+- 验证结果：默认 484 library + 455 binary = 939、egui 566 library + 83 binary = 649 项完整测试通过；两前端 locked/offline check、严格 all-targets Clippy、test/build、组合 all-features/all-targets check 及 fmt/diff 通过；17 项 Python、56 Markdown/入口、758×11 PO/生成（含 header 为 759）、275 egui 源键、116 图标/5 生成文件、skill/tracker 校验通过。四项新增、14 项设置聚焦通过，覆盖无脏发现、失效/满列表当前值、Context/全语言/Unicode、失败重试和实际新终端消费。
+- 风险/待办：本轮无新平台 cfg，未重复显式 target/MSRV；其它原生平台、Intel 链接/运行及 GUI/键盘/PATH 仍需 CI/用户验收。无多 agent/Worker、自主截图或提交发布。
+
+
+## 2026-10-26 05:34 +0800 E7R-SFTP-Key 开工预检
+
+- 范围：仅实验 UI 菜单/焦点/快捷键，沿用已锁定 egui 0.37/Muda 0.19.3，无新依赖/schema。
+- 证据与判定：Cargo/lock、五目标 CI 与源码一致；rustc/Cargo 1.97.1、Python 3.10.20、aarch64/x86_64 macOS target 可用，1.95 未安装。允许开工，先官方检索/计划后代码。
+- 验证计划：聚焦焦点/路由/事务测试、两前端完整门禁/组合、双 macOS target check/严格 Clippy，文档/翻译/skill/tracker。原生 GUI/其它平台/MSRV 保留，无多 agent/Worker。
+
+
+## 2026-10-26 05:42 +0800 E7R-SFTP-Key 最终验证
+
+- 目的：接通 SFTP 菜单/保存快捷键与精确 pane 路径焦点，补全部八键校验。
+- 范围：仅 egui 菜单/设置/焦点与回归，无依赖/schema/transport/工具链/CI 变化。
+- 执行内容：先环境/官方 API/计划再代码，复用已有 companion，无自动 Connect/认证/List；保存事务与平台别名语义均验证。
+- 验证结果：默认 484 library + 455 binary = 939、egui 566 library + 88 binary = 654 项完整测试通过；两前端 locked/offline check、严格 all-targets Clippy、test/build、组合 all-features/all-targets check 通过；ARM64/Intel macOS 两前端按 CI 原命令的 target check/严格 Clippy 全通过。最终平台别名补充后重跑 egui 全量/构建/组合及双 target 门禁通过。17 项 Python、56 Markdown/入口、758×11 PO/生成（含 header 为 759）、275 egui 源键、116 图标/5 生成文件、skill/tracker/fmt/diff 通过。
+- 风险/待办：Intel 仅交叉 check/Clippy，未链接/运行；Windows/Linux 原生链接/运行与 Rust 1.95 仍需 CI，本机未安装 1.95。原生 GUI/菜单/键盘/焦点验收保留，未自主截图、提交/推送/发布或使用多 agent/Worker。下一项会话级导入/导出。
+
+
+## 2026-10-26 05:46 +0800 E7R-Transfer 开工预检
+
+- 范围：默认纯规则共享、实验事务与 UI；单 package Rust 2024、MSRV 1.95、现有锁定依赖，无新增依赖/feature/schema/CI。
+- 证据：Cargo/lock、源码/五目标 CI 与既有环境记录一致；本机 Rust/Cargo 1.97.1、Python 3.10.20、双 macOS target 可用，1.95 未安装。
+- 开工判定：允许，官方检索/计划先于代码；聚焦后运行两前端完整/组合及双 macOS target 门禁。GUI 与其它原生平台/MSRV 仍待补证。
+
+
+## 2026-10-26 06:16 +0800 E7R-Transfer 最终验证
+
+- 目的：共享既有会话/分组 JSON 格式和脱敏规则，接通实验交换与全部八键。
+- 范围：共享纯规则、默认薄适配、controller 后台串行事务和 egui 模态交换；无新依赖/持久 schema/协议格式/transport/工具链/CI。
+- 执行内容：先预检/官方版本研究/计划再实现，保留默认行为及纯测试，补输入限额/失败原子性/任务排空和结果归属保护，完成双前端与双 macOS target 检查。
+- 验证结果：默认 490 library + 450 binary = 940、egui 575 library + 94 binary = 669 项完整测试通过；两前端 locked/offline check、严格 all-targets Clippy、test/build、组合 all-features/all-targets check 通过；ARM64/Intel macOS 两前端按 CI 原命令的 target check/严格 Clippy 全通过。17 项 Python、56 Markdown/入口、758×11 PO/生成（含 header 为 759）、279 egui 源键、116 图标/5 生成文件、skill/tracker/fmt/diff 校验通过。
+- 风险/待办：Intel 仅交叉 check/Clippy，未链接/运行；Windows/Linux 原生链接/运行与 Rust 1.95 仍需 CI。本机未安装 1.95；原生 GUI/菜单/焦点/剪贴板验收保留。未自主截图、提交/推送/发布或使用多 agent/Worker。定向分组导入/侧栏快捷复制、SFTP 剩余交互和原生文件选择器继续开放。
+
+
+## 2026-10-26 06:23 +0800 E6R-Pause 开工预检
+
+- 范围：实验 owner/快照/UI，复用 Tokio 1.53.3/egui 0.37.0 与已有 SFTP worker，无新依赖/feature/schema/工具链/CI。
+- 环境：Rust/Cargo 1.97.1、Python 3.10.20、ARM64/Intel macOS target 可用，MSRV 1.95 未安装；Cargo/lock/CI 为依据。
+- 开工判定：允许，已完成官方版本研究/计划；聚焦后跑双前端完整/组合，双 macOS target 和文档门禁。原生 GUI/其它平台/Intel 运行及 MSRV 保留，无多 agent/Worker。
+
+
+## 2026-10-26 06:53 +0800 E6R-Pause 最终验证
+
+- 目的：接通既有单项下载暂停/继续与类型化快照/资格、有界历史和 UI。
+- 范围：实验 controller/UI 与回归；没有依赖/schema/协议/工具链/CI 变化。
+- 执行内容：先预检/官方版本研究/计划再实现，固定信任 loopback 的 READ 闸门/FIFO barrier 验证实际字节、旧代次、暂停取消/关闭清理；原 native worker 行为保持。
+- 验证结果：默认 490 library + 450 binary = 940、egui 580 library + 96 binary = 676 项完整测试通过；两前端 locked/offline check、严格 all-targets Clippy、test/build、组合 all-features/all-targets check 通过；ARM64/Intel macOS 两前端按 CI 原命令 target check/严格 Clippy 全通过。17 项 Python、56 Markdown/入口、758×11 PO/生成（含 header 为 759）、281 egui 源键、116 图标/5 生成文件、skill/tracker/fmt/diff 校验通过。
+- 风险/待办：Intel 仅交叉 check/Clippy，未链接/运行；Windows/Linux 原生链接/运行和 Rust 1.95 仍需 CI，本机未安装 1.95。原生 GUI/键盘/滚动/真实服务器暂停延迟及取消验收保留。未自主截图、提交/推送/发布或使用多 agent/Worker。下一项优先批量选择/控制，远端修改与原生拖出仍开放。
+
+
+## 2026-10-26 07:25 +0800 E6R-Batch 开工预检
+
+- 范围：controller 1–64 UUID 批次/有界最新结果，egui pane 局部选择；现有单项控制与任务 owner 复用，无新依赖/schema/协议/CI。
+- 环境：Rust/Cargo 1.97.1、Python 3.10.20、双 macOS target 确认，MSRV 1.95 未安装；Cargo/lock 与既有五目标 CI 为依据。
+- 开工判定：允许，已先官方版本检索和计划；聚焦后执行双前端完整/组合、双 macOS target 与文档校验。GUI/其它平台/Intel 运行/MSRV 保留，无多 agent/Worker。
+
+
+## 2026-10-26 19:16 +0800 E6R-Batch 最终验证
+
+- 目的：接通当前 pane 的传输多选、批量 Pause/Resume/Cancel 与逐项入队汇总。
+- 范围：实验 controller/UI/回归与双语翻译；没有依赖/schema/worker 协议/工具链/CI 变化。
+- 执行内容：先预检/官方版本检索/plan，再实现并验证现有有界 worker；READ 闸门/FIFO barrier 使用 owner 现态保留提前回执，不依赖 sleep。
+- 验证结果：默认 490 library + 450 binary = 940、egui 583 library + 98 binary = 681 项完整测试通过；两前端 locked/offline check、严格 all-targets Clippy、test/build、组合 all-features/all-targets check 通过；ARM64/Intel macOS 两前端按 CI 原命令 target check/严格 Clippy 全通过。17 项 Python、56 Markdown/入口、760×11 PO/生成（含 header 为 761）、290 egui 源键、116 图标/5 生成文件、skill/tracker/fmt/diff 校验通过。
+- 风险/待办：Intel 仅交叉 check/Clippy，未链接/运行；Windows/Linux 原生链接/运行与 Rust 1.95 仍需 CI，本机未安装 1.95。原生 GUI/键盘/滚动/真实服务器批次行为验收保留。无新依赖、持久 schema、worker 协议、工具链或 CI 变化；未自主截图、提交/推送/发布或使用多 agent/Worker。下一项优先远端重命名/删除，远端文件多选与原生拖出仍开放。
+
+
+## 2026-10-26 20:37 +0800 E6R-Mutate 开工预检
+
+- 项目边界：独立 Rust 桌面应用的实验 egui/controller 单项远端修改，不更改默认前端或原生写协议。
+- 环境记忆状态：范围已刷新，Cargo/lock 与本机命令核对；Rust/Cargo 1.97.1、Python 3.10.20、ARM64/Intel macOS target 可用，MSRV 1.95 未安装。
+- 测试环境：现 fixed-trust loopback 与无窗口 egui 夹具，双前端 check/严格 Clippy/test/build、组合和双 macOS target；不读取真实凭据或连接真实服务器。
+- 开工判定：允许；已先官方来源研究和落盘 plan，再实施。原生 GUI/其它平台/MSRV/Intel 运行保留，无多 agent/Worker。
+
+
+## 2026-10-26 21:06 +0800 E6R-Mutate 最终验证
+
+- 目的：接通单项远端 Rename/Delete、明确确认、单槽精确回执和导航安全刷新。
+- 范围：实验 controller/UI、固定信任 peer/回归及双语翻译；生产 SSH/SFTP 协议、依赖/schema/工具链/CI 不变。
+- 执行内容：先预检/官方检索/落盘 plan，再实现并验证现有写 worker 的类型/目标不存在/非递归删除边界；UI 无 I/O/等待/锁，关闭放弃结果，断开仍取消/join。
+- 验证结果：默认 490 library + 450 binary = 940、egui 588 library + 101 binary = 689 项完整测试通过；两前端 locked/offline check、严格 all-targets Clippy、test/build、组合 all-features/all-targets check 通过；ARM64/Intel macOS 两前端按 CI 原命令 target check/严格 Clippy 全通过。17 项 Python、56 Markdown/入口、763×11 PO/生成（含 header 为 764）、297 egui 源键、116 图标/5 生成文件、skill/tracker/fmt/diff 校验通过。
+- 风险/待办：Intel 仅交叉 check/Clippy，未链接/运行；Windows/Linux 原生链接/运行与 Rust 1.95 仍需 CI，本机未安装 1.95。原生 GUI/焦点/键盘及真实服务器 rename/delete 验收保留，未自主截图。无新生产 task/channel、依赖、持久 schema、SSH 信任/协议、工具链或 CI 变化；未提交/推送/发布或使用多 agent/Worker。下一项优先远端文件多选/批量传输。
+
+
+## 2026-10-26 21:54 +0800 E6R-Select 开工预检
+
+- 项目边界：独立 Rust 桌面应用的实验远端选择/批量下载，以及共享发现入口既有 512 槽预算补齐。
+- 环境记忆状态：范围已刷新，Cargo/lock 与本机命令核对；Rust/Cargo 1.97.1、Python 3.10.20、ARM64/Intel macOS target 可用，MSRV 1.95 未安装。
+- 测试环境：固定信任 loopback、无窗口 egui 与双前端/组合/target Cargo 门禁；不读取真实凭据或连接真实服务器。
+- 开工判定：允许；先官方来源和 plan 后施工，GUI/其它平台/MSRV/Intel 运行仍保留，无多 agent/Worker。
+
+
+## 2026-10-26 22:22 +0800 E6R-Select 最终验证
+
+- 目的：接通远端 path 多选/全选/清空、按钮批量下载与入队摘要，补齐共享发现入口预算。
+- 范围：实验 controller/UI、共享既有 512 槽准入和测试 peer；没有依赖/schema/协议/工具链/CI 变化。
+- 执行内容：先预检/官方研究/落盘 plan，再实施并验证。保持现根行/发现 Cancel，首子项复用根 UUID、空目录 DiscoveryFailed；UI 无 I/O/等待，目标在 owner 复验后交既有 worker。
+- 验证结果：默认 490 library + 450 binary = 940、egui 593 library + 103 binary = 696 项完整测试通过；两前端 locked/offline check、严格 all-targets Clippy、test/build、组合 all-features/all-targets check 通过；ARM64/Intel macOS 两前端按 CI 原命令 target check/严格 Clippy 全通过。17 项 Python、56 Markdown/入口、764×11 PO/生成（含 header 为 765）、299 egui 源键、116 图标/5 生成文件、skill/tracker/fmt/diff 校验通过。
+- 风险/待办：Intel 仅交叉 check/Clippy，未链接/运行；Windows/Linux 原生链接/运行与 Rust 1.95 仍需 CI，本机未安装 1.95。原生 GUI/键盘/选择/真实服务器下载验收保留，未自主截图。无新依赖、持久 schema、wire 协议、队列、task 类型或工具链/CI 变化；SSH 信任保持默认拒绝。未提交/推送/发布或使用多 agent/Worker。下一项优先本地多选/批量上传。
+
+
+## 2026-10-26 22:29 +0800 E6R-UploadSelect 开工预检
+
+- 项目边界：实验本地多选/批量上传，复用现 controller 单个 blocking 准备与 SSH worker。
+- 环境记忆状态：范围已刷新，Cargo/lock/现命令核对；Rust/Cargo 1.97.1、Python 3.10.20、双 macOS target 可用，MSRV 1.95 未安装。
+- 测试环境：固定信任 loopback/私有临时目录与无窗口 egui；双前端完整/组合和 target 检查，UI 不自主截图。
+- 开工判定：允许，先官方研究/plan 后施工；原生 GUI/其它平台/MSRV/Intel 运行保留，无多 agent/Worker。

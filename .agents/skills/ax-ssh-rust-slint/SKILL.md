@@ -11,7 +11,9 @@ project to its reference checkout.
 ## Workflow
 
 1. Read the root `AGENTS.md`, `Cargo.toml`, the relevant source files, and
-   `docs/project-implementation-tracker/project-map.md`.
+   `docs/project-implementation-tracker/project-map.md`. Complete the root
+   Standards-first Implementation lookup and record its sources/version-matched
+   decision in the tracker before editing implementation code.
 2. Read [rust-layout.md](references/rust-layout.md) completely for Cargo, Rust,
    module, API, error, concurrency, or test changes.
 3. Read [slint-guidelines.md](references/slint-guidelines.md) completely for

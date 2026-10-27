@@ -18,7 +18,7 @@
 | `LICENSE`、`THIRD_PARTY_NOTICES.md` | AxSSH GPL 主许可证与独立第三方许可边界 | 修改授权、分发或打包声明时 | 原创软件使用 GPL-3.0-only；Slint/OFL 字体/MIT vendor/平台文件图标依赖保留各自声明 |
 | `src/` | Rust 库边界、进程、UI bridge、配置、系统凭据、终端、日志和 transport | 修改行为、状态、存储、凭据、终端、日志或连接时 | `lib.rs` 导出 audio/media/config/credentials/logging/ssh/sftp/telnet/serial/terminal；生成的 Slint 类型只在 `app.rs` 使用 |
 | `ui/` | Slint 页面、共享 Settings 控件和集中式设计 token（含 icons 共用 SVG） | 修改布局、视觉状态、主题或 UI callback 时 | 页面不持有静态颜色/字号/间距字面量，不执行文件系统或网络操作 |
-| `translations/` | 构建时内嵌的 Slint 界面翻译目录与语言元数据 | 增加或修改静态文案、locale 或语言选择时 | PO 目录为 `de`/`en-GB`/`es`/`fr`/`ja`/`ko`/`pt-BR`/`ru`/`uk`/`zh-CN`/`zh-TW`，各 675 keys；`en` 仅保存源语言元数据；每个目录的 `language.json` 驱动 build 注册表与 Settings model；PO 为译文来源，维护脚本生成静态搜索数组并校验完整性，旧 build_zh 命令兼容；远端内容、用户值、日志与技术错误详情不进入翻译键 |
+| `translations/` | 两前端共用 PO 与语言元数据 | 修改静态文案、locale 或语言选择时 | 11 个译文 PO 各 765 keys，egui 使用 300（E6R-UploadSelect）；`en` 为源语言 metadata；Slint/egui/搜索源键合并，静态表由脚本生成和校验；远端/用户/日志/技术错误不进入键 |
 | `assets/fonts/` | 项目自带应用/Terminal 字体、许可证和作者声明 | 修改字体选择或打包资源时 | JetBrains Mono 四个字重由 Rust 编译进可执行文件作为默认基线；Maple 和 Iosevka 分别为必需的 Han/缺失符号回退资源，其余 TTF 从运行时资源路径读取；均不经 Slint import，也不读取参考子模块 |
 | `assets/ion/` | 用户提供 Terminal 图标的跨平台资源集与说明 | 接入应用图标、打包或替换品牌图标时 | `terminal_icon.svg` 是唯一源；Slint/winit 使用 256px PNG，Windows 嵌入 ICO，macOS Dock/Bundle 使用 PNG/ICNS，Linux package 安装 hicolor PNG 集 |
 | `assets/os-icons/` | 官网/Iconify/社区系统与平台 SVG/PNG、原生变体和来源许可清单 | 为系统标识选图、核对身份或 light/dark 命名时 | 328 个系统图标、178 个系统/平台条目；`ui/folder/` 另存连接分组的 Iconify 文件夹 UI 资源，不计入系统图标清单 |
@@ -35,17 +35,32 @@
 
 | Path | Role | Key Symbols / Sections | Read For |
 | --- | --- | --- | --- |
-| `docs/egui-migration.md`、`docs/egui-migration.zh.md` | egui 迁移阶段与当前原型限制 | D1、E0–E9、FigCraft 参考、构建/翻译迁移 | E1/E2 已有独立入口和本地终端，默认仍 Slint；GUI/性能未验收 |
-| `src/egui_main.rs`、`src/egui_app.rs`、`src/egui_app/` | 实验前端启动/字体/网格绘制/输入 | `run`、`TerminalPane`、按帧输入去重、可见行 revision 缓存 | 只在 egui-ui binary 编译，不读取已有会话；输入/字体/原生 GUI 待验收 |
+| `docs/egui-migration.md`、`docs/egui-migration.zh.md` | egui 迁移阶段与剩余限制 | D1、E0–E9、E7T、FigCraft 参考、构建/翻译迁移 | 连接/工作区/SFTP/基础设置与菜单已落地；E6R/E7R/E8R 和原生验收保留，默认仍 Slint |
+| `src/egui_main.rs`、`src/egui_app.rs`、`src/egui_app/` | 实验前端组合、字体、网格绘制与输入 | `run`、`TerminalPane`、按帧去重、可见行 revision 缓存 | 只在 egui-ui binary 编译，读取独立实验配置；输入/字体/原生 GUI 待验收 |
 | `src/controller.rs`、`src/controller/{input,output,presentation,viewport,shutdown}.rs` 及其 `tests.rs` | 两前端共享的终端控制与清理 | `encode_terminal_mouse_input`、`TerminalOutput`、`TerminalViewport`、`WorkerShutdowns` | 视口/选区代次与帧失效事务、有界滚轮、owned 效果、内部帧缓存/脏行合并、期限 drain；不含 UI/凭据 |
 | `src/controller/connection.rs`、`src/controller/connection/reconnect.rs` 及测试 | UI 无关连接身份与有界重连策略 | `ConnectionIdentity`、`ReconnectState` | profile/attempt 与协议隔离、五次预算、worker 存在/在途 gate、代次取消；不拥有安全提示/凭据/worker |
 | `src/controller/workspace.rs`、`src/controller/workspace/{catalog,layout,persistence,tests}.rs` | 实验工作区单 owner、事务/恢复与私有回归 | `Workspace`、`WorkspaceClient`、`WorkspaceView`、`CatalogResult` | 独立 ConfigStore、64 命令/回执、版本闸门、原子 blocking 写入、32 活动/关闭终端；恢复 idle、不含秘密/输出 |
-| `src/egui_app/workspace.rs`、`src/egui_app/workspace/{editor,tests}.rs` | 实验侧栏/编辑器/Tab/pane 与无窗口回归 | `WorkspaceUi`、`Editor` | UUID 控件 ID、焦点/禁用输入隔离、多 pass 去重、分隔拖动及文件路径入口；无 I/O/worker |
-| `src/controller/terminal_session.rs` 及其 `tests.rs` | 单个实验临时 transport/model 所有权 | `TerminalSession`、`TerminalClient`、`TerminalView` | 有界 64 命令、16ms 展示合并、共用终端控制、连接/选区代次、prompt token、退出 join；不含 UI 类型/快照秘密 |
+| `src/egui_app/workspace.rs`、`src/egui_app/workspace/{editor,tabs,tests}.rs` | 实验侧栏/编辑器/Tab/pane 与无窗口回归 | `WorkspaceUi`、`Editor` | UUID 控件 ID、静态文案与用户数据分离、焦点/多 pass 去重、文件路径入口；无 I/O/worker |
+| `src/egui_app/settings.rs`、`src/egui_app/settings/{appearance,icons,terminal,shells,shortcuts,workspace,audio,sftp,x11}.rs`、`src/egui_app/settings/x11/tests.rs` | 实验设置草稿、关闭决策与分类控件 | `SettingsUi`、`show`、`set_x11_locations` | 外观预览、Light/Dark 自定义调色板编辑、行为保存、过滤文本、快捷键/路径校验；主题规范化仍由 config 持有，X11 provider/非秘密路径/启动兼容设置、启动时只读位置快照，绘制无 I/O |
+| `src/egui_app/settings/audio.rs`、其 tests | 音频格式草稿与选择控件 | `show`、AudioSettings | 仅编辑既有格式，不读取设备；保存成功后用于新 SSH worker，连接级转发授权独立且默认关闭 |
+| `src/egui_app/i18n.rs`、`src/egui_app/i18n/catalog.rs` | 实验界面静态翻译与上下文语言 | `Translator`、`tr!`、`mark!` | PO 常量查找，无运行时文件读取；菜单/设置/连接/工作区使用成功保存的语言 |
+| `src/font_resources.rs`、`src/font_resources/tests.rs` | 两前端共用字体资源元数据与选项约束 | `BUNDLED_FONTS`、`font_options`、`bundled_font_directories` | 内置目录/字节、名称校验、选中项保留与 256 项上限；不依赖 UI |
+| `src/egui_app/fonts.rs`、`src/egui_app/fonts/` | 实验字体后台加载、快照与 GUI 应用 | `FontService`、`FontClient`、`Loader` | 最新请求/结果、有界读取、取消/join、字体别名/回退；绘制不读文件 |
+| `src/controller/workspace/catalog.rs`、`src/controller/{terminal_session,sftp_session}.rs` | 保存设置到现有/新 worker | `configure`、`with_settings` | 原子提交后 watch 最新值；历史/过滤/编辑限额即时更新，连接策略下次捕获 |
+| `src/controller/workspace.rs`、`src/controller/workspace/{catalog,persistence,tests}.rs` | 实验进程全局上传限额配置 | `configure_uploads` 私有回调、加载/原子提交 | 成功加载和已改变的保存值应用既有 limiter；失败/旧编辑/预览无影响，测试注入避免全局污染 |
+| `src/controller/sftp_session/local_open.rs`、`src/controller/sftp_session/local_open/tests.rs` | 实验本地打开后台任务与安全回归 | `Opening`、单 task/撤销/30 分钟期限、注入 copier/opener | 导航/设置/断开/关闭取消并保留 join；私有实验缓存副本，不把文件句柄/正文交给 UI |
+| `src/controller/terminal_session.rs` 及其 `tests.rs` | 单个实验临时 transport/model 所有权 | `TerminalSession`、`TerminalClient`、`TerminalConnectionOptions`、`TerminalView` | 有界 64 命令、保存 FPS/焦点驱动的输出快照 deadline、连接/选区代次、prompt token、退出 join；音频格式 watch/临时 opt-in，不含 UI 类型/快照秘密 |
 | `src/controller/sftp_session.rs` 及其测试 | egui 独立 SFTP companion 生命周期、远端/local 目录与传输快照 | `SftpSession`、`SftpClient`、`SftpView`、`LocalEntryView`、`SftpEntryView`、`SftpTransferView` | host-key probe 后认证、远端 request ID 过期页过滤、本地目录在 blocking worker 读取并有界发布、下载/上传/冲突决策/取消与独立 worker join；独立持有/关闭预热任务，快照最多 64 个共享 RGBA 图标；不共享终端 russh handle，不持有 UI 类型或持久化秘密 |
 | `src/egui_app/file_icons.rs` | egui 图标纹理适配 | `FileIconTextures` | 每 pane 最多 64 项，straight RGBA 转纹理、像素 allocation 复用、隐藏/关闭/最小化释放；只接收内存像素，不查询平台或文件系统 |
 | `src/controller/terminal_session/{actions,transport,reconnect,remote_tests}.rs` | 临时连接、原有 worker 适配、重连期限及真实 loopback | `TerminalPrompt`、`TerminalPromptKind`、`Transport` | 先 probe/后认证、仅本次信任、旧 receiver 丢弃/worker join、五次重试；无持久化 |
-| `src/egui_app/connection.rs` | 临时连接草稿与提示 UI | `ConnectionForm` | 标准密码/路径输入、undo 清理、多 pass 操作去重；无 worker/磁盘/网络 |
+| `src/egui_app/connection.rs` | 临时连接草稿和共享提示适配 | `ConnectionForm` | 固定字段翻译、共享提示映射；秘密 undo 清理、多 pass 去重；无 worker/磁盘/网络 |
+| `src/egui_app/connection/prompt.rs` | 终端/SFTP 共用 SSH 提示 | `ssh_prompt`、`PromptAction`、`secret_edit` | 目标/指纹原文、精确 token、默认拒绝按钮 gate；无 worker 或凭据持久化 |
+| `src/egui_app/workspace/sftp.rs`、`src/egui_app/workspace/sftp/tests.rs` | SFTP 前端组合、意图准入及回归 | `SftpPane`、`show_view` | 固定文案与路径/文件名分离；每帧去重、代次清除凭据、错误反馈及全语言回归 |
+| `src/egui_app/terminal/input/mouse.rs`、`src/egui_app/terminal/interaction_tests.rs` | 终端鼠标所有权和交互回归 | `MouseInput`、选择优先/复制/右键 | reporting/本地选择/延迟点击由一个手势拥有；取消不转发，保存值决定行为 |
+| `src/egui_app/clipboard.rs` | 用户发起粘贴的目标绑定 | `request`、`guard`、`allows` | 单个短期元数据票据，无剪贴板正文；焦点/可见 pane/连接/视口不符则在控件处理前丢弃 |
+| `src/egui_app/native_input.rs` | macOS 聚焦终端的 Option 原生策略 | `update`、`active` | 只使用已保存设置，winit OptionAsAlt 保留原始字符；编辑器/设置恢复原生输入，声明/调用/测试同 cfg |
+| `src/controller/terminal_session/clipboard.rs` | 实验 OSC 52 权限/请求/协议响应 | `clipboard_read`、`respond_clipboard`、`take_remote_clipboard` | 默认拒绝；最新请求 UUID、20 秒期限、64 KiB、有界写槽、连接/权限撤销；formatter 和正文不进入普通快照 |
+| `src/egui_app/remote_clipboard.rs`、`src/egui_app/remote_clipboard/tests.rs` | 显式 Allow 后的原生文本读取服务 | `Service`、`Client`、`request`、`guard` | 单 blocking job/一项队列和结果槽；空文本/CRLF 原样、焦点/请求复验、迟到丢弃和退出 join；测试注入 reader，不访问实际剪贴板 |
 | `scripts/check_repository.py`、`scripts/test_repository.py` | 仓库所有文档的本地链接/中英配对与固定源入口检查 | `validate_markdown`、`validate_source_layout` | 现代 Rust 文件名、单一 Slint build/type 入口；跳过上游文档/代码示例/外部 URL，不替代 Cargo 语义、依赖图或平台验证 |
 | `src/local_shell/tests.rs`、`src/sftp/tests.rs`、`src/terminal/input/tests.rs`、`src/ssh/x11/tests.rs` | transport/domain owner 私有回归 | 父模块的 `cfg(test) mod tests` | PTY 生命周期、SFTP 协议边界、终端键盘编码及 X11 认证隔离；辅助类型不进入运行时 API |
 | `src/app/input/tests.rs`、`src/app/input/menu_navigation_tests.rs`、`src/app/font_bridge/tests.rs`、`src/app/settings_bridge/tests.rs`、`src/app/terminal_presentation/tests.rs`、`src/app/terminal_render/tests.rs` | 应用 owner 私有回归 | 输入/菜单/字体/设置/呈现/渲染测试 | 大型内联测试移出实现文件；保留 cfg/辅助代码私有边界及行为，三项图标测试归入 settings tests 命名空间 |
@@ -66,7 +81,7 @@
 | `src/app/connection/worker_start/tests.rs`、`src/app/terminal_media/tests.rs` | worker 启动和媒体生命周期回归 | phase/profile/target gate、paste/PNG/job owner | loopback listener/transport、私有临时文件；不访问真实凭据/录音设备 |
 | `docs/coverage.md`、`docs/coverage.zh.md` | 双语 coverage 复现与边界说明 | 测试边界、测量记录 | 同平台 LCOV、原生未覆盖项与 artifact 位置 |
 | `src/remote_edit.rs`、`src/remote_edit/tests.rs` | 共用编辑状态机与私有副本 I/O | `RemoteEdits`、`RemoteEditView`、`create_copy_in`、`read_copy` | 八编辑/128 retained copy、字节保真、精确回执、动态限制、未发布副本清理；不包含 UI/监听/网络 |
-| `src/file_identity.rs`、`src/app/local_files.rs` | 共用本地文件可观察 identity 与默认目录适配 | `LocalFileFingerprint`、`local_file_fingerprint` | Unix dev/inode、Windows handle identity、长度/时间变化，shared edit/local open handle 复验 |
+| `src/file_identity.rs`、`src/local_files.rs` | 共用本地文件可观察 identity 与目录校验 | `LocalFileFingerprint`、`local_file_fingerprint` | Unix dev/inode、Windows handle identity、长度/时间变化，shared edit/local open handle 复验 |
 | `src/app/remote_edit.rs`、`src/sftp/edit.rs` 及各自 `tests.rs` | 默认外部编辑监听/设置适配与 guarded SFTP 回传 | `connected_edit`、`read_edit_file`、`write_edit_file` | 系统关联程序、原子保存、迟到结果、冲突及副本保留；默认前端动态 Settings 仍保留 |
 | `src/controller/sftp_session/editing.rs`、`editing/tests.rs`、`src/egui_app/sftp_edit.rs` | 实验编辑 owner 与 metadata-only 控件 | `Editing`、`check_edits`、`EditControls` | 单本地 job/保留 join、连接代次和 edit UUID、稳定变化检查、自动/手动回传、launch permit 撤销；真实 loopback/注入 opener，不启动系统程序 |
 | `src/ssh/worker/sftp/operations.rs` | 有界串行后台写操作 | `SftpWriteWorker` | 编辑/元数据操作不阻塞主调度；取消和 join |
@@ -105,7 +120,7 @@
 | `src/app/workspace/files.rs` | workspace 文件菜单动作与替换编排 | 路径校验、异步读写、最近路径 MRU 记录/清理、旧 worker/probe 停止、UI 线程快照应用与连接恢复 | 不拥有 schema、凭据、transport 实现或 Slint 组件声明；文件内容由 `src/config/workspace.rs` 校验，历史持久化委托 `PersistenceCoordinator` |
 | `src/app/workspace/tabs.rs` | 工作区 Tab 与子 pane 生命周期 bridge | `wire_workspace_tabs`、`close_workspace_tab`、`close_terminal_child_pane` | 可见 Tab 激活/循环/内存排序、Terminal pane group/子 pane 关闭、pending probe 取消、worker shutdown 和 settings/editor/icon 资源回收；创建、排序和关闭动作先经过窗口模态闸门 |
 | `src/app/workspace/session_editor.rs` | Session Editor 与 profile mutation bridge | `SessionEditorContext`、`begin_profile_mutation`、`commit_profile_credential_storage`、`clear_saved_password`、`commit_profile_password_clear`、`wire_session_editor`、profile 构造与 mutation commit | 编辑器 callback、逐 profile 最新 mutation token、进程级持久化 gate、SFTP 远端/本地默认目录、串行凭据副作用与失败回滚、一次性密码/显式保存分流、隐藏随机保险库解锁密钥、单独确认后立即清除保存密码并保留编辑 draft、保存后 SSH 连接 |
-| `src/app/workspace/session_management.rs` | Group/Profile 管理与配置传输 bridge | `wire_session_management`、`SessionTransferEnvelope`、duplicate/import/export/delete helpers | Group/Profile CRUD、Group/Server Duplicate、256 KiB/128 profile 有界脱敏 JSON 导入导出；不导出凭据或 host trust |
+| `src/app/workspace/session_management.rs` | Group/Profile 管理与配置传输 bridge | `wire_session_management`、duplicate/import/export/delete 适配，纯规则调用 `session_transfer` | Group/Profile CRUD、Group/Server Duplicate 与 owned persistence gate；JSON 格式/脱敏/命名由共享 `src/session_transfer.rs` 持有，不导出凭据或 host trust |
 | `src/app/workspace/tests.rs` | workspace application bridge 回归 | editor credential、mutation ordering、group/profile CRUD 和 transfer tests | 修改 workspace callback、凭据事务、导入导出或 profile 删除语义后 |
 | `src/app/connection.rs` 与 `src/app/connection/` | 多协议连接控制器组装入口与单一流程模块 | `wire_connection_request`、`request_profile_connection`、`begin_authentication`、`start_telnet_connection`、`start_serial_connection`、`start_session_worker`、`schedule_reconnect` | `request` 共用新建/恢复的 `spawn_host_key_probe` 与 Tab/profile/target/phase 校验，解析 SSH/SFTP companion 导航、分发协议并以原子注册将新 Tab 加入目标窗口/pane；`authentication` 让 agent/private-key/系统凭据走既有安全流程；`direct` 通过事件适配共用 `spawn_direct_monitor`，负责 Telnet/Serial attempt、即时 parser/协议应答和统一 UI 呈现调度，创建 worker 前校验完整当前 profile，Serial 在异步发现后再校验一次；`host_key` 以进程级持久化 gate 和 profile token 保护 blocking known_hosts/config 写入并保持 revoked deny-by-default；`reconnect` 使用最多 5 次指数退避和代次隔离，触发时重读 profile；未知或变化密钥仍须明确确认 |
 | `src/app/connection_monitor.rs` | SSH worker 事件消费 | `spawn_session_monitor`、`persist_authenticated_credential`、`PendingCredentialStore` | attempt 路由、断线自动重连调度、SFTP transfer 的队列/暂停/继续/进度/终态状态；成功下载直接完成为 `Downloaded` 并保留安全本地路径，不派生平台 opener；成功上传、远端写操作和下载只刷新仍显示受影响目录的远端或本地栏；加载期间合并一次后续刷新；即时解析且保留最早接收时间的合并 UI 呈现、录音需求后的 MicrophoneUnavailable 状态/SSH 保持、失败事件、凭据保存和迟到结果隔离；release 返回通过主窗口模型刷新更新侧栏系统图标；凭据保存与进程级 persistence gate/profile token/expected snapshot 串行化；断线保留终端模型与 Tab |
@@ -120,7 +135,7 @@
 | `src/app/state/latency.rs`、`src/app/view/workspace.rs`、`ui/components/workspace-titlebar.slint` | 临时延迟状态、Tab 状态点与主体提示 | `ConnectionLatency`、`ConnectionLatencySnapshot`、`refresh_workspace_tabs` | 20% EWMA、连续两次新档位切色，重连清空；attempt guard 拒绝旧事件，Tab-only 刷新共用有界门控，不构造终端/SFTP snapshot；颜色、可访问文本及拖动预览共用摘要；标准 Tooltip 覆盖图标/序号/标题/状态点，组合标题/系统版本/RTT/更新时间，异常状态替代数值，断开隐藏连接数据，动作区域独立且拖动禁用提示；无配置 schema |
 | `src/app/state/system_detection.rs` | 逐 profile 探测租约、缓存优先级与后台保存事务 | `request_system_detection`、`accept_system_detection`、`save_system_detection` | 合并 SSH/SFTP，手动/有效缓存跳过；重置和旧 attempt/目标拒绝；等待 profile/凭据事务，从磁盘只保存缓存字段、保留 Settings 预览 |
 | `ui/components/system-icon-picker.slint` | 服务器/Local Shell 共用有界搜索选择器 | `SystemIconPicker`、`SystemIconChoiceRow` | 固定 32px 下拉控件、20px 居中 glyph/系统显示名称，独立 360px 搜索弹层和六行虚拟列表，不改变父行高度；is-open 控制箭头/无障碍状态；Rust 纯筛选/精确查询内置目录，手动覆盖可切回自动，Local Shell 独立立即保存 |
-| `src/app/system_icons.rs`、`src/app/system_icons/catalog.rs` | 系统/发行版图标身份映射和本机 Linux 有界发现 | `local_platform`、`discover_local_platform`、`platform_for_release`、生成的 family/distro alias 表 | 缓存只读规范标识；本机 os-release 由启动 blocking worker 最多读取 8 KiB，优先 ID、不继承 ID_LIKE；远端短 release 识别具体发行版/版本，未知 Linux 使用 Tux；不持有 Slint 或 transport |
+| `src/system_icons.rs`、`src/system_icons/catalog.rs`、`src/app/system_icons.rs` | 共享系统/发行版身份及默认薄适配 | `local_platform`、`discover_local_platform`、`platform_for_release`、生成的 family/distro alias 表 | 缓存只读规范标识；本机 os-release 在启动 blocking worker 最多读 8 KiB，仅缺失时回退；优先 ID、不继承 ID_LIKE；远端短 release 识别具体发行版/版本，未知 Linux 使用 Tux；不持有 Slint 或 transport |
 | `src/file_icons.rs`、`src/file_icons/`、`src/app/file_icons.rs` | 两前端共用文件图标 provider/cache 与默认薄适配 | `FileIconKey`、`FileIconProvider`、`clear_global_cache`、`prewarm_async`、platform `Resolver` | 根模块保留 24x24 owned RGBA、128 项 LRU、64-key 预热与 fallback；清理返回释放的扩展图标数量；平台目录隔离 macOS NSWorkspace/UTType、Windows Shell/GDI（COM/句柄恢复保护）、Linux MIME/freedesktop 解析；`svg.rs` 以 resvg 解码受限矢量、拒绝资源读取；不得把远端名称当本机路径 |
 | `src/app/view/sftp.rs` | SFTP/Local 行映射与图标预热协调 | `prewarm_file_icons`、`run_icon_prewarm_worker`、`clear_file_icon_cache` | 预热队列有界、代次失效，目标只持有 `Weak<AppState>`；最后一个 SFTP Tab 关闭时清理扩展图标并记录释放数量 |
 | `src/app/view/sidebar.rs` | 连接导航与 `+` 已保存连接 model | `session_group_rows`、`connection_option_rows`、`profile_system_platform`、`refresh_session_models` | 侧栏和连接列表共用手动/有效缓存/运行时 release/通用图标优先级；启动与连接更新同步规范标识，尚未开 Tab 也复用 profile 缓存，不新增识别、文件读取或凭据访问 |
@@ -136,11 +151,11 @@
 | `src/app/serial_bridge.rs` | Serial 按需发现 bridge | `wire_serial_port_discovery`、`refresh_serial_ports`、`invalidate_serial_port_discovery` | Session Editor 进入 Serial 或显式刷新时枚举 descriptor，离开/关闭时清理并用 generation 丢弃迟到结果；启动不扫描，不得打开设备 |
 | `src/app/sftp_bridge.rs` | SFTP 浏览、本地打开、远端递归下载与 transfer intent bridge | `wire_sftp`、`handle_native_dropped_file_on_remote_pane`、`queue_remote_downloads`、`queue_native_remote_download`、`wire_selected_transfer_actions`、`navigate_sftp_tab_to_path`、`prepare_local_file_open`、`open_local_file`、`reveal_local_path` | 所有 SFTP UI intent 在 callback 时按来源窗口经 `WindowRouter::active_tab` 解析 Tab，并将该 UUID 传入状态/worker；不使用进程级 active Tab；只接受 connected 的 SFTP Tab 当前 snapshot；右键重命名确认前重新校验原始 Tab/路径、稳定目录及唯一选择；表头排序在 AppState 中切换；远端 `More` 请求下一页，本地 `More` 释放当前有界快照的下一页；Winit 外部文件仅在上游已确认 Remote files 目标后进入同一上传队列，桥接再次拒绝 loading 的远端目录；Slint DropArea 的内部拖放按本地/远端来源前缀分流为上传或下载；macOS 远端普通文件的 file-promise 仅在接受目标后进入明确本地路径下载，发起窗口的返回拖放使用开始时捕获的 local directory 和 Local files 原生区域；上传、Finder 拖入、远端选择下载和远端拖动均应用 AppSettings 的平台/自定义文件名过滤；远端选择发送当前 local directory 和小型下载根，暂停/继续/取消先校验 AppState；本地行与终态 transfer 的显示位置操作都在 blocking worker 重验非链接路径，bridge 不持有协议 session |
 | `src/app/local_directory_watch.rs` | SFTP 本地栏当前目录的文件系统事件监听 | `ensure_local_directory_watch`、`queue_local_change_refresh` | 每个已加载的 SFTP Tab 至多一条 Tokio 监听任务；只监听当前目录直接子项，单槽事件通道合并变化，延迟 150ms 后通过状态门禁与既有后台读取刷新；切换目录重新注册，关闭 Tab 退出；事件不可用时保留手动 Refresh |
-| `src/app/local_files.rs` | 本机目录 snapshot 与 regular file 打开重验边界 | `read_local_directory`、`validate_local_file_for_open`、`LocalFileFingerprint`、`ValidatedLocalFile` | 本地栏目录 2 MiB 名称/路径文本预算（无固定读取条目数），单项名称/路径上限和独立 unavailable 计数；non-following metadata、平台文件 identity 与可观察元数据 fingerprint、目录/symlink/替换拒绝；只把已验证 handle 交给缓存层，250 条分页由 AppState 持有 |
+| `src/local_files.rs`、`src/app/local_files.rs` | 共享本地目录 snapshot/regular file 重验，默认仅薄适配 | `read_local_directory`、`validate_local_file_for_open`、`LocalDirectoryEntry`、`ValidatedLocalFile` | 2 MiB 名称/路径预算、UTF-8/单项上限、私有 fingerprint、目录/链接/替换拒绝；默认 AppState 250 条分页，egui 仅读取/发布 250 条普通条目，保留精确路径空白 |
 | `src/app/terminal_render.rs` | 终端色表、亮度、语义 span 和行渲染缓存 | `TerminalRenderer`、`render_line`、`semantic_highlight_spans`、`SemanticColorOverrides`、`prepare_semantic_highlighting` | 有界默认 ASCII cell 的 span 着色；保留 ANSI/特殊样式、四类颜色及行缓存；呈现 DTO 扩展字体角色、连续符号间距与几何路径，不修改终端源模型 |
 | `src/app/terminal_render/typography.rs` | 终端文字/emoji 字体角色与安全批量排字 | `FontRole`、`prepare`、`fixed_symbol` | 显式 VS15/VS16、默认 emoji、同样式 ZWJ/肤色/旗帜保持组合；同列连续且四字形均与 M 等宽的符号才能合并，样式/链接/宽字/组合边界独立 |
 | `src/app/terminal_render/geometry.rs`、`ui/components/terminal-geometry-glyph.slint` | 字体无关的有界 cell 几何 | `GlyphPaths`、`TerminalGeometryGlyph` | 独立 128 单位路径，基本轻/重盒线、块字符和 E0B0–E0B7；其它形状走字体；按 cell 物理像素边界缩放，共用前景/行缓存，原文与复制不变 |
-| `src/app/terminal_render/highlighting.rs` | 标准等级词及 HTTP 上下文的 regex 识别 | `RULE_PATTERN`、`HighlightSpan`、`prepare`、`spans` | 启动预编译；OpenTelemetry/syslog 词和响应/访问日志/HTTP 属性码；无旧词表或裸数字回退 |
+| `src/controller/semantic.rs` | 两前端共用等级词/HTTP regex、run 资格及可见行注解 | `HighlightSpan`、`SemanticHighlight`、`prepare`、`highlight_run`、`SemanticLine`、`Cache::update` | 启动预编译；512 字节/默认风格 ASCII；按源行 Arc 身份复用，仅当前视口，Painter 不执行匹配 |
 | `docs/benchmark-grounded-method-research/sftp-icons-local-open/report.md` | SFTP 图标、临时副本和双击打开的公开实现对标 | 需求定义、候选方法、推荐结论、不可比项 | 规划阶段证据；不承载功能代码，不把 proxy evidence 当 benchmark 排名 |
 | `docs/benchmark-grounded-method-research/sftp-icons-local-open/source-tracking.md` | 该主题的来源登记 | source/status/evidence use 表 | 记录官方来源、本机锁定 API 和 AxShell 参考边界 |
 | `src/config.rs` 与 `src/config/` | 稳定 config 入口及 session、settings、theme、persistence、回归测试模块 | `ConnectionProfile`、`SessionProfile::validate`、`RendererPreference`、`SoftwarePresentationMode`、`TerminalSemanticColors`、`SessionStore::validate`、`ConfigStore`、`MAX_CONFIG_FILE_BYTES`、profile/store 共享上限 | schema v36 增加远程编辑上限 remote_edit_max_file_mib（默认 4 MiB，1–64 MiB）；schema v34 增加配置文件专用的 `settings.appearance.system_icons_follow_theme`，默认 false 保留系统图标原色，Settings 预览/保存保留该值；schema v30 增加最多 8 条经过校验的 workspace 路径 MRU；旧 `sessions.json` 通过默认空列表兼容，历史只保存非敏感路径，不保存 snapshot/凭据；schema v29 保存默认 `encrypted-vault` 和应用私有自动解锁标记（兼容旧 keyring 字段名）；schema v27 保存 macOS CPU `layer-images`/`damage-backing-store` 呈现偏好，缺失/无效值默认使用 damage backing store，显式 `layer-images` 为兼容性回退；schema v25/v26 保存紧凑渲染、行 cache 和刷新上限；旧 `terminal_partition_strategy` JSON 字段作为未知字段忽略；schema v24 保存 `automatic`/`gpu`/`software` renderer 偏好；两个启动偏好只在首个 Slint window/surface 前应用；profile/store 上限、私有原子写入和 SSH-only 安全字段隔离不变 |
@@ -155,6 +170,7 @@
 | `src/logging.rs` | 进程级 tracing 与 crash 诊断生命周期 | `LoggingGuard`、滚动 writer、panic hook | 日志目录、过滤、保留、退出 flush、私有 `ax_ssh-crash.log` 同步报告，以及向 About 提供已创建目录 |
 | `src/x_server.rs` | 跨平台本机 X server 选择、位置快照与启动边界 | `provider_options`、`provider_index`、`discovered_provider_locations`、`XServerPlan` | macOS bundle/Windows PATH 与 Program Files 系统发现、只读已知位置快照、Custom executable、display 候选和 Trusted 首个通过 cookie 校验的 X11 channel 时的有界启动；Untrusted 在请求前准备受限授权；不持有 SSH channel、cookie 或 UI 状态 |
 | `src/ssh.rs` | russh 0.64.1 传输、host-key trust 与受限系统 release 探测 | `ClientHandler`、`PublicKeyOrCertificate`、`SshConnection`、`SshSessionHandle`、`read_system_release`、`probe_host_key`、known_hosts append/remove helpers | `TCP_NODELAY`、交互 PTY 的 `OPOST/ONLCR`、profile 指纹与系统 OpenSSH `known_hosts` 快照、unknown/changed/revoked 分类、证书 deny-by-default、密码/私钥/运行时 agent 认证、最多 5 个 agent identity 与 30 秒总上限、独立 exec channel 的四秒/2 KiB release 探测、默认拒绝/有界转交服务端 X11 channel、取消和连接 worker；不保存 agent 端点/identity、X11 cookie、release 原文之外的秘密或凭据 |
+| `src/ssh/shell_setup.rs` | SSH X11 请求确认与有界早到输出 | `request_x11`、私有确认累积器 | 请求入队不代表服务端接受；最多 64 消息/64 KiB、15 秒期限，失败不启用 dispatcher，输出保留给 shell；worker 接纳断开 |
 | `src/ssh/known_hosts.rs` | OpenSSH known_hosts 解析与显式记录管理 | `Snapshot`、`TrustDecision`、atomic append/remove | 有界文件读取、host/port/alias/wildcard/negative/hashed 匹配、multiple keys、`@revoked` 优先拒绝、坏行只收窄信任；不接触 Slint、凭据或 live russh handles |
 | `src/ssh/private_keys.rs` | 本机私钥边界 | `discover_private_keys`、`load_private_key` | `.ssh` 发现、blocking 加载和 `Zeroizing` passphrase |
 | `src/ssh/worker.rs` 与 `src/ssh/worker/{shell,sftp}.rs` | SSH/SFTP-only worker 与 transfer 生命周期 | `SshSessionHandle`、`SshTerminalSettings`、`SshSessionMode`、`SshSessionEvent`、`run_terminal_session`、`run_sftp_session`、`PendingSftpOpen`、`PendingDiscovery` | 根模块保留有界连接/认证、命令/resize 管道与 mode 路由；shell 不再持有旧 SFTP browser，SFTP-only worker 独占浏览/传输；Terminal 在已认证后限时五秒准备标准音源，失败仍可开 shell，SFTP-only 不准备音频；录音失败按原代次显示连接状态并保持 SSH；SSH 输出只在缓冲区非空时启动一次性 16ms flush，16 KiB 上限和输入后首输出即时 flush 不变；Terminal 的 Off 不建立 X11 relay，`-X`/`-Y` 都在 host key 与认证完成后才进入 X11 准备；明确的 shell EOF/close 报告正常 shell 结束，无 EOF/close 消息的 stream 结束仍规范为断开，两者都退出 worker；resize watch 只在尺寸变化时通知，SFTP 子模块独占递归发现、明确 local path 的单文件下载、独立 subsystem opening、暂停/继续/取消和 shutdown join；每 Tab 最多 2 个 pending/active transfer，认证前普通命令仍被忽略 |
@@ -221,15 +237,15 @@
 
 ## 常用定位
 
-- 实施 egui 迁移：先读 `docs/egui-migration.zh.md`、`current.md` 和项目技能 egui reference；独立入口为 `src/egui_main.rs`，仅 egui-ui 构建不得包含 Slint/softbuffer。controller 已提取终端控制/视口/选区/帧/清理、连接身份与重连策略，完整工作区/安全提示/连接/设置编排待 E3 后续提取，egui 远端连接入口待 E4。FigCraft 只读参考，不引入 path dependency。
+- 实施 egui 迁移：先读 `docs/egui-migration.zh.md`、`current.md` 和项目技能 egui reference；独立入口为 `src/egui_main.rs`，仅 egui-ui 构建不得包含 Slint/softbuffer。controller 已拥有实验连接、工作区和 SFTP；基础设置与菜单位于 `src/egui_app/{settings,theme,menus}.rs`。后续按 E6R/E7T/E7R/E8R 追踪，原生验收独立保留。FigCraft 只读参考，不引入 path dependency。
 
 - 终端滚轮/鼠标失效：检查 `ui/workspace-shell.slint` 主/独立窗口两条 `terminal-pointer-input` 转发链；`src/app/view/tests.rs` 用相同 Slint 滚轮事件覆盖两种布局。
 
 - 滚轮时保持行首选项：`TerminalSettings::alternate_scroll_to_home` 默认关闭，经设置 callback 即时预览/保存；`src/controller/input.rs::encode_terminal_mouse_input` 对有界 alternate-scroll 每步发送 `Up/Down + Home`，请求目标行首，reporting 优先；最终位置取决于程序按键绑定，双语 UI、搜索与目录生成脚本须一起维护。
 - 修改会话或设置字段：先从 `src/config.rs` 定位至 `src/config/{session,settings,theme,persistence}.rs`，再同步 `src/app/settings_bridge.rs`、`src/app/view.rs` 和对应 `ui/settings/*.slint` 映射；Session Editor 的 SSH SFTP 默认目录及服务器传输覆盖还需同步 `src/app/state/editor.rs`、`src/app/state/tabs.rs`、`src/app/workspace/session_editor.rs`、`src/ssh/worker.rs` 与 `ui/session-editor.slint`；传输大小/速率/并发从全局或 profile 解析后复制到新 SFTP worker；旧收起组名字符数由 `WorkspaceSettings` 校验，仅保留存储兼容；系统图标主题着色配置由 `AppearanceSettings` 持有，应用映射到 `Theme`，没有 Settings 开关；默认凭据后端位于 Settings > General，既有 profile 使用自身的非敏感后端引用。
 - 修改连接或认证：先从 `src/app/connection.rs` 定位至 `src/app/connection/{request,direct,host_key,authentication,worker_start}.rs`；保存并连接必须在 profile 持久化成功后复用 request 路由，认证弹窗的后端选择只在成功且勾选记住后进入 `PendingCredentialStore`；SSH 再检查 `src/ssh.rs`、`src/ssh/known_hosts.rs`、`src/ssh/worker.rs`、`src/ssh/x11.rs` 和 `src/x_server.rs`，保持系统 known_hosts 只能增加有效共享信任、profile 冲突/changed/revoked 仍拒绝，X11 profile 的 Off/`-X`/`-Y` 不改变全局 provider；普通 SSH 建连不读 DISPLAY/xauth/启动 provider，`-X` 也必须在 host key 与认证完成后创建受限授权、无安全授权即不请求 X11，`-Y` 首个远端 X11 channel 准备失败不阻断 shell，以及本机 cookie/relay/启动上限；Telnet/Serial 分别检查 `src/{telnet,serial}.rs`，保持明文提示、只发现不自动打开，以及在启动前比较当前完整 profile（Serial 在异步发现后再次比较）。
-- 修改 SFTP 浏览、下载、分栏或 SSH/SFTP Tab 切换：先检查 `src/sftp.rs` 的 packet/path/page/directory/递归上限、`src/sftp/transfer/local.rs` 的路径发布契约和 `src/app/local_files.rs` 的本地目录预算，再检查 `src/ssh/worker.rs` 的 SFTP-only worker 生命周期、`src/app/state.rs` 的运行时 companion UUID 与 transfer phase、`src/app/{connection,sftp_bridge,connection_monitor,view}.rs` 的逐 Tab 路由/snapshot，最后修改 `ui/{app,workspace-shell,sftp-pane,components/{session-navigation,sftp-controls}}.slint`；分栏比例和 Transfers 折叠只属于 `WorkspaceShell` 运行时 UI 状态，不进入配置或 Rust；暂停/继续不能跨 worker 或进程恢复，取消必须由 worker 清理其任务创建的数据；配对不能共享 russh handle，未来上传/另存为/修改必须另建确认、进度、取消和冲突契约。
-- 修改 SFTP 图标或文件双击打开：先读 `docs/benchmark-grounded-method-research/sftp-icons-local-open/{report,source-tracking}.md`，再检查 `ui/sftp-pane.slint`、`src/app/view.rs`、`src/app/sftp_bridge.rs`、`src/app/local_files.rs`、`src/sftp.rs` 和 `src/ssh/worker.rs`；图标 provider/cache 只返回有界 Slint DTO，local open 必须重验当前 snapshot 与平台文件 identity 和可观察的长度/修改时间/创建时间 fingerprint、从已验证 handle 发布私有缓存快照且不得按源路径重开；远端勾选下载使用当前 local directory 中安全的相对树，首版不做受管编辑、监听上传或冲突覆盖。
+- 修改 SFTP 浏览、下载、分栏或 SSH/SFTP Tab 切换：先检查 `src/sftp.rs` 的 packet/path/page/directory/递归上限、`src/sftp/transfer/local.rs` 的路径发布契约和 `src/local_files.rs` 的本地目录预算，再检查 `src/ssh/worker.rs` 的 SFTP-only worker 生命周期、`src/app/state.rs` 的运行时 companion UUID 与 transfer phase、`src/app/{connection,sftp_bridge,connection_monitor,view}.rs` 的逐 Tab 路由/snapshot，最后修改 `ui/{app,workspace-shell,sftp-pane,components/{session-navigation,sftp-controls}}.slint`；分栏比例和 Transfers 折叠只属于 `WorkspaceShell` 运行时 UI 状态，不进入配置或 Rust；暂停/继续不能跨 worker 或进程恢复，取消必须由 worker 清理其任务创建的数据；配对不能共享 russh handle，未来上传/另存为/修改必须另建确认、进度、取消和冲突契约。
+- 修改 SFTP 图标或文件双击打开：先读 `docs/benchmark-grounded-method-research/sftp-icons-local-open/{report,source-tracking}.md`，再检查 `ui/sftp-pane.slint`、`src/app/view.rs`、`src/app/sftp_bridge.rs`、`src/local_files.rs`、`src/sftp.rs` 和 `src/ssh/worker.rs`；图标 provider/cache 只返回有界 Slint DTO，local open 必须重验当前 snapshot 与平台文件 identity 和可观察的长度/修改时间/创建时间 fingerprint、从已验证 handle 发布私有缓存快照且不得按源路径重开；远端勾选下载使用当前 local directory 中安全的相对树，首版不做受管编辑、监听上传或冲突覆盖。
 - 修改终端解析、scrollback、pane 或 resize：先检查 `src/app/panes.rs` 的最多 8 leaf、方向和 collapse 语义，再检查 `src/terminal.rs` 与 `src/terminal_dimensions.rs`；主屏直接使用 `alacritty_terminal::Term::resize` 的重排/历史恢复语义，备用屏不重排。纵向扩容只可恢复真实 scrollback；无历史时保留已有内容在顶部、在底部新增空行，禁止模型层二次滚动或强制光标贴底。URL/路径 target 仅使用 `src/app/terminal_targets.rs` 的有界 parser、`TerminalModel::visible_row_text_at_cell` 的 cell-to-text 映射和 `visible_row_cell_span_for_characters` 的逆映射，随后经 `src/app/{terminal_bridge,sftp_bridge,connection}.rs` 走 UUID 定向 companion；不得记录完整行、复用 transport 或绕过 host-key/认证。终端状态词/HTTP 的常驻颜色标注只在 `src/app/terminal_render.rs` 完成：扫描有界可见的默认 ASCII run，按当前 Terminal 色表和背景校正颜色，且不得覆盖 ANSI/真彩色、非默认背景、反色或 dim 样式；URL/路径只由 `TerminalPane` 在平台主修饰键按住时请求 `TerminalTargetHighlight`，`TerminalGrid` 绘制下划线。UI resize 只从 `src/app/terminal_bridge.rs` 带 `tab_id` 进入 `AppState::resize_terminal(tab_id, ...)`，由状态层请求指定 worker 并更新指定本地模型；worker/Slint 只消费既有 `TerminalSnapshot`。拆分只能新建独立 local PTY 或 profile connection，SSH child 不得继承短期秘密。修改按键序列：`src/terminal/input.rs`，并同步 `src/app/input.rs`、`ui/{terminal-pane,workspace-shell}.slint` 与 `TerminalSettings::option_as_meta`；修改终端网格绘制、指针或菜单意图时还需检查 `ui/components/terminal-grid.slint`：普通高度的行数向下取整，零散高度作为正顶部原点，首行完整且末行贴住 pane 底边；只有低于三行保底时使用负原点裁切旧顶部行，超过最大行数后的空间留在顶部，网格、IME/预编辑和指针坐标必须共享该原点。SSH shell I/O 检查 `src/ssh/worker.rs`；本地 PTY I/O 与 shutdown 检查 `src/local_shell.rs`，保持进程组/child 终止、reader 和 worker join 的单一所有权。
 - 修改终端/工作区设置：`src/config/{settings,theme}.rs`、`src/app.rs`、`ui/settings.slint` 和 `ui/workspace-shell.slint`；跨组件新增字段优先扩展相应 `*ViewState`，不要重新逐条透传；字体呈现同时检查 `src/app/terminal_render/{typography,geometry}.rs`、`ui/components/terminal-geometry-glyph.slint` 和 `src/app/view/tests/terminal_typography.rs`；字体资源同时检查 `assets/fonts/` 的许可证/声明和 `src/app/font_bridge.rs` 的运行时注册/有界发现。
 - 修改 Tab 生命周期或排序：`src/app/state.rs`、`src/app/state/transitions.rs` 和 `src/app/workspace.rs`；运行实例键及 SSH/SFTP companion 配对保持为 Tab UUID，不能退回 profile UUID，位置序号只由 Slint 列表索引派生。关闭一端必须解除另一端 companion 引用但不得联动关闭；SSH probe、host-key 确认、认证与 stored-credential loading 也必须随 Tab 迁移，并让迟到 completion 重验 Tab/profile/attempt/phase。
@@ -257,9 +273,137 @@
 ## 刷新规则
 
 - 刷新触发：新增/删除模块、入口、跨层契约、构建/CI 或持久化事实时更新相应路径和定位；功能实现和验证历史追加到月度记录。
-- 最近依据：2026-10-24 E6 拖放切片：共享递归上传发现、单任务准备/关闭 join、egui 双向栏内复制与原生文件拖入；完整 SFTP 对照和原生验收保留。
+- 最近依据：2026-10-25 23:40 E7R-Shells 已交付，启动发现/只读候选/保存副本与新终端消费核对完成；默认 939/egui 649、完整双前端门禁/组合和文档校验通过。兼容组名字段无当前 UI 消费，不能单列为已提供控制；剩余项见 current。
 - 地图只保留当前路由，不继续累积旧任务的“当前/最近”段落。此前地图逐字保存在[历史地图快照](project-map-before-2026-10-20.md)，实施状态见 [current.md](current.md)，历史见 [changes/2026/10.md](changes/2026/10.md)。
 
 ## 最后更新时间
 
-- 2026-10-24 10:45 +0800
+- 2026-10-25 23:40 +0800
+
+## E7H 侧栏遮罩路由
+
+- `src/controller/session_labels.rs`：两前端共用纯 endpoint 遮罩，`src/app/session_groups.rs` 保留 re-export；不修改 profile/transport。
+- `src/egui_app/workspace/editor.rs`：遮罩地址/完整悬停与原始搜索；`src/egui_app/settings/workspace.rs`：单字符草稿、稳定 ID/全语言输入回归；config 继续规范化和持久化。
+
+## E7I 附件路由
+
+- `src/egui_app/image_paste.rs`、`src/egui_app/image_paste/tests.rs`：单个后台像素转换/PNG 编码、焦点与目标票据、撤销和退出 join；从 terminal input 接 PasteImage，复用 app entry 的可见 pane guard。
+- `src/controller/terminal_session/attachments.rs`、其 tests 与 `src/controller/terminal_session/remote_tests/attachments.rs`：每终端单个 prepare/ready/confirm token、Local 私有文件与同连接 SSH 上传，断开/替换/退出清理；transport 协议仍在 SSH worker。
+- `src/media.rs`、`src/ssh/worker/media.rs`：既有尺寸/PNG 限额、私有文件和 SFTP WRITE/CLOSE 回执及会话清理，不新建上传连接。
+
+## E7B 文字颜色路由
+
+- `src/controller/text_colors.rs`：共享纯 RGB/HSL 亮度算法，默认 terminal_render 保留适配；无 UI 或 transport 类型。
+- `src/egui_app/settings/appearance.rs`：亮度/粗体亮色控件；`src/egui_app/terminal/paint.rs`：颜色顺序、装饰及设置缓存键；原子保存仍由 workspace/config 负责。
+
+## E7Q 语义高亮路由
+
+- `src/controller/semantic.rs`：两前端共用规则、资格与范围/类别；`terminal_session.rs` 发布可见行注解，按源行 Arc 身份复用，绘制不执行识别。
+- `src/egui_app/settings/appearance.rs`：开关/四类颜色草稿；`src/egui_app/terminal/paint.rs`：静止预览缓存键和每格前景，不改变背景/复制/输入。
+- `src/egui_app/terminal/paint/semantic_tests.rs`：真实 PTY 发布注解后的高亮、亮度、几何/装饰保留与即时还原。
+
+
+## E7R-FPS 实施路由
+
+- `src/controller/terminal_session/refresh.rs`、`refresh/tests.rs`：UI 无关的保存频率、焦点提示与绝对输出 deadline；不拥有解析器/transport。
+- `src/controller/terminal_session.rs`：既有任务接收最新焦点/保存策略，仅脏输出等待 deadline；`TerminalClient::presentation_focus` 为逐准入帧/隐藏的无协议提示，协议命令保留代次校验及有界队列。
+- `src/controller/workspace/{layout,catalog}.rs`：新建/恢复 pane 与成功保存后下发策略；`src/egui_app/settings/appearance.rs`：1–120 FPS 草稿控件，预览不下发；`src/egui_app/terminal.rs`：逐准入帧提示/隐藏优先撤销。
+
+
+## E7R-Icons 实施路由
+
+- `src/system_icons.rs`、`src/system_icons/catalog.rs`：原平台/发行版身份映射与 Linux 启动期有界发现；`src/app/system_icons.rs` 保留默认适配。图标 ID/schema 仍由 config 拥有。
+- `build/system_icons.rs`：仅 egui feature 使用的现有资源栅格化与 OUT_DIR Rust 目录；`build.rs`/`Cargo.toml` 明确 feature gate，生成器索引移至共享路径。
+- `src/egui_app/system_icons.rs`：有界 native/mask 纹理与 profile/local 纯选择，Settings/Workspace 独立持有并在清缓存释放；Appearance 草稿、Sidebar 与 Tab 消费，无运行期 SVG/文件 I/O。
+
+- `src/egui_app/settings/icons.rs`：主题轮廓/本地覆盖草稿；`src/egui_app/system_icons/tests.rs`：实际构建资源/纹理/目的地与聚焦 pane 回归，复用 `build/system_icons.rs` 的资源拒绝测试。
+
+
+## E7R-Shells 实施路由
+
+- `src/local_shell.rs`：沿用 discover_shells/resolve_shell，候选发现仅查可执行文件，不启动 shell；`src/config/settings/terminal.rs`：System default、32 项/256 字符、去重/规范化的唯一 owner。
+- `src/egui_app/settings/shells.rs`、`shells/tests.rs`：Context 局部不可变候选、当前选择优先的副本与标准控件；`src/egui_app.rs` 在 GUI 前 blocking 发现并 join，`src/egui_app/settings.rs` 的 Save 候选合并，`terminal.rs` 只组合控件。
+- `collapsed_group_label_chars` 当前仅兼容数据，`ui/components/session-navigation.slint` 的 rail label 及 egui Sidebar 均未消费；不得将它直接套到组展开/关闭状态上。下一步紧凑侧栏需单独定义契约。
+
+## E7R-SFTP-Key 实施路由
+
+- `src/egui_app/menus.rs` 统一当前 pane 的 SFTP 资格；`src/egui_app/workspace.rs` 与 `workspace/sftp.rs` 拥有 UUID 单次 Remote path 焦点；`src/egui_app/settings/shortcuts.rs` 及 `shortcuts/tests.rs` 管理六项编辑/八项语义冲突。只消费 workspace 元数据，无自动网络或秘密操作。
+
+- `src/egui_app/workspace/tests/sftp_shortcuts.rs`：真实 workspace、保存 SSH/本地与混合 pane 资格、菜单/键盘、路径焦点/文本、旧 UUID/多 pass；固定未连接状态验证，无真实网络。
+
+- 2026-10-26 05:42 +0800：E7R-SFTP-Key 路由/设置/回归地图已刷新，两个前端及双 macOS target 自动检查通过；下一项会话级导入/导出。
+
+
+## E7R-Transfer 实施路由
+
+- `src/app/workspace/session_management.rs` 的纯 JSON 规则与五项纯测试迁入 `src/session_transfer.rs`、`src/session_transfer/tests.rs`，默认前端保留 UI/后台持久化适配，不引入任何 UI 类型到库。
+- `src/controller/workspace/catalog.rs` 与 `workspace.rs`：导入/导出沿用 revision/有界请求回执，解析/序列化/写盘在 owner 等待的 blocking task 中，失败不发布。
+- `src/egui_app/workspace/transfer.rs`：导入草稿/导出目标与 Copy、回执归属/关闭丢弃；`menus.rs`、`settings/shortcuts.rs` 接通最后两键。
+
+- `src/controller/workspace/tests/transfer.rs` 与 `src/egui_app/workspace/transfer/tests.rs`：有界回执/关闭/失败/旧 revision/活动 pane、真实粘贴/语言焦点与单次剪贴板输出；不读系统剪贴板、不启动远端。
+
+- 2026-10-26 06:16 +0800：E7R-Transfer 完成；共享纯规则与默认适配边界、实验事务/脱敏回执、模态/快捷键和回归路由已刷新。实际 egui 279 源键；完整双前端/组合及双 macOS target 门禁通过。
+
+
+## E6R-Pause 实施路由
+
+- `src/controller/sftp_session/transfer_state.rs`：事件投影、阶段/能力/等待状态、终态与 history 准入；`sftp_session.rs`/`transfers.rs` 复用既有 worker pause/resume/cancel，保持 generation/64 容量。
+- `src/egui_app/workspace/sftp.rs`：单项 Pause/Resume/Cancel，按当前连接/类型化快照启用，无 UI 网络或状态猜测；对应 tests 验证全语言/多 pass/禁用。
+- `src/ssh/worker/behavior_tests.rs` 既有固定信任 SFTP peer 与读取闸门、SystemRelease FIFO barrier 可复用，不绕过 host-key handler。新状态回归位于 `src/controller/sftp_session/transfer_state/tests.rs`。
+
+- E6R-Pause 快照导出 `SftpTransferPhase` 与 `can_pause/can_resume/can_cancel`，源于当前 worker 能力/回执；`transfers.rs` 只有请求成功接纳后才回收终态。UI 历史最高 160px、64 行，UUID ID/每帧准入保持。
+
+- 2026-10-26 06:53 +0800：E6R-Pause 路由/阶段/资格/回收与 UI 数值回归地图已收口；双前端/组合与双 macOS target 检查通过。下一项批量选择/控制，281 egui 源键。
+
+
+## E6R-Batch 实施路由
+
+- `src/controller/sftp_session/transfer_state.rs`：有界批次 control/逐项资格/部分成功与最新结果；`sftp_session.rs`/`controller.rs` 持有并发布 generation 内最新结果，重置时清空。
+- `src/egui_app/workspace/sftp/transfer_controls.rs`：行控制、pane 选择、批次工具条和有界失败展示；`workspace.rs` 的 SftpPane 仅组合私有 UI 状态。
+- `src/controller/sftp_session/transfer_state/tests.rs` 及新子测试：使用既有固定信任 peer/READ 闸门/FIFO barrier；`src/egui_app/workspace/sftp/tests.rs` 保留全语言/重复 pass 基础回归。
+
+- `src/controller/sftp_session/transfer_state/tests/batch.rs`：部分发送/限额/旧代次及真实双下载批次回归；`src/egui_app/workspace/sftp/transfer_controls/tests.rs`：选择生命周期、11 locale 与重复 pass 真实输入。PO 760×11（含 header 761），egui 290 源键。
+
+- 2026-10-26 19:16 +0800：E6R-Batch 已收口，私有 transfer_controls UI/子测试、controller batch 子测试及 760×11/290 键路由已校准；双前端完整/组合、双 macOS target 通过。下一项远端文件重命名/删除，远端多选和原生拖出保留。
+
+
+## E6R-Mutate 实施路由（2026-10-26 20:37 +0800）
+
+- `src/app/sftp_bridge/files.rs` 与 `ui/components/sftp-rename-dialog.slint`：默认单项 rename 的草稿/原始对象重验；default delete 直接提交，实验端增加显式确认。
+- `src/controller/sftp_session/mutations.rs`：单项路径/名称/条目复验、单个保留结果槽、UUID 路由及导航安全刷新；`sftp_session.rs` 提交/事件/断开清理，`controller.rs` 只导出 typed action。
+- `src/egui_app/workspace/sftp/entry_actions.rs`：逐行 Rename/Delete、冻结目标的 modal/草稿/请求、根 UI 模态展示；`workspace.rs` 纳入菜单/终端阻断，不在绘制回调做 I/O。
+- `src/ssh/worker/sftp/operations.rs` 与 `src/sftp.rs`：沿用有界写 worker、lstat/目标不存在检查、非递归 REMOVE/RMDIR/RENAME，不改生产协议。
+
+- `src/controller/sftp_session/mutations/tests.rs`：单槽/边界/代次与真实 rename/delete/非空目录拒绝；`src/egui_app/workspace/sftp/entry_actions/tests.rs`：逐行入口/冻结目标、11 locale/重复 pass、sizing/禁用与 workspace blocked。共享 test peer 扩展仅用于空/非空 RMDIR，不改生产协议。
+
+- 2026-10-26 21:06 +0800：E6R-Mutate 单槽/提交/回执/重置、私有行入口/根 Modal/blocked 与子测试路由收口；763×11 PO/297 egui 键，双前端完整/组合及双 macOS target 通过。下一项远端文件多选/批量传输，原生拖出和原生验收保留。
+
+
+## E6R-Select 实施路由（2026-10-26 21:54 +0800）
+
+- `src/app/state/sftp.rs`、`src/app/sftp_bridge/transfers.rs`：默认 path 多选/全选与根项逐项发送，递归交原 worker；不复制其失败只给整体状态的展示。
+- `src/controller/sftp_session/downloads.rs`：1–64 唯一路径/256 KiB 文本输入、目录和本地 revision 复验、逐项入队/跳过/失败最新摘要；`transfers.rs` 保留根行/发现 Cancel/首子项复用 UUID，空目录经 DiscoveryFailed 终结。
+- `src/egui_app/workspace/sftp/remote_selection.rs`：pane/连接/目录 scoped 的 path 选择、全选/清空/Download selected、标准 selectable 按钮/稳定 ID/每帧去重；不改变拖放载荷或单项修改目标。
+- `src/ssh/worker/sftp.rs`：OpenSftpFile 入口也检查既有 512 传输/发现预算，拒绝时发既有 DiscoveryFailed，不增协议事件/队列；共享 fixed-trust peer 用于目录发现、文件字节与取消。
+
+- `src/controller/sftp_session/downloads/tests.rs`：输入/队列/部分失败/过期目标、真实混合递归/空目录失败/过滤/冲突/取消；`src/egui_app/workspace/sftp/remote_selection/tests.rs`：选择代次/类型/64 上限、11 locale/重复 pass/禁用目标/摘要不改选择。共享 peer 支持按目录 handle 列直接子项。
+
+- 2026-10-26 22:22 +0800：E6R-Select 路由/根摘要/目标复验、private remote selection、共享入口 512 槽及直接子项 peer 收口；764×11 PO/299 egui 键、双前端完整/组合与双 macOS target 通过。保留原根行/发现 Cancel，下一项本地多选/批量上传。
+
+
+## E6R-UploadSelect 实施路由（2026-10-26 22:29 +0800）
+
+- `src/app/sftp_bridge.rs`、`src/app/sftp_bridge/transfers.rs`：默认本地选择准备/上传队列与显式冲突规则；现 controller `transfers.rs` 已有单个 retained/cancellable blocking job 和 64 文件准入。
+- `src/controller/sftp_session/transfers/selection.rs`：本地 1–64 唯一路径、revision/可见条目与私有快照绑定，文件指纹/目录元数据校验在准备任务内；`transfers.rs` 统一单项拖入和选中多项的 source 描述/前后复验。
+- `src/controller/sftp_session.rs`：新增 UploadSelected 意图/目录元数据保留，导航取消准备；`local_open.rs` 继续拒绝目录，UI 不接收私有文件指纹或句柄。
+- `src/egui_app/workspace/sftp/local_selection.rs`：独立 pane/代次/local revision 选择、全选/清空/Upload selected，复用标准 selectable 与每帧准入，不改变拖放载荷。
+
+- `src/controller/sftp_session/transfers/selection/tests.rs`：有界意图/旧目标与来源、文件替换/目录变类型、真实递归字节/过滤/批次 UUID、取消导航/冲突确认与 64 文件拒绝；`src/egui_app/workspace/sftp/local_selection/tests.rs`：11 locale/64 根/路径类型与版本/重复 pass/禁用和 busy 单次提交。
+
+
+## E6R-UploadConflict 实施路由
+
+- `src/controller/sftp_session.rs`：扩展带 `apply_to_batch` 的冲突决策命令，保留旧单项 API；handler 仅转发到既有 worker。
+- `src/egui_app/workspace/sftp/transfer_controls.rs`：冲突行只打开稳定 UUID Modal；Modal 维护临时 Keep both/批次复选框，按钮一次提交决策，UI 不读文件或网络。
+- `src/ssh/worker/sftp.rs`、`src/sftp/transfer/upload.rs`：继续拥有 pending conflict、batch policy 与 KeepBoth 编号命名，不修改协议。
+- 回归位于 transfer controls/controller SFTP 测试：覆盖三种选择、批次应用、遮罩/Esc、禁用与多 pass。
