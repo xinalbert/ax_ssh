@@ -180,18 +180,18 @@ impl russh_sftp::server::Handler for FilePeer {
         })
     }
     async fn opendir(&mut self, id: u32, path: String) -> Result<FileHandle, StatusCode> {
-        if path != "/remote" {
+        if path != "/remote" && !self.files.directories.lock().unwrap().contains(&path) {
             return Err(StatusCode::PermissionDenied);
         }
         self.listed = false;
         Ok(FileHandle { id, handle: path })
     }
-    async fn readdir(&mut self, id: u32, _: String) -> Result<Name, StatusCode> {
+    async fn readdir(&mut self, id: u32, directory: String) -> Result<Name, StatusCode> {
         if self.listed {
             return Err(StatusCode::Eof);
         }
         self.listed = true;
-        let names = self
+        let mut names = self
             .files
             .files
             .lock()
@@ -199,10 +199,15 @@ impl russh_sftp::server::Handler for FilePeer {
             .keys()
             .cloned()
             .collect::<Vec<_>>();
+        names.extend(self.files.directories.lock().unwrap().iter().cloned());
         Ok(Name {
             id,
             files: names
                 .iter()
+                .filter(|path| {
+                    path.rsplit_once('/')
+                        .is_some_and(|(parent, _)| parent == directory)
+                })
                 .map(|path| {
                     File::new(
                         path.rsplit('/').next().expect("filename"),
@@ -299,6 +304,28 @@ impl russh_sftp::server::Handler for FilePeer {
         files.insert(new, bytes);
         Ok(success(id))
     }
+    async fn rmdir(&mut self, id: u32, path: String) -> Result<Status, StatusCode> {
+        let prefix = format!("{path}/");
+        if self
+            .files
+            .files
+            .lock()
+            .unwrap()
+            .keys()
+            .any(|item| item.starts_with(&prefix))
+        {
+            return Err(StatusCode::Failure);
+        }
+        let mut directories = self.files.directories.lock().unwrap();
+        if directories.iter().any(|item| item.starts_with(&prefix)) {
+            return Err(StatusCode::Failure);
+        }
+        if !directories.remove(&path) {
+            return Err(StatusCode::NoSuchFile);
+        }
+        Ok(success(id))
+    }
+
     async fn remove(&mut self, id: u32, path: String) -> Result<Status, StatusCode> {
         self.files
             .files
@@ -376,6 +403,14 @@ impl Fixture {
         }
     }
 
+    #[cfg(feature = "egui-ui")]
+    pub(crate) fn add_directory(&self, path: &str) {
+        self.files.directories.lock().unwrap().insert(path.into());
+    }
+    #[cfg(feature = "egui-ui")]
+    pub(crate) fn has_directory(&self, path: &str) -> bool {
+        self.files.directories.lock().unwrap().contains(path)
+    }
     #[cfg(feature = "egui-ui")]
     pub(crate) fn contains(&self, path: &str) -> bool {
         self.files.files.lock().unwrap().contains_key(path)

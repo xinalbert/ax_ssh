@@ -1,4 +1,6 @@
 use super::*;
+
+mod transfer;
 use crate::config::{
     PaneNodeSnapshot, WORKSPACE_SNAPSHOT_VERSION, WorkspaceTabSnapshot, WorkspaceWindowSnapshot,
 };
@@ -503,5 +505,166 @@ async fn settings_save_is_atomic_preserves_other_domains_and_rejects_stale_revis
         .unwrap();
     assert!(result(&client, stale).await.error.is_some());
     assert_eq!(*client.view().unwrap().settings, settings);
+    workspace.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn only_committed_settings_reach_existing_and_new_panes() {
+    let fixture = Fixture::new();
+    let workspace = fixture.start();
+    let client = workspace.client();
+    wait(&client, |view| view.ready).await;
+    client.action(WorkspaceAction::NewConnection).unwrap();
+    let view = wait(&client, |view| view.tabs.len() == 1).await;
+    let id = view.tabs[0].id;
+    let terminal = client.terminal(id).unwrap().unwrap();
+    let before = terminal.view().unwrap();
+    let mut settings = (*view.settings).clone();
+    settings.terminal.scrollback_lines = 777;
+    settings.terminal.default_columns = 100;
+    settings.terminal.default_rows = 40;
+    let backup = fixture.directory.join("original.json");
+    std::fs::rename(fixture.store.path(), &backup).unwrap();
+    std::fs::create_dir(fixture.store.path()).unwrap();
+    let failed = client
+        .catalog(
+            view.catalog_revision,
+            CatalogAction::Settings(Box::new(settings.clone())),
+        )
+        .unwrap();
+    assert!(result(&client, failed).await.error.is_some());
+    assert_eq!(
+        terminal.view().unwrap().selection_revision,
+        before.selection_revision
+    );
+    std::fs::remove_dir(fixture.store.path()).unwrap();
+    std::fs::rename(backup, fixture.store.path()).unwrap();
+    let saved = client
+        .catalog(
+            view.catalog_revision,
+            CatalogAction::Settings(Box::new(settings)),
+        )
+        .unwrap();
+    assert!(result(&client, saved).await.error.is_none());
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while terminal.view().unwrap().selection_revision == before.selection_revision {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert_eq!(
+        terminal.view().unwrap().terminal.max_columns,
+        before.terminal.max_columns
+    );
+    client.action(WorkspaceAction::NewConnection).unwrap();
+    let view = wait(&client, |view| view.tabs.len() == 2).await;
+    let new_terminal = client
+        .terminal(view.tabs[1].id)
+        .unwrap()
+        .unwrap()
+        .view()
+        .unwrap();
+    assert_eq!(new_terminal.terminal.max_columns, 100);
+    assert_eq!(new_terminal.terminal.lines.len(), 40);
+    assert!(!new_terminal.connected);
+    workspace.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn global_upload_limit_applies_loaded_and_committed_values_without_profile_or_failed_save_effects()
+ {
+    let fixture = Fixture::new();
+    let mut sessions = fixture.store.load().unwrap();
+    sessions.settings.sftp_transfers.global_uploads = 6;
+    fixture.store.save(&sessions).unwrap();
+    let applied = Arc::new(Mutex::new(Vec::new()));
+    let observed = applied.clone();
+    let workspace = Workspace::start(
+        &Handle::current(),
+        fixture.store.clone(),
+        Arc::new(|| {}),
+        Arc::new(move |limit| observed.lock().unwrap().push(limit)),
+    );
+    let client = workspace.client();
+    let view = wait(&client, |view| view.ready).await;
+    assert_eq!(*applied.lock().unwrap(), [6]);
+    let mut settings = (*view.settings).clone();
+    settings.sftp_transfers.global_uploads = 3;
+    let backup = fixture.directory.join("before-limit-save.json");
+    std::fs::rename(fixture.store.path(), &backup).unwrap();
+    std::fs::create_dir(fixture.store.path()).unwrap();
+    let failed = client
+        .catalog(0, CatalogAction::Settings(Box::new(settings.clone())))
+        .unwrap();
+    assert!(result(&client, failed).await.error.is_some());
+    assert_eq!(*applied.lock().unwrap(), [6]);
+    assert_eq!(
+        client
+            .view()
+            .unwrap()
+            .settings
+            .sftp_transfers
+            .global_uploads,
+        6
+    );
+    std::fs::remove_dir(fixture.store.path()).unwrap();
+    std::fs::rename(backup, fixture.store.path()).unwrap();
+    let saved = client
+        .catalog(0, CatalogAction::Settings(Box::new(settings.clone())))
+        .unwrap();
+    assert!(result(&client, saved).await.error.is_none());
+    assert_eq!(*applied.lock().unwrap(), [6, 3]);
+    assert_eq!(
+        fixture
+            .store
+            .load()
+            .unwrap()
+            .settings
+            .sftp_transfers
+            .global_uploads,
+        3
+    );
+    settings.sftp_transfers.global_uploads = 9;
+    let stale = client
+        .catalog(0, CatalogAction::Settings(Box::new(settings)))
+        .unwrap();
+    assert!(result(&client, stale).await.error.is_some());
+    assert_eq!(*applied.lock().unwrap(), [6, 3]);
+    let profile = SessionProfile::new("Upload limit fixture", "localhost", "fixture");
+    let saved = client
+        .catalog(1, CatalogAction::Upsert(Box::new(profile)))
+        .unwrap();
+    assert!(result(&client, saved).await.error.is_none());
+    assert_eq!(*applied.lock().unwrap(), [6, 3]);
+    let mut settings = (*client.view().unwrap().settings).clone();
+    settings.sftp_transfers.global_uploads = u8::MAX;
+    let normalized = client
+        .catalog(2, CatalogAction::Settings(Box::new(settings)))
+        .unwrap();
+    assert!(result(&client, normalized).await.error.is_none());
+    assert_eq!(
+        *applied.lock().unwrap(),
+        [6, 3, usize::from(crate::config::MAX_SFTP_GLOBAL_UPLOADS)]
+    );
+    workspace.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn failed_workspace_load_does_not_change_the_process_upload_policy() {
+    let fixture = Fixture::new();
+    std::fs::write(fixture.store.path(), b"not a settings file").unwrap();
+    let applied = Arc::new(Mutex::new(Vec::new()));
+    let observed = applied.clone();
+    let workspace = Workspace::start(
+        &Handle::current(),
+        fixture.store.clone(),
+        Arc::new(|| {}),
+        Arc::new(move |limit| observed.lock().unwrap().push(limit)),
+    );
+    let client = workspace.client();
+    let view = wait(&client, |view| view.error.is_some()).await;
+    assert!(!view.ready);
+    assert!(applied.lock().unwrap().is_empty());
     workspace.shutdown().await.unwrap();
 }

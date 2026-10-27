@@ -11,7 +11,7 @@ pub(super) struct Drag {
     pane: Uuid,
     generation: u64,
     revision: u64,
-    path: String,
+    paths: Vec<String>,
     local: bool,
 }
 
@@ -26,6 +26,12 @@ pub(super) struct Drops {
 }
 
 impl Drops {
+    fn paths_for(path: &str, selected: Option<&[String]>) -> Vec<String> {
+        selected
+            .filter(|paths| paths.iter().any(|selected| selected == path))
+            .map_or_else(|| vec![path.to_owned()], ToOwned::to_owned)
+    }
+
     pub(super) fn source(
         ui: &mut egui::Ui,
         pane: Uuid,
@@ -33,8 +39,10 @@ impl Drops {
         path: &str,
         name: &str,
         local: bool,
+        selected: Option<Vec<String>>,
     ) {
         let response = ui.add(egui::Label::new(name).sense(egui::Sense::click_and_drag()));
+        let paths = Self::paths_for(path, selected.as_deref());
         response.dnd_set_drag_payload(Drag {
             pane,
             generation: view.generation,
@@ -43,7 +51,7 @@ impl Drops {
             } else {
                 view.request_id
             },
-            path: path.into(),
+            paths,
             local,
         });
     }
@@ -82,20 +90,38 @@ impl Drops {
             let bound = client.for_view(view);
             if remote {
                 ensure!(payload.local, "drop local files on the remote files area");
-                bound.upload_local_drop(
-                    payload.path.clone(),
-                    payload.revision,
-                    view.path.clone(),
-                    view.request_id,
-                )?;
+                if payload.paths.len() == 1 {
+                    bound.upload_local_drop(
+                        payload.paths[0].clone(),
+                        payload.revision,
+                        view.path.clone(),
+                        view.request_id,
+                    )?;
+                } else {
+                    bound.upload_selected(
+                        payload.paths.clone(),
+                        payload.revision,
+                        view.path.clone(),
+                        view.request_id,
+                    )?;
+                }
             } else {
                 ensure!(!payload.local, "drop remote files on the local files area");
-                bound.download_drop(
-                    payload.path.clone(),
-                    payload.revision,
-                    view.local_path.clone(),
-                    view.local_revision,
-                )?;
+                if payload.paths.len() == 1 {
+                    bound.download_drop(
+                        payload.paths[0].clone(),
+                        payload.revision,
+                        view.local_path.clone(),
+                        view.local_revision,
+                    )?;
+                } else {
+                    bound.download_selected(
+                        payload.paths.clone(),
+                        payload.revision,
+                        view.local_path.clone(),
+                        view.local_revision,
+                    )?;
+                }
             }
         }
         if remote

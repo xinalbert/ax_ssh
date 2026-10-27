@@ -21,9 +21,13 @@ async fn owner(fixture: &SftpTestFixture, root: &Root, opener: Opener) -> SftpSe
     let template = SftpSession::idle(&Handle::current(), Arc::new(|| {}));
     let view = template.client().view().unwrap();
     template.shutdown().await.unwrap();
-    let shared = Arc::new(Mutex::new(Shared { view }));
+    let shared = Arc::new(Mutex::new(Shared {
+        view,
+        mutation: None,
+    }));
     let (commands, receiver) = mpsc::channel(COMMAND_CAPACITY);
     let (stop, cancelled) = watch::channel(false);
+    let (settings, updates) = watch::channel(Settings::default());
     let client = SftpClient {
         commands,
         generation: None,
@@ -35,6 +39,8 @@ async fn owner(fixture: &SftpTestFixture, root: &Root, opener: Opener) -> SftpSe
             runtime: Handle::current(),
             commands: receiver,
             stop: cancelled,
+            settings: Settings::default(),
+            updates,
             transport: Some(transport),
             events: Some(events),
             profile: None,
@@ -60,10 +66,15 @@ async fn owner(fixture: &SftpTestFixture, root: &Root, opener: Opener) -> SftpSe
             local_loading: false,
             local_entries: Vec::new(),
             local_revision: 0,
+            local_files: HashMap::new(),
+            local_open: super::super::local_open::Opening::default(),
             preparation: super::super::transfers::Preparation::default(),
             icon_task: None,
             icons_dirty: false,
             transfers: BTreeMap::new(),
+            last_batch: None,
+            last_download_batch: None,
+            mutation: None,
             editing: Editing {
                 root: Some(root),
                 opener,
@@ -81,7 +92,12 @@ async fn owner(fixture: &SftpTestFixture, root: &Root, opener: Opener) -> SftpSe
         }
         result.and(cleanup)
     });
-    let session = SftpSession { client, stop, task };
+    let session = SftpSession {
+        client,
+        stop,
+        settings,
+        task,
+    };
     wait(&session.client(), |view| {
         view.connected && !view.entries.is_empty()
     })
@@ -193,7 +209,13 @@ async fn shutdown_joins_pending_copy_creation_without_publishing_or_opening_it()
     let (sender, receiver) = std::sync::mpsc::sync_channel(1);
     let task = tokio::task::spawn_blocking(move || {
         receiver.recv().unwrap();
-        let local = create_copy_in(&path, "/remote/file.txt", b"unpublished", max_bytes()).unwrap();
+        let local = create_copy_in(
+            &path,
+            "/remote/file.txt",
+            b"unpublished",
+            SftpTransferSettings::default().remote_edit_max_file_bytes(),
+        )
+        .unwrap();
         JobResult {
             generation: 1,
             id: Uuid::new_v4(),
@@ -366,5 +388,67 @@ async fn navigation_and_cancel_discard_preparation_before_transport_admission() 
     })
     .await;
     assert!(!fixture.contains("/remote/discarded.txt"));
+    session.shutdown().await.unwrap();
+}
+
+#[tokio::test]
+async fn saved_filters_and_edit_size_apply_to_a_connected_companion() {
+    let fixture = SftpTestFixture::new(false).await;
+    fixture.replace("/remote/large.txt", &vec![b'x'; 2 * 1024 * 1024]);
+    let root = Root::new();
+    let local = root.0.join("upload");
+    std::fs::create_dir_all(&local).unwrap();
+    std::fs::write(local.join("keep.txt"), b"keep").unwrap();
+    std::fs::write(local.join("skip.tmp"), b"omit").unwrap();
+    let opened = Arc::new(AtomicUsize::new(0));
+    let observed = opened.clone();
+    let session = owner(
+        &fixture,
+        &root,
+        Arc::new(move |_| {
+            observed.fetch_add(1, Ordering::SeqCst);
+            Ok(())
+        }),
+    )
+    .await;
+    let client = session.client();
+    let mut transfers = SftpTransferSettings {
+        remote_edit_max_file_mib: 1,
+        ..Default::default()
+    };
+    let filters = SftpTransferFilterSettings::normalized(true, false, "*.tmp");
+    session.configure(transfers.clone(), filters.clone());
+    let view = client.view().unwrap();
+    client
+        .upload_roots(vec![local], view.path, view.request_id)
+        .unwrap();
+    wait(&client, |view| {
+        view.transfers
+            .iter()
+            .any(|transfer| transfer.status == "Completed")
+    })
+    .await;
+    assert_eq!(fixture.contents("/remote/upload/keep.txt"), b"keep");
+    assert!(!fixture.contains("/remote/upload/skip.tmp"));
+    client.edit("/remote/large.txt".into()).unwrap();
+    wait(&client, |view| {
+        view.status.contains("within the edit limit")
+    })
+    .await;
+    assert_eq!(opened.load(Ordering::SeqCst), 0);
+    transfers.remote_edit_max_file_mib = 3;
+    session.configure(transfers, filters);
+    client.edit("/remote/large.txt".into()).unwrap();
+    wait(&client, |view| {
+        view.edits.iter().any(|edit| edit.local_path.is_some())
+    })
+    .await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while opened.load(Ordering::SeqCst) == 0 {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
     session.shutdown().await.unwrap();
 }

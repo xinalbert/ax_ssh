@@ -191,7 +191,7 @@ def main() -> int:
     try:
         icons = load_catalog(PROJECT_ROOT)
         outputs = {
-            "src/app/system_icons/catalog.rs": rust_catalog(icons),
+            "src/system_icons/catalog.rs": rust_catalog(icons),
             "src/config/system_icons/catalog.rs": domain_catalog(icons),
             "ui/components/system-platform-icon.slint": slint_icons(icons),
             "assets/os-icons/names.md": name_index(icons, chinese=False),

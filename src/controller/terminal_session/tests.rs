@@ -2,7 +2,7 @@ use super::*;
 use crate::terminal::{TerminalMouseButton, TerminalMouseEventKind, TerminalMouseModifiers};
 
 #[cfg(unix)]
-fn two_line_reader_script() -> std::path::PathBuf {
+pub(super) fn two_line_reader_script() -> std::path::PathBuf {
     use std::os::unix::fs::PermissionsExt as _;
 
     let path = std::env::temp_dir().join(format!("axssh-egui-input-{}.sh", uuid::Uuid::new_v4()));
@@ -19,7 +19,7 @@ fn two_line_reader_script() -> std::path::PathBuf {
     path
 }
 
-fn terminal_text(view: &TerminalView) -> String {
+pub(super) fn terminal_text(view: &TerminalView) -> String {
     view.terminal
         .lines
         .iter()
@@ -29,10 +29,59 @@ fn terminal_text(view: &TerminalView) -> String {
 }
 
 #[test]
+fn completed_copy_keeps_its_connection_and_viewport_identity() {
+    let (commands, _receiver) = mpsc::channel(1);
+    let shared = Arc::new(Mutex::new(Shared {
+        view: TerminalView {
+            semantic: Vec::new(),
+            terminal: TerminalModel::new(80, 24, 10).snapshot(),
+            status: String::new(),
+            connected: true,
+            selection_revision: 1,
+            generation: 1,
+            identity: ConnectionIdentity::Local,
+            prompt: None,
+        },
+        clipboard: Some(CopyResult {
+            text: "old viewport".into(),
+            generation: 1,
+            revision: 0,
+        }),
+        selection: None,
+        remote: clipboard::SharedClipboard::default(),
+        image: None,
+    }));
+    let client = TerminalClient {
+        focus: watch::Sender::new(false),
+        commands,
+        generation: None,
+        shared: shared.clone(),
+    };
+    assert!(client.take_clipboard().unwrap().is_none());
+    let old = client.for_view(&client.view().unwrap());
+    {
+        let mut state = shared.lock().unwrap();
+        state.view.generation = 2;
+        state.clipboard = Some(CopyResult {
+            text: "current connection".into(),
+            generation: 2,
+            revision: 1,
+        });
+    }
+    assert!(old.take_clipboard().unwrap().is_none());
+    assert_eq!(
+        client.take_clipboard().unwrap().as_deref(),
+        Some("current connection")
+    );
+    assert!(client.take_clipboard().unwrap().is_none());
+}
+
+#[test]
 fn facade_reports_overload_and_rejects_oversize_paste() {
     let (commands, _receiver) = mpsc::channel(1);
     let shared = Arc::new(Mutex::new(Shared {
         view: TerminalView {
+            semantic: Vec::new(),
             terminal: TerminalModel::new(80, 24, 10).snapshot(),
             status: String::new(),
             connected: false,
@@ -43,8 +92,11 @@ fn facade_reports_overload_and_rejects_oversize_paste() {
         },
         clipboard: None,
         selection: None,
+        remote: clipboard::SharedClipboard::default(),
+        image: None,
     }));
     let client = TerminalClient {
+        focus: watch::Sender::new(false),
         commands,
         shared,
         generation: None,
@@ -254,6 +306,75 @@ fn wheel_batches_use_live_model_modes_for_cursor_and_horizontal_reports() {
     );
 }
 
+#[test]
+fn saved_alternate_scroll_policy_preserves_reporting_precedence() {
+    let mut model = TerminalModel::new(80, 24, 100);
+    model.process(b"\x1b[?1049;1007h");
+    let event = TerminalMouseEvent {
+        kind: TerminalMouseEventKind::Press,
+        button: TerminalMouseButton::WheelUp,
+        row: 3,
+        column: 4,
+        modifiers: TerminalMouseModifiers::default(),
+    };
+    assert_eq!(
+        mouse_bytes_with_settings(&model, event, 1, 1, 2, true).unwrap(),
+        Some(b"\x1b[A\x1b[H".repeat(2))
+    );
+    model.process(b"\x1b[?1000;1006h");
+    assert_eq!(
+        mouse_bytes_with_settings(&model, event, 1, 1, 2, true).unwrap(),
+        Some(b"\x1b[<64;5;4M".repeat(2))
+    );
+}
+
+#[test]
+fn configured_model_bounds_history_and_keeps_osc52_disabled() {
+    let settings = TerminalSettings {
+        scrollback_lines: 100,
+        ..Default::default()
+    };
+    let mut model = new_model_with_settings(TerminalSize::model(80, 12), &settings);
+    model.process(&b"history\r\n".repeat(400));
+    model.scroll(1000);
+    assert_eq!(model.display_offset(), 100);
+    assert!(!model.osc52_clipboard_enabled());
+}
+
+#[tokio::test]
+async fn saved_settings_update_idle_model_without_launching_or_resizing_it() {
+    let mut settings = TerminalSettings {
+        default_columns: 93,
+        default_rows: 17,
+        scrollback_lines: 500,
+        ..Default::default()
+    };
+    let session =
+        TerminalSession::with_settings(&Handle::current(), None, settings.clone(), Arc::new(|| {}));
+    let client = session.client();
+    let view = client.view().unwrap();
+    assert_eq!(view.terminal.max_columns, 93);
+    assert_eq!(view.terminal.lines.len(), 17);
+    settings.scrollback_lines = 100;
+    settings.default_columns = 120;
+    session.configure(settings);
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let current = client.view().unwrap();
+            if current.selection_revision > view.selection_revision {
+                assert_eq!(current.terminal.max_columns, 93);
+                assert!(!current.connected);
+                assert_eq!(current.generation, view.generation);
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    session.shutdown().await.unwrap();
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn real_pty_resize_rejects_stale_copy_and_selection_requests() {
@@ -294,6 +415,14 @@ async fn real_pty_resize_rejects_stale_copy_and_selection_requests() {
     .await
     .unwrap();
 
+    client.copy(range, before.selection_revision).unwrap();
+    tokio::time::timeout(Duration::from_secs(10), async {
+        while client.shared.lock().unwrap().clipboard.is_none() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
     client.resize(TerminalSize::model(90, 30), 10, 20).unwrap();
     client.copy(range, before.selection_revision).unwrap();
     client
@@ -344,6 +473,7 @@ async fn rejected_transport_resize_can_be_retried_without_changing_the_viewport(
     let mut model = TerminalModel::new(80, 24, 100);
     let shared = Arc::new(Mutex::new(Shared {
         view: TerminalView {
+            semantic: Vec::new(),
             terminal: model.snapshot(),
             status: String::new(),
             connected: false,
@@ -354,9 +484,18 @@ async fn rejected_transport_resize_can_be_retried_without_changing_the_viewport(
         },
         clipboard: None,
         selection: None,
+        remote: clipboard::SharedClipboard::default(),
+        image: None,
     }));
     let mut worker = Worker {
+        presentation: refresh::Presentation::default(),
+        focus: watch::Sender::new(false).subscribe(),
+        semantic: crate::controller::semantic::Cache::default(),
+        audio_format: AudioSettings::default().format(),
+        microphone_forwarding: false,
+        x11_settings: X11Settings::default(),
         model,
+        settings: TerminalSettings::default(),
         transport: Some(Transport::Local(pty)),
         events: Events::Idle,
         reconnect: super::super::ReconnectState::new(false),
@@ -372,6 +511,8 @@ async fn rejected_transport_resize_can_be_retried_without_changing_the_viewport(
         connected: false,
         last_resize: None,
         viewport: TerminalViewport::default(),
+        remote_read: None,
+        attachments: Default::default(),
     };
     for _ in 0..2 {
         assert!(
@@ -383,4 +524,37 @@ async fn rejected_transport_resize_can_be_retried_without_changing_the_viewport(
         assert_eq!(worker.viewport.selection_revision(), 0);
     }
     worker.stop_transport().await.unwrap();
+}
+
+#[test]
+fn published_semantic_ranges_follow_source_rows_without_mutating_model_or_selection() {
+    let (mut worker, client) = super::clipboard::tests::fixture(false);
+    worker.model.process(b"ERROR HTTP/1.1 200");
+    worker.publish().unwrap();
+    let first = client.view().unwrap();
+    assert_eq!(first.semantic.len(), first.terminal.lines.len());
+    let annotations = &first.semantic[0];
+    assert_eq!(annotations.spans(&first.terminal.lines[0], 0).len(), 2);
+    assert_eq!(first.selection_revision, 0);
+    assert_eq!(
+        first.terminal.lines[0].runs[0].text.trim_end(),
+        "ERROR HTTP/1.1 200"
+    );
+    worker.publish().unwrap();
+    let unchanged = client.view().unwrap();
+    assert!(Arc::ptr_eq(&first.semantic[0], &unchanged.semantic[0]));
+    worker.model.process(b"\r\x1b[2KINFO");
+    worker.publish().unwrap();
+    let replaced = client.view().unwrap();
+    assert!(!Arc::ptr_eq(&first.semantic[0], &replaced.semantic[0]));
+    assert!(
+        first.semantic[0]
+            .spans(&replaced.terminal.lines[0], 0)
+            .is_empty()
+    );
+    assert_eq!(
+        replaced.semantic[0].spans(&replaced.terminal.lines[0], 0)[0].highlight,
+        super::super::semantic::SemanticHighlight::Info
+    );
+    assert_eq!(replaced.selection_revision, 0);
 }

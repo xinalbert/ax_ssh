@@ -640,7 +640,7 @@ fn semantic_highlighting_keeps_bounded_ascii_cell_geometry() {
         column += run.cells;
     }
 
-    let within_limit = format!("{} ERROR", "x".repeat(MAX_SEMANTIC_HIGHLIGHT_BYTES - 6));
+    let within_limit = format!("{} ERROR", "x".repeat(512 - 6));
     assert!(
         !semantic_highlight_spans(&within_limit, within_limit.len(), TerminalStyle::default())
             .is_empty()

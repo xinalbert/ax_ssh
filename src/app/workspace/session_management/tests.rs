@@ -176,14 +176,11 @@ async fn imported_profiles_are_persisted_without_credentials_or_host_trust() {
     let ssh = source.ssh_mut().unwrap();
     ssh.credential_storage = Some(CredentialStorage::SystemKeyring);
     ssh.host_key_fingerprint = Some("SHA256:fixture".into());
-    let exported = serialize_session_transfer(SessionTransferEnvelope {
-        format: SESSION_TRANSFER_FORMAT.into(),
-        version: SESSION_TRANSFER_VERSION,
-        kind: SessionTransferKind::Server,
-        group_name: None,
-        profiles: vec![source.clone()],
+    let exported = serde_json::json!({
+        "format": "axssh-session-export", "version": 1, "kind": "server",
+        "profiles": [source]
     })
-    .unwrap();
+    .to_string();
     import_session_transfer(
         &fixture.state,
         &fixture.persistence,

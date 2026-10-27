@@ -26,10 +26,7 @@ use self::session_editor::{
 };
 #[cfg(test)]
 use self::session_management::{
-    MAX_SESSION_TRANSFER_BYTES, SESSION_TRANSFER_FORMAT, SESSION_TRANSFER_VERSION,
-    SessionImportMode, SessionTransferEnvelope, SessionTransferKind, duplicate_session_group,
-    duplicate_session_name, duplicate_session_profile, export_session_group,
-    export_session_profile, import_session_transfer_into_store, parse_session_transfer,
+    duplicate_session_group, duplicate_session_name, duplicate_session_profile,
     update_session_group,
 };
 

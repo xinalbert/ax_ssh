@@ -1,3 +1,4 @@
+use super::super::i18n::{self, mark, tr};
 use super::*;
 
 #[derive(Clone)]
@@ -9,6 +10,7 @@ impl WorkspaceUi {
         ui: &mut egui::Ui,
         view: &WorkspaceView,
         width: f32,
+        appearance: &ax_ssh::config::AppearanceSettings,
     ) -> Option<Action> {
         let mut action = None;
         egui::ScrollArea::horizontal()
@@ -19,15 +21,33 @@ impl WorkspaceUi {
                     for (index, tab) in view.tabs.iter().enumerate() {
                         ui.push_id(tab.id, |ui| {
                             let active = view.active_tab_id == Some(tab.id);
+                            let label = if tab.settings {
+                                tr!("Settings", ui.ctx())
+                            } else {
+                                &tab.title
+                            };
                             let title =
-                                format!("{} {}", if tab.settings { "⚙" } else { "▣" }, tab.title);
-                            let button = egui::Button::new(title)
+                                format!("{} {}", if tab.settings { "⚙" } else { "▣" }, label);
+                            let icon = if tab.settings {
+                                None
+                            } else {
+                                self.icons.image(
+                                    ui,
+                                    super::super::system_icons::tab_icon(tab, appearance),
+                                    appearance.system_icons_follow_theme,
+                                )
+                            };
+                            let button = icon
+                                .map_or_else(
+                                    || egui::Button::new(title),
+                                    |image| egui::Button::image_and_text(image, label),
+                                )
                                 .selected(active)
                                 .truncate()
                                 .sense(Sense::click_and_drag());
                             let response = ui
                                 .add_sized([width - 28.0, 28.0], button)
-                                .on_hover_text(&tab.title);
+                                .on_hover_text(label);
                             if active && self.last_active != Some(tab.id) {
                                 response.scroll_to_me(Some(egui::Align::Center));
                             }
@@ -49,22 +69,26 @@ impl WorkspaceUi {
                             response.context_menu(|ui| {
                                 for (label, next) in [
                                     (
-                                        "Move left",
+                                        mark!("Move Tab Left"),
                                         WorkspaceAction::MoveTab {
                                             id: tab.id,
                                             index: index.saturating_sub(1),
                                         },
                                     ),
                                     (
-                                        "Move right",
+                                        mark!("Move Tab Right"),
                                         WorkspaceAction::MoveTab {
                                             id: tab.id,
                                             index: index + 1,
                                         },
                                     ),
-                                    ("Close tab", WorkspaceAction::CloseTab(tab.id)),
+                                    (
+                                        mark!("Close Current Tab"),
+                                        WorkspaceAction::CloseTab(tab.id),
+                                    ),
                                 ] {
-                                    if ui.button(label).clicked() {
+                                    if ui.button(i18n::current(ui.ctx()).text("", label)).clicked()
+                                    {
                                         action = Some(Action::Layout(next));
                                         ui.close();
                                     }
@@ -72,8 +96,8 @@ impl WorkspaceUi {
                             });
                             if ui
                                 .add_sized([22.0, 28.0], egui::Button::new("×"))
-                                .accessible_name("Close tab")
-                                .on_hover_text("Close tab")
+                                .accessible_name(tr!("Close Current Tab", ui.ctx()))
+                                .on_hover_text(tr!("Close Current Tab", ui.ctx()))
                                 .clicked()
                             {
                                 action = Some(Action::Layout(WorkspaceAction::CloseTab(tab.id)));
@@ -82,11 +106,11 @@ impl WorkspaceUi {
                     }
                     ui.menu_button("+", |ui| {
                         for (label, next) in [
-                            ("New Local Shell", WorkspaceAction::NewLocal),
-                            ("New Connection", WorkspaceAction::NewConnection),
-                            ("Settings…", WorkspaceAction::OpenSettings),
+                            (mark!("New Local Shell"), WorkspaceAction::NewLocal),
+                            (mark!("New Connection"), WorkspaceAction::NewConnection),
+                            (mark!("Settings…"), WorkspaceAction::OpenSettings),
                         ] {
-                            if ui.button(label).clicked() {
+                            if ui.button(i18n::current(ui.ctx()).text("", label)).clicked() {
                                 action = Some(Action::Layout(next));
                                 ui.close();
                             }

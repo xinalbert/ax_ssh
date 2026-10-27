@@ -3,9 +3,11 @@
 use super::*;
 use rand::{SeedableRng, rngs::StdRng};
 use russh::{Channel, ChannelId, keys::PrivateKey, server};
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use tokio::net::TcpListener;
 use tokio::task::JoinSet;
+
+mod attachments;
 
 const SECRET: &str = "fixture-ephemeral-input";
 
@@ -13,12 +15,22 @@ const SECRET: &str = "fixture-ephemeral-input";
 struct Observed {
     authentications: AtomicUsize,
     execs: AtomicUsize,
+    microphone_formats: Mutex<Vec<(u32, u16)>>,
+    ignore_microphone: AtomicBool,
+    x11_requests: AtomicUsize,
+    reject_x11: AtomicBool,
+    ignore_x11: AtomicBool,
     input: Mutex<Vec<u8>>,
     sizes: Mutex<Vec<(u32, u32, u32, u32)>>,
     shell: Mutex<Option<server::Handle>>,
+    upload: Mutex<Option<Arc<attachments::Upload>>>,
 }
 
-struct Peer(Arc<Observed>);
+struct Peer(
+    Arc<Observed>,
+    std::collections::HashMap<ChannelId, Channel<server::Msg>>,
+    JoinSet<()>,
+);
 
 impl server::Handler for Peer {
     type Error = russh::Error;
@@ -38,11 +50,32 @@ impl server::Handler for Peer {
 
     async fn channel_open_session(
         &mut self,
-        _: Channel<server::Msg>,
+        channel: Channel<server::Msg>,
         reply: server::ChannelOpenHandle,
         _: &mut server::Session,
     ) -> Result<(), Self::Error> {
+        self.1.insert(channel.id(), channel);
         reply.accept().await;
+        Ok(())
+    }
+
+    async fn subsystem_request(
+        &mut self,
+        id: ChannelId,
+        name: &str,
+        session: &mut server::Session,
+    ) -> Result<(), Self::Error> {
+        let upload = self.0.upload.lock().unwrap().clone();
+        if let Some(upload) = upload.filter(|_| name == "sftp") {
+            let channel = self.1.remove(&id).unwrap();
+            session.channel_success(id)?;
+            self.2.spawn(async move {
+                russh_sftp::server::run(channel.into_stream(), attachments::FilePeer(upload)).await;
+            });
+        } else {
+            session.channel_failure(id)?;
+            session.close(id)?;
+        }
         Ok(())
     }
 
@@ -94,12 +127,42 @@ impl server::Handler for Peer {
         Ok(())
     }
 
+    async fn x11_request(
+        &mut self,
+        id: ChannelId,
+        _: bool,
+        protocol: &str,
+        cookie: &str,
+        screen: u32,
+        session: &mut server::Session,
+    ) -> Result<(), Self::Error> {
+        assert!(self.0.authentications.load(Ordering::SeqCst) > 0);
+        assert_eq!(protocol, "MIT-MAGIC-COOKIE-1");
+        assert_eq!(cookie.len(), 32);
+        assert!(cookie.bytes().all(|byte| byte.is_ascii_hexdigit()));
+        assert_eq!(screen, 0);
+        self.0.x11_requests.fetch_add(1, Ordering::SeqCst);
+        if self.0.ignore_x11.load(Ordering::SeqCst) {
+            return Ok(());
+        }
+        if self.0.reject_x11.load(Ordering::SeqCst) {
+            session.channel_failure(id)?;
+        } else {
+            session.channel_success(id)?;
+        }
+        Ok(())
+    }
+
     async fn data(
         &mut self,
         id: ChannelId,
         data: &[u8],
         session: &mut server::Session,
     ) -> Result<(), Self::Error> {
+        // SFTP data is owned by the removed channel's stream, never echoed into the PTY.
+        if !self.1.contains_key(&id) {
+            return Ok(());
+        }
         let mut input = self.0.input.lock().unwrap();
         assert!(input.len() + data.len() < 8192);
         input.extend_from_slice(data);
@@ -110,10 +173,27 @@ impl server::Handler for Peer {
     async fn exec_request(
         &mut self,
         id: ChannelId,
-        _: &[u8],
+        command: &[u8],
         session: &mut server::Session,
     ) -> Result<(), Self::Error> {
         self.0.execs.fetch_add(1, Ordering::SeqCst);
+        let command = std::str::from_utf8(command).unwrap();
+        let rate = command.lines().find_map(|line| {
+            line.strip_prefix("rate=")
+                .and_then(|value| value.parse::<u32>().ok())
+        });
+        let channels = command.lines().find_map(|line| {
+            line.strip_prefix("channels=")
+                .and_then(|value| value.parse::<u16>().ok())
+        });
+        if let (Some(rate), Some(channels)) = (rate, channels) {
+            let mut formats = self.0.microphone_formats.lock().unwrap();
+            assert!(formats.len() < 4);
+            formats.push((rate, channels));
+        }
+        if self.0.ignore_microphone.load(Ordering::SeqCst) {
+            return Ok(());
+        }
         session.channel_failure(id)?;
         session.close(id)?;
         Ok(())
@@ -169,7 +249,7 @@ impl Fixture {
                             ..Default::default()
                         });
                         accepts += 1;
-                        let peer = Peer(state.clone());
+                        let peer = Peer(state.clone(), Default::default(), JoinSet::new());
                         connections.spawn(async move {
                             if let Ok(session) = server::run_stream(config, stream, peer).await {
                                 session.await
@@ -216,7 +296,13 @@ async fn wait(client: &TerminalClient, predicate: impl Fn(&TerminalView) -> bool
         }
     })
     .await
-    .expect("controller transition should complete")
+    .unwrap_or_else(|_| {
+        let view = client.view().unwrap();
+        panic!(
+            "controller transition timed out: connected={}, status={}",
+            view.connected, view.status
+        )
+    })
 }
 
 fn text(view: &TerminalView) -> String {
@@ -229,12 +315,50 @@ fn text(view: &TerminalView) -> String {
 }
 
 #[tokio::test]
+async fn low_refresh_policy_keeps_ssh_parser_replies_independent_of_snapshot_admission() {
+    let fixture = Fixture::new(true, usize::MAX).await;
+    let (mut worker, client) = super::clipboard::tests::fixture(false);
+    worker.presentation.rates = super::refresh::Rates::new(1, 1);
+    worker.profile = Some(fixture.profile.clone());
+    worker.start_remote(Zeroizing::new(SECRET.into())).unwrap();
+    // Drive transport/parser events without admitting an output snapshot.
+    // The fixed-trust peer asks for the cursor after E4_READY and records replies.
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            tokio::select! {
+                event = worker.events.next() => worker.event(event).await.unwrap(),
+                _ = tokio::time::sleep(Duration::from_millis(5)) => {
+                    if fixture.observed.input.lock().unwrap().windows(6).any(|bytes| bytes == b"\x1b[2;1R") {
+                        break;
+                    }
+                }
+            }
+        }
+    }).await.unwrap();
+    assert!(!text(&client.view().unwrap()).contains("E4_READY"));
+    worker.publish().unwrap();
+    let view = client.view().unwrap();
+    assert!(text(&view).contains("E4_READY"));
+    assert_eq!(view.selection_revision, 0);
+    worker.stop_transport().await.unwrap();
+    fixture.finish().await;
+}
+
+#[tokio::test]
 async fn unknown_key_requires_exact_confirmation_before_authentication_and_echoes_bytes() {
-    let fixture = Fixture::new(false, usize::MAX).await;
+    let mut fixture = Fixture::new(false, usize::MAX).await;
+    fixture.profile.ssh_mut().unwrap().x11_forwarding = crate::config::X11ForwardingMode::Trusted;
     let terminal = terminal();
     let client = terminal.client();
     client
-        .connect(fixture.profile.clone(), Zeroizing::new(SECRET.into()))
+        .connect_with_options(
+            fixture.profile.clone(),
+            Zeroizing::new(SECRET.into()),
+            TerminalConnectionOptions {
+                microphone_forwarding: true,
+                ..Default::default()
+            },
+        )
         .unwrap();
     let view = wait(&client, |view| view.prompt.is_some()).await;
     let prompt = view.prompt.unwrap();
@@ -246,6 +370,8 @@ async fn unknown_key_requires_exact_confirmation_before_authentication_and_echoe
         }
     ));
     assert_eq!(fixture.observed.authentications.load(Ordering::SeqCst), 0);
+    assert_eq!(fixture.observed.execs.load(Ordering::SeqCst), 0);
+    assert_eq!(fixture.observed.x11_requests.load(Ordering::SeqCst), 0);
     assert!(!text(&client.view().unwrap()).contains(SECRET));
     client
         .respond(Uuid::new_v4(), Zeroizing::new(SECRET.into()))
@@ -271,6 +397,7 @@ async fn unknown_key_requires_exact_confirmation_before_authentication_and_echoe
     })
     .await;
     assert_eq!(fixture.observed.authentications.load(Ordering::SeqCst), 1);
+    assert_eq!(fixture.observed.x11_requests.load(Ordering::SeqCst), 1);
     let input = fixture.observed.input.lock().unwrap().clone();
     assert!(input.windows(6).any(|bytes| bytes == b"\x1b[2;1R"));
     tokio::time::timeout(Duration::from_secs(5), async {
@@ -286,10 +413,270 @@ async fn unknown_key_requires_exact_confirmation_before_authentication_and_echoe
     })
     .await
     .unwrap();
-    assert_eq!(fixture.observed.execs.load(Ordering::SeqCst), 0);
+    assert_eq!(fixture.observed.execs.load(Ordering::SeqCst), 1);
     client.disconnect().unwrap();
     wait(&client, |view| view.status == "Disconnected").await;
     terminal.shutdown().await.unwrap();
+    fixture.finish().await;
+}
+
+#[tokio::test]
+async fn microphone_requires_explicit_ssh_choice_and_captures_saved_format_on_new_workers() {
+    let fixture = Fixture::new(true, usize::MAX).await;
+    let terminal = TerminalSession::idle(&Handle::current(), Arc::new(|| {}));
+    terminal.configure_audio(&AudioSettings {
+        sample_rate: 96000,
+        channels: 4,
+        ..Default::default()
+    });
+    let client = terminal.client();
+    let options = TerminalConnectionOptions {
+        microphone_forwarding: true,
+        automatic_reconnect: true,
+    };
+    client
+        .connect_with_options(
+            fixture.profile.clone(),
+            Zeroizing::new("incorrect".into()),
+            options,
+        )
+        .unwrap();
+    let prompt = wait(&client, |view| {
+        view.prompt
+            .as_ref()
+            .is_some_and(|prompt| prompt.kind == TerminalPromptKind::Authentication)
+    })
+    .await
+    .prompt
+    .unwrap();
+    assert_eq!(fixture.observed.execs.load(Ordering::SeqCst), 0);
+    client
+        .respond(prompt.id, Zeroizing::new(SECRET.into()))
+        .unwrap();
+    let before = wait(&client, |view| {
+        view.connected && text(view).contains("E4_READY")
+    })
+    .await;
+    assert_eq!(
+        *fixture.observed.microphone_formats.lock().unwrap(),
+        [(96000, 4)]
+    );
+    terminal.configure_audio(&AudioSettings {
+        sample_rate: 16000,
+        channels: 1,
+        ..Default::default()
+    });
+    client
+        .key(
+            TerminalKey::Text("AUDIO_SETTINGS_SAVED".into()),
+            TerminalModifiers::default(),
+        )
+        .unwrap();
+    let saved = wait(&client, |view| text(view).contains("AUDIO_SETTINGS_SAVED")).await;
+    assert_eq!(saved.generation, before.generation);
+    assert_eq!(fixture.observed.execs.load(Ordering::SeqCst), 1);
+    let shell = fixture.observed.shell.lock().unwrap().take().unwrap();
+    shell
+        .disconnect(
+            russh::Disconnect::ByApplication,
+            "fixture closed".into(),
+            String::new(),
+        )
+        .await
+        .unwrap();
+    let retry = wait(&client, |view| {
+        view.prompt
+            .as_ref()
+            .is_some_and(|prompt| prompt.kind == TerminalPromptKind::Authentication)
+    })
+    .await;
+    client
+        .respond(retry.prompt.unwrap().id, Zeroizing::new(SECRET.into()))
+        .unwrap();
+    let second = wait(&client, |view| {
+        view.generation > saved.generation && view.connected && text(view).contains("E4_READY")
+    })
+    .await;
+    assert_eq!(
+        *fixture.observed.microphone_formats.lock().unwrap(),
+        [(96000, 4), (16000, 1)]
+    );
+    // The compatibility API explicitly starts a fresh connection with forwarding off.
+    client
+        .connect(fixture.profile.clone(), Zeroizing::new(SECRET.into()))
+        .unwrap();
+    let off = wait(&client, |view| {
+        view.generation > second.generation && view.connected && text(view).contains("E4_READY")
+    })
+    .await;
+    assert_eq!(fixture.observed.execs.load(Ordering::SeqCst), 2);
+    assert!(
+        client
+            .connect_with_options(
+                SessionProfile::new_telnet("fixture", "localhost"),
+                Zeroizing::new(String::new()),
+                options
+            )
+            .is_err()
+    );
+    assert_eq!(client.view().unwrap().generation, off.generation);
+    client.disconnect().unwrap();
+    wait(&client, |view| view.status == "Disconnected").await;
+    client
+        .connect_with_reconnect(
+            fixture.profile.clone(),
+            Zeroizing::new(SECRET.into()),
+            false,
+        )
+        .unwrap();
+    wait(&client, |view| {
+        view.generation > off.generation && view.connected && text(view).contains("E4_READY")
+    })
+    .await;
+    assert_eq!(fixture.observed.execs.load(Ordering::SeqCst), 2);
+    terminal.shutdown().await.unwrap();
+    fixture.finish().await;
+}
+
+#[tokio::test]
+async fn disconnect_joins_a_worker_waiting_for_microphone_preparation() {
+    let fixture = Fixture::new(true, usize::MAX).await;
+    fixture
+        .observed
+        .ignore_microphone
+        .store(true, Ordering::SeqCst);
+    let terminal = TerminalSession::idle(&Handle::current(), Arc::new(|| {}));
+    let client = terminal.client();
+    client
+        .connect_with_options(
+            fixture.profile.clone(),
+            Zeroizing::new(SECRET.into()),
+            TerminalConnectionOptions {
+                microphone_forwarding: true,
+                automatic_reconnect: true,
+            },
+        )
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while fixture.observed.execs.load(Ordering::SeqCst) == 0 {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(!client.view().unwrap().connected);
+    client.disconnect().unwrap();
+    tokio::time::timeout(
+        Duration::from_secs(2),
+        wait(&client, |view| view.status == "Disconnected"),
+    )
+    .await
+    .unwrap();
+    tokio::time::timeout(Duration::from_secs(2), terminal.shutdown())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(fixture.observed.execs.load(Ordering::SeqCst), 1);
+    assert!(fixture.observed.shell.lock().unwrap().is_none());
+    fixture.finish().await;
+}
+
+#[tokio::test]
+async fn x11_rejection_preserves_shell_and_off_reconnect_makes_no_request() {
+    let mut fixture = Fixture::new(true, usize::MAX).await;
+    fixture.profile.ssh_mut().unwrap().x11_forwarding = crate::config::X11ForwardingMode::Trusted;
+    fixture.observed.reject_x11.store(true, Ordering::SeqCst);
+    let terminal = TerminalSession::idle(&Handle::current(), Arc::new(|| {}));
+    terminal.configure_x11(X11Settings {
+        provider: crate::config::X11ServerProvider::Custom,
+        app_path: "axssh-never-launch-fixture-x-server".into(),
+        launch_on_connect: false,
+        allow_no_auth: false,
+    });
+    let client = terminal.client();
+    client
+        .connect(fixture.profile.clone(), Zeroizing::new("incorrect".into()))
+        .unwrap();
+    let prompt = wait(&client, |view| {
+        view.prompt
+            .as_ref()
+            .is_some_and(|prompt| prompt.kind == TerminalPromptKind::Authentication)
+    })
+    .await
+    .prompt
+    .unwrap();
+    assert_eq!(fixture.observed.x11_requests.load(Ordering::SeqCst), 0);
+    client
+        .respond(prompt.id, Zeroizing::new(SECRET.into()))
+        .unwrap();
+    let connected = wait(&client, |view| {
+        view.connected && view.status.contains("X11 unavailable") && text(view).contains("E4_READY")
+    })
+    .await;
+    assert_eq!(fixture.observed.x11_requests.load(Ordering::SeqCst), 1);
+    client
+        .key(
+            TerminalKey::Text("X11_REJECTED_ECHO".into()),
+            TerminalModifiers::default(),
+        )
+        .unwrap();
+    wait(&client, |view| text(view).contains("X11_REJECTED_ECHO")).await;
+    terminal.configure_x11(X11Settings::default());
+    client
+        .key(
+            TerminalKey::Text("SAVED_X11_SETTINGS".into()),
+            TerminalModifiers::default(),
+        )
+        .unwrap();
+    let after = wait(&client, |view| text(view).contains("SAVED_X11_SETTINGS")).await;
+    assert!(after.connected);
+    assert_eq!(after.generation, connected.generation);
+    assert_eq!(fixture.observed.x11_requests.load(Ordering::SeqCst), 1);
+    client.disconnect().unwrap();
+    wait(&client, |view| view.status == "Disconnected").await;
+    fixture.profile.ssh_mut().unwrap().x11_forwarding = crate::config::X11ForwardingMode::Off;
+    client
+        .connect(fixture.profile.clone(), Zeroizing::new(SECRET.into()))
+        .unwrap();
+    wait(&client, |view| {
+        view.connected && text(view).contains("E4_READY")
+    })
+    .await;
+    assert_eq!(fixture.observed.x11_requests.load(Ordering::SeqCst), 1);
+    assert_eq!(fixture.observed.execs.load(Ordering::SeqCst), 0);
+    terminal.shutdown().await.unwrap();
+    fixture.finish().await;
+}
+
+#[tokio::test]
+async fn disconnect_joins_a_worker_waiting_for_x11_confirmation() {
+    let mut fixture = Fixture::new(true, usize::MAX).await;
+    fixture.profile.ssh_mut().unwrap().x11_forwarding = crate::config::X11ForwardingMode::Trusted;
+    fixture.observed.ignore_x11.store(true, Ordering::SeqCst);
+    let terminal = TerminalSession::idle(&Handle::current(), Arc::new(|| {}));
+    let client = terminal.client();
+    client
+        .connect(fixture.profile.clone(), Zeroizing::new(SECRET.into()))
+        .unwrap();
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while fixture.observed.x11_requests.load(Ordering::SeqCst) == 0 {
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(!client.view().unwrap().connected);
+    client.disconnect().unwrap();
+    tokio::time::timeout(
+        Duration::from_secs(2),
+        wait(&client, |view| view.status == "Disconnected"),
+    )
+    .await
+    .unwrap();
+    tokio::time::timeout(Duration::from_secs(2), terminal.shutdown())
+        .await
+        .unwrap()
+        .unwrap();
     fixture.finish().await;
 }
 

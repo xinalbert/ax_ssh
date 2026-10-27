@@ -3,14 +3,28 @@
 //! Severity names follow OpenTelemetry and RFC 5424's syslog severity table.
 //! HTTP classes follow RFC 9110; color choices belong to AxSSH. HTTP/2 and
 //! HTTP/3 prefixes are textual diagnostic conventions, not wire status lines.
-//! No terminal content or transport state is retained by this module.
+//! Recognition emits only ranges/classes; the visible-row cache shares source Arcs.
 
 use std::ops::Range;
 use std::sync::LazyLock;
 
 use regex::Regex;
 
-use super::SemanticHighlight;
+#[cfg(any(feature = "egui-ui", test))]
+use crate::terminal::TerminalSnapshot;
+use crate::terminal::{TerminalColor, TerminalStyle, TerminalStyledLine};
+use std::sync::Arc;
+
+/// Presentation class; colors remain the responsibility of the frontend.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SemanticHighlight {
+    Success,
+    Info,
+    Warning,
+    Error,
+}
+
+const MAX_SEMANTIC_HIGHLIGHT_BYTES: usize = 512;
 
 // A single matcher returns the capture to color rather than the surrounding
 // context. ASCII word boundaries preserve terminal cell geometry. The access
@@ -37,18 +51,21 @@ static RULES: LazyLock<Option<Regex>> = LazyLock::new(|| match Regex::new(RULE_P
     }
 });
 
-pub(super) struct HighlightSpan {
-    pub(super) range: Range<usize>,
-    pub(super) highlight: SemanticHighlight,
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct HighlightSpan {
+    /// Byte range within one eligible run; one ASCII byte is one terminal cell.
+    pub range: Range<usize>,
+    /// Color class without any terminal contents.
+    pub highlight: SemanticHighlight,
 }
 
 /// Compile once during startup, before a window or event loop is created.
-pub(super) fn prepare() {
+pub fn prepare() {
     LazyLock::force(&RULES);
 }
 
 /// Return ordered, non-overlapping captures within an eligible ASCII run.
-pub(super) fn spans(text: &str) -> Vec<HighlightSpan> {
+fn spans(text: &str) -> Vec<HighlightSpan> {
     let Some(rules) = RULES.as_ref() else {
         return Vec::new();
     };
@@ -84,6 +101,74 @@ pub(super) fn spans(text: &str) -> Vec<HighlightSpan> {
             })
         })
         .collect()
+}
+
+/// Recognize only bounded ASCII runs whose program styling can be preserved.
+pub fn highlight_run(text: &str, cells: usize, style: TerminalStyle) -> Vec<HighlightSpan> {
+    if !text.is_ascii()
+        || text.is_empty()
+        || text.len() > MAX_SEMANTIC_HIGHLIGHT_BYTES
+        || cells != text.len()
+        || style.foreground != TerminalColor::Default
+        || style.background != TerminalColor::Default
+        || style.inverse
+        || style.dim
+        || style.hidden
+    {
+        return Vec::new();
+    }
+    spans(text)
+}
+
+/// Recognition for one immutable visible source line, without copying its text.
+pub struct SemanticLine {
+    source: Arc<TerminalStyledLine>,
+    runs: Vec<Vec<HighlightSpan>>,
+}
+
+impl SemanticLine {
+    /// Reject annotations from a different source line, even with a reused revision.
+    pub fn spans(&self, source: &Arc<TerminalStyledLine>, run: usize) -> &[HighlightSpan] {
+        if !Arc::ptr_eq(&self.source, source) {
+            return &[];
+        }
+        self.runs.get(run).map_or(&[], Vec::as_slice)
+    }
+}
+
+#[cfg(any(feature = "egui-ui", test))]
+#[derive(Default)]
+pub(crate) struct Cache {
+    lines: Vec<Arc<SemanticLine>>,
+}
+
+#[cfg(any(feature = "egui-ui", test))]
+impl Cache {
+    pub(crate) fn update(&mut self, snapshot: &TerminalSnapshot) -> Vec<Arc<SemanticLine>> {
+        let previous = std::mem::take(&mut self.lines);
+        self.lines = snapshot
+            .lines
+            .iter()
+            .enumerate()
+            .map(|(row, source)| {
+                if let Some(cached) = previous
+                    .get(row)
+                    .filter(|cached| Arc::ptr_eq(&cached.source, source))
+                {
+                    return cached.clone();
+                }
+                Arc::new(SemanticLine {
+                    source: source.clone(),
+                    runs: source
+                        .runs
+                        .iter()
+                        .map(|run| highlight_run(&run.text, run.cells, run.style))
+                        .collect(),
+                })
+            })
+            .collect();
+        self.lines.clone()
+    }
 }
 
 #[cfg(test)]
@@ -178,5 +263,71 @@ mod tests {
                 ("302", SemanticHighlight::Info),
             ]
         );
+    }
+}
+
+#[cfg(test)]
+mod cache_tests {
+    use super::*;
+    use crate::terminal::TerminalModel;
+
+    #[test]
+    fn eligibility_keeps_explicit_styles_unicode_and_oversize_runs_untouched() {
+        for style in [
+            TerminalStyle {
+                foreground: TerminalColor::Indexed(1),
+                ..Default::default()
+            },
+            TerminalStyle {
+                background: TerminalColor::Indexed(1),
+                ..Default::default()
+            },
+            TerminalStyle {
+                inverse: true,
+                ..Default::default()
+            },
+            TerminalStyle {
+                dim: true,
+                ..Default::default()
+            },
+            TerminalStyle {
+                hidden: true,
+                ..Default::default()
+            },
+        ] {
+            assert!(highlight_run("ERROR HTTP/1.1 200", 18, style).is_empty());
+        }
+        let text = format!("{} ERROR", "x".repeat(506));
+        assert_eq!(text.len(), 512);
+        assert_eq!(highlight_run(&text, 512, TerminalStyle::default()).len(), 1);
+        assert!(highlight_run(&(text + " "), 513, TerminalStyle::default()).is_empty());
+        for (text, cells) in [("ERROR", 4), ("中文 ERROR", 9), ("é ERROR", 7)] {
+            assert!(highlight_run(text, cells, TerminalStyle::default()).is_empty());
+        }
+    }
+
+    #[test]
+    fn cache_reuses_only_source_identity_and_releases_removed_visible_rows() {
+        let mut model = TerminalModel::new(80, 4, 100);
+        model.process(b"ERROR HTTP/1.1 200");
+        let mut snapshot = model.snapshot();
+        let mut cache = Cache::default();
+        let first = cache.update(&snapshot);
+        let reused = cache.update(&snapshot);
+        assert!(Arc::ptr_eq(&first[0], &reused[0]));
+        assert!(!first[0].spans(&snapshot.lines[0], 0).is_empty());
+        let old = snapshot.lines[0].clone();
+        snapshot.lines[0] = Arc::new((*old).clone());
+        assert!(first[0].spans(&snapshot.lines[0], 0).is_empty());
+        let replaced = cache.update(&snapshot);
+        assert!(!Arc::ptr_eq(&first[0], &replaced[0]));
+        let removed = Arc::downgrade(replaced.last().unwrap());
+        snapshot.lines.truncate(1);
+        cache.update(&snapshot);
+        assert_eq!(cache.lines.len(), 1);
+        drop(first);
+        drop(reused);
+        drop(replaced);
+        assert!(removed.upgrade().is_none());
     }
 }

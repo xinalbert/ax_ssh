@@ -84,6 +84,8 @@ pub enum CatalogAction {
     AddGroup(String),
     RenameGroup { old: String, new: String },
     RemoveGroup(String),
+    Import(String),
+    Export(crate::session_transfer::SessionExportTarget),
 }
 
 /// Exact completion identity; failed writes never commit the draft to memory.
@@ -91,6 +93,8 @@ pub struct CatalogResult {
     pub request: Uuid,
     pub revision: u64,
     pub error: Option<String>,
+    /// Sanitized JSON, only present for a successful explicit export request.
+    pub exported: Option<String>,
 }
 
 enum Command {
@@ -158,6 +162,17 @@ impl WorkspaceClient {
     }
 
     pub fn catalog(&self, revision: u64, action: CatalogAction) -> Result<Uuid> {
+        if let CatalogAction::Import(text) = &action {
+            ensure!(
+                text.len() <= crate::session_transfer::MAX_SESSION_TRANSFER_BYTES,
+                "session import exceeds the 256 KiB limit"
+            );
+        }
+        if let CatalogAction::Export(crate::session_transfer::SessionExportTarget::Group(name)) =
+            &action
+        {
+            ensure!(name.len() <= 1024, "group input exceeds the command limit");
+        }
         if let CatalogAction::Settings(settings) = &action {
             ensure!(
                 serde_json::to_vec(settings)?.len() <= 64 * 1024,
@@ -228,6 +243,22 @@ impl Workspace {
     }
 
     pub fn spawn(runtime: &Handle, store: ConfigStore, wake: Arc<dyn Fn() + Send + Sync>) -> Self {
+        Self::start(
+            runtime,
+            store,
+            wake,
+            Arc::new(crate::sftp::configure_global_upload_limit),
+        )
+    }
+
+    // Keep process-global policy injectable without exposing a second public
+    // startup API or changing actual limits in concurrent controller tests.
+    fn start(
+        runtime: &Handle,
+        store: ConfigStore,
+        wake: Arc<dyn Fn() + Send + Sync>,
+        configure_uploads: Arc<dyn Fn(usize) + Send + Sync>,
+    ) -> Self {
         let shared = Arc::new(Mutex::new(Shared {
             view: WorkspaceView {
                 ready: false,
@@ -271,6 +302,7 @@ impl Workspace {
                 busy: false,
                 status: "Loading workspace…".into(),
                 error: None,
+                configure_uploads,
             };
             let result = owner.run(receiver, cancelled).await;
             let cleanup = owner.finish().await;
@@ -314,6 +346,7 @@ struct Owner {
     busy: bool,
     status: String,
     error: Option<String>,
+    configure_uploads: Arc<dyn Fn(usize) + Send + Sync>,
 }
 
 impl Owner {
@@ -395,9 +428,10 @@ impl Owner {
                             .as_ref()
                             .err()
                             .map(|error| format!("{error:#}").chars().take(1024).collect()),
+                        exported: result.as_ref().ok().and_then(Clone::clone),
                     },
                 );
-                result
+                result.map(|_| ())
             }
         };
         if let Err(error) = result {

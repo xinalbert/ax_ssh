@@ -15,14 +15,25 @@ use tokio::task::JoinHandle;
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
-use crate::config::SessionProfile;
+use crate::config::{SessionProfile, SftpTransferFilterSettings, SftpTransferSettings};
 pub use crate::file_icons::FileIconKey as SftpIcon;
 use crate::file_icons::{FileIcon, IconPrewarmReport, global_provider, prewarm_async};
 use crate::sftp::{SftpBrowserEvent, SftpEntry, SftpTransferEvent, SftpUploadConflictChoice};
 use crate::ssh::{HostKeyProbe, SshSessionEvent, SshSessionHandle, TrustDecision};
 
+mod downloads;
+pub use downloads::{MAX_SFTP_DOWNLOAD_ROOTS, SftpDownloadBatchResult, SftpDownloadFailure};
 mod editing;
+mod local_open;
+mod mutations;
+pub use mutations::SftpEntryAction;
+mod transfer_state;
 mod transfers;
+pub use transfer_state::{
+    MAX_SFTP_TRANSFER_BATCH, SftpTransferBatchFailure, SftpTransferBatchResult,
+    SftpTransferControl, SftpTransferPhase,
+};
+pub use transfers::MAX_SFTP_UPLOAD_ROOTS;
 
 use super::{ConnectionIdentity, TerminalPrompt, TerminalPromptKind};
 
@@ -31,8 +42,6 @@ const MAX_ENTRIES: usize = 250;
 const MAX_TRANSFERS: usize = 64;
 const MAX_LOCAL_ENTRIES: usize = 250;
 const MAX_LOCAL_PATH_BYTES: usize = 4096;
-const MAX_LOCAL_NAME_CHARS: usize = 256;
-const MAX_LOCAL_TEXT_BYTES: usize = 2 * 1024 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct LocalEntryView {
@@ -62,6 +71,8 @@ pub struct SftpTransferView {
     pub downloaded_bytes: u64,
     pub total_bytes: u64,
     pub conflict: bool,
+    pub phase: SftpTransferPhase,
+    pub pausable: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -85,15 +96,29 @@ pub struct SftpView {
     pub upload_preparing: bool,
     pub icons: Arc<HashMap<SftpIcon, FileIcon>>,
     pub transfers: Vec<SftpTransferView>,
+    pub last_batch: Option<SftpTransferBatchResult>,
+    pub last_download_batch: Option<SftpDownloadBatchResult>,
     pub edits: Vec<crate::remote_edit::RemoteEditView>,
     pub edit_auto_upload: bool,
 }
 
 struct Shared {
     view: SftpView,
+    mutation: Option<mutations::Slot>,
 }
 
 enum Command {
+    DownloadSelected {
+        paths: Vec<String>,
+        request_id: u64,
+        local_directory: String,
+        local_revision: u64,
+    },
+    Mutate {
+        id: Uuid,
+        target: mutations::Target,
+        action: SftpEntryAction,
+    },
     Connect(Box<SessionProfile>, Zeroizing<String>),
     Respond(Uuid, Zeroizing<String>),
     List(String),
@@ -103,6 +128,12 @@ enum Command {
         local_directory: PathBuf,
     },
     Cancel(Uuid),
+    Pause(Uuid),
+    Resume(Uuid),
+    ControlBatch {
+        ids: Vec<Uuid>,
+        control: SftpTransferControl,
+    },
     Upload {
         local_path: PathBuf,
         remote_path: String,
@@ -110,13 +141,24 @@ enum Command {
     ResolveConflict {
         transfer_id: Uuid,
         choice: SftpUploadConflictChoice,
+        apply_to_batch: bool,
     },
     ListLocal(PathBuf),
+    OpenLocal {
+        path: String,
+        revision: u64,
+    },
+    UploadSelected {
+        paths: Vec<String>,
+        local_revision: u64,
+        remote_directory: String,
+        request_id: u64,
+    },
     UploadRoots {
         paths: Vec<PathBuf>,
         remote_directory: String,
         request_id: u64,
-        local_source: Option<(String, u64)>,
+        local_source: Option<transfers::LocalSource>,
     },
     DownloadDrop {
         path: String,
@@ -216,6 +258,19 @@ impl SftpClient {
         })
     }
 
+    pub fn control_transfers(&self, ids: Vec<Uuid>, control: SftpTransferControl) -> Result<()> {
+        transfer_state::validate_batch(&ids)?;
+        self.send(Command::ControlBatch { ids, control })
+    }
+
+    pub fn pause(&self, transfer_id: Uuid) -> Result<()> {
+        self.send(Command::Pause(transfer_id))
+    }
+
+    pub fn resume(&self, transfer_id: Uuid) -> Result<()> {
+        self.send(Command::Resume(transfer_id))
+    }
+
     pub fn cancel(&self, transfer_id: Uuid) -> Result<()> {
         self.send(Command::Cancel(transfer_id))
     }
@@ -234,9 +289,19 @@ impl SftpClient {
         transfer_id: Uuid,
         choice: SftpUploadConflictChoice,
     ) -> Result<()> {
+        self.resolve_conflict_with_batch(transfer_id, choice, false)
+    }
+
+    pub fn resolve_conflict_with_batch(
+        &self,
+        transfer_id: Uuid,
+        choice: SftpUploadConflictChoice,
+        apply_to_batch: bool,
+    ) -> Result<()> {
         self.send(Command::ResolveConflict {
             transfer_id,
             choice,
+            apply_to_batch,
         })
     }
 
@@ -272,7 +337,7 @@ impl SftpClient {
             paths: vec![PathBuf::from(&path)],
             remote_directory,
             request_id,
-            local_source: Some((path, local_revision)),
+            local_source: Some(transfers::LocalSource::Entry(path, local_revision)),
         })
     }
     pub fn download_drop(
@@ -316,17 +381,62 @@ impl SftpClient {
         validate_local_directory_input(&path)?;
         self.send(Command::ListLocal(path))
     }
+
+    /// Opens a private snapshot of one file from the displayed local directory.
+    pub fn open_local(&self, path: String, revision: u64) -> Result<()> {
+        validate_local_directory_input(Path::new(&path))?;
+        self.send(Command::OpenLocal { path, revision })
+    }
 }
 
 pub struct SftpSession {
     client: SftpClient,
     stop: watch::Sender<bool>,
+    settings: watch::Sender<Settings>,
     task: JoinHandle<Result<()>>,
+}
+
+#[derive(Clone, Default, PartialEq, Eq)]
+struct Settings {
+    transfers: SftpTransferSettings,
+    filters: SftpTransferFilterSettings,
 }
 
 impl SftpSession {
     pub fn idle(runtime: &Handle, wake: Arc<dyn Fn() + Send + Sync>) -> Self {
+        Self::with_settings(
+            runtime,
+            SftpTransferSettings::default(),
+            SftpTransferFilterSettings::default(),
+            wake,
+        )
+    }
+
+    pub(crate) fn with_settings(
+        runtime: &Handle,
+        transfers: SftpTransferSettings,
+        filters: SftpTransferFilterSettings,
+        wake: Arc<dyn Fn() + Send + Sync>,
+    ) -> Self {
+        Self::start(
+            runtime,
+            transfers,
+            filters,
+            wake,
+            local_open::Opening::default(),
+        )
+    }
+
+    fn start(
+        runtime: &Handle,
+        transfers: SftpTransferSettings,
+        filters: SftpTransferFilterSettings,
+        wake: Arc<dyn Fn() + Send + Sync>,
+        opening: local_open::Opening,
+    ) -> Self {
+        let settings = Settings { transfers, filters };
         let shared = Arc::new(Mutex::new(Shared {
+            mutation: None,
             view: SftpView {
                 connected: false,
                 status: "SFTP companion ready; connect with fresh credentials".into(),
@@ -347,12 +457,15 @@ impl SftpSession {
                 upload_preparing: false,
                 icons: Arc::new(HashMap::new()),
                 transfers: Vec::new(),
+                last_batch: None,
+                last_download_batch: None,
                 edits: Vec::new(),
                 edit_auto_upload: true,
             },
         }));
         let (commands, receiver) = mpsc::channel(COMMAND_CAPACITY);
         let (stop, cancelled) = watch::channel(false);
+        let (settings_sender, updates) = watch::channel(settings.clone());
         let client = SftpClient {
             commands,
             generation: None,
@@ -364,6 +477,8 @@ impl SftpSession {
                 runtime: runtime_handle,
                 commands: receiver,
                 stop: cancelled,
+                settings,
+                updates,
                 transport: None,
                 events: None,
                 profile: None,
@@ -387,9 +502,14 @@ impl SftpSession {
                 local_entries: Vec::new(),
                 local_revision: 0,
                 preparation: transfers::Preparation::default(),
+                local_files: HashMap::new(),
+                local_open: opening,
                 icon_task: None,
                 icons_dirty: false,
                 transfers: BTreeMap::new(),
+                last_batch: None,
+                last_download_batch: None,
+                mutation: None,
                 editing: editing::Editing::default(),
                 shared,
                 wake,
@@ -397,6 +517,7 @@ impl SftpSession {
             let result = worker.run().await;
             let cleanup = worker.stop_transport().await;
             let preparation_cleanup = worker.preparation.finish().await;
+            let local_open_cleanup = worker.local_open.finish().await;
             let editing_cleanup = worker.editing.finish().await;
             let icon_cleanup = if let Some(task) = worker.icon_task.take() {
                 task.await
@@ -408,10 +529,31 @@ impl SftpSession {
             result
                 .and(cleanup)
                 .and(preparation_cleanup)
+                .and(local_open_cleanup)
                 .and(editing_cleanup)
                 .and(icon_cleanup)
         });
-        Self { client, stop, task }
+        Self {
+            client,
+            stop,
+            settings: settings_sender,
+            task,
+        }
+    }
+
+    pub(crate) fn configure(
+        &self,
+        transfers: SftpTransferSettings,
+        filters: SftpTransferFilterSettings,
+    ) {
+        let next = Settings { transfers, filters };
+        self.settings.send_if_modified(|settings| {
+            if *settings == next {
+                return false;
+            }
+            *settings = next;
+            true
+        });
     }
 
     pub fn client(&self) -> SftpClient {
@@ -432,6 +574,8 @@ struct Worker {
     runtime: Handle,
     commands: mpsc::Receiver<QueuedCommand>,
     stop: watch::Receiver<bool>,
+    settings: Settings,
+    updates: watch::Receiver<Settings>,
     transport: Option<SshSessionHandle>,
     events: Option<mpsc::Receiver<SshSessionEvent>>,
     profile: Option<SessionProfile>,
@@ -454,10 +598,15 @@ struct Worker {
     local_loading: bool,
     local_entries: Vec<LocalEntryView>,
     local_revision: u64,
+    local_files: HashMap<String, crate::local_files::LocalDirectoryEntry>,
+    local_open: local_open::Opening,
     preparation: transfers::Preparation,
     icon_task: Option<JoinHandle<IconPrewarmReport>>,
     icons_dirty: bool,
     transfers: BTreeMap<Uuid, SftpTransferView>,
+    last_batch: Option<SftpTransferBatchResult>,
+    last_download_batch: Option<SftpDownloadBatchResult>,
+    mutation: Option<mutations::Pending>,
     editing: editing::Editing,
     shared: Arc<Mutex<Shared>>,
     wake: Arc<dyn Fn() + Send + Sync>,
@@ -473,12 +622,18 @@ impl Worker {
                 result = self.stop.changed() => {
                     if result.is_err() || *self.stop.borrow() { break; }
                 }
+                result = self.updates.changed() => {
+                    result.context("SFTP settings owner closed")?;
+                    self.settings = self.updates.borrow_and_update().clone();
+                    self.local_open.cancel();
+                    // A preparation scanned using the previous filters must not
+                    // publish a batch after the saved policy changed.
+                    self.preparation.cancel();
+                    self.publish()?;
+                }
                 command = self.commands.recv() => {
                     let Some(command) = command else { break; };
-                    if (command.generation == self.generation
-                        || matches!(command.command, Command::Connect(..) | Command::Disconnect))
-                        && let Err(error) = self.dispatch(command.command).await
-                    {
+                    if let Err(error) = self.dispatch_queued(command).await {
                         self.status = format!("{error:#}").chars().take(512).collect();
                         self.publish()?;
                     }
@@ -488,7 +643,10 @@ impl Worker {
                     else {
                         self.events = None;
                         self.connected = false;
+                        self.reset_mutation()?;
+                        self.interrupt_transfers();
                         self.preparation.cancel();
+                        self.local_open.cancel();
                         self.editing.reset();
                         self.status = "SFTP disconnected".into();
                         self.publish()?;
@@ -504,6 +662,23 @@ impl Worker {
                     if self.complete_edit_job(result.context("external edit task failed")?)? {
                         self.publish()?;
                     }
+                }
+                result = local_open::next_job(&mut self.local_open.task), if self.local_open.task.is_some() => {
+                    self.local_open.task = None;
+                    self.local_open.deadline = None;
+                    let result = result.context("local file open task failed")?;
+                    if result.generation == self.generation && result.revision == self.local_revision
+                        && self.prompt.is_none()
+                        && (!result.cancelled || self.status.starts_with("Opening local file")) {
+                        self.status = result.result.unwrap_or_else(|error| format!("Cannot open local file: {error:#}")).chars().take(512).collect();
+                        self.publish()?;
+                    }
+                }
+                _ = local_open::deadline(self.local_open.deadline), if self.local_open.deadline.is_some() => {
+                    self.local_open.cancel();
+                    self.local_open.deadline = None;
+                    self.status = "Local file opening timed out; waiting for cleanup".into();
+                    self.publish()?;
                 }
                 result = transfers::next_preparation(&mut self.preparation.task), if self.preparation.task.is_some() => {
                     self.preparation.task = None;
@@ -523,8 +698,23 @@ impl Worker {
         Ok(())
     }
 
+    async fn dispatch_queued(&mut self, command: QueuedCommand) -> Result<()> {
+        if command.generation == self.generation
+            || matches!(command.command, Command::Connect(..) | Command::Disconnect)
+        {
+            self.dispatch(command.command).await?;
+        } else if let Command::Mutate { id, .. } = command.command {
+            self.finish_mutation(id, Err("SFTP connection changed".into()))?;
+            self.publish()?;
+        }
+        Ok(())
+    }
+
     async fn dispatch(&mut self, command: Command) -> Result<()> {
         match command {
+            Command::Mutate { id, target, action } => {
+                self.mutate_entry(id, target, action, self.generation)?
+            }
             Command::Connect(profile, secret) => {
                 self.replace().await?;
                 self.profile = Some(*profile);
@@ -554,6 +744,7 @@ impl Worker {
                 self.start_remote(secret)?;
             }
             Command::List(path) => {
+                self.preparation.cancel();
                 if !self.connected {
                     bail!("SFTP is not connected");
                 }
@@ -582,11 +773,10 @@ impl Worker {
             } => {
                 self.queue_download(path, local_directory)?;
             }
-            Command::Cancel(id) => {
-                if let Some(worker) = &self.transport {
-                    worker.request_cancel_sftp_transfer(id)?;
-                }
-            }
+            Command::Cancel(id) => self.control_transfer(id, transfer_state::Control::Cancel)?,
+            Command::ControlBatch { ids, control } => self.control_batch(ids, control)?,
+            Command::Pause(id) => self.control_transfer(id, transfer_state::Control::Pause)?,
+            Command::Resume(id) => self.control_transfer(id, transfer_state::Control::Resume)?,
             Command::Upload {
                 local_path,
                 remote_path,
@@ -599,6 +789,14 @@ impl Worker {
                     Some(remote_path),
                 )?;
             }
+            Command::UploadSelected {
+                paths,
+                local_revision,
+                remote_directory,
+                request_id,
+            } => {
+                self.prepare_selected_upload(paths, local_revision, remote_directory, request_id)?
+            }
             Command::UploadRoots {
                 paths,
                 remote_directory,
@@ -607,6 +805,12 @@ impl Worker {
             } => {
                 self.prepare_upload(paths, remote_directory, request_id, local_source, None)?;
             }
+            Command::DownloadSelected {
+                paths,
+                request_id,
+                local_directory,
+                local_revision,
+            } => self.download_selected(paths, request_id, local_directory, local_revision)?,
             Command::DownloadDrop {
                 path,
                 request_id,
@@ -623,13 +827,25 @@ impl Worker {
             Command::ResolveConflict {
                 transfer_id,
                 choice,
+                apply_to_batch,
             } => {
                 if let Some(worker) = &self.transport {
-                    worker.request_resolve_sftp_upload_conflict(transfer_id, choice, false)?;
+                    worker.request_resolve_sftp_upload_conflict(
+                        transfer_id,
+                        choice,
+                        apply_to_batch,
+                    )?;
                 }
             }
             Command::ListLocal(path) => {
+                self.preparation.cancel();
+                self.last_download_batch = None;
                 validate_local_directory_input(&path)?;
+                if self.local_open.task.is_some() && self.status.starts_with("Opening local file") {
+                    self.status = "Local file opening cancelled by directory navigation".into();
+                }
+                self.local_open.cancel();
+                self.local_files.clear();
                 self.local_revision = self
                     .local_revision
                     .checked_add(1)
@@ -644,10 +860,12 @@ impl Worker {
                 let listing = listing?;
                 self.local_path = listing.path;
                 self.local_entries = listing.entries;
+                self.local_files = listing.files;
                 self.local_loading = false;
                 self.icons_dirty = true;
                 self.schedule_icons();
             }
+            Command::OpenLocal { path, revision } => self.open_local(path, revision)?,
             Command::Edit(path) => {
                 self.begin_edit(path)?;
             }
@@ -691,6 +909,8 @@ impl Worker {
         self.truncated = false;
         self.request_id = 0;
         self.transfers.clear();
+        self.last_batch = None;
+        self.last_download_batch = None;
         Ok(())
     }
 
@@ -771,7 +991,9 @@ impl Worker {
             Uuid::new_v4(),
             profile.clone(),
             secret,
-            crate::config::SftpTransferSettings::default().policy(None),
+            self.settings
+                .transfers
+                .policy(profile.ssh().and_then(|ssh| ssh.sftp_transfer_policy)),
         );
         self.transport = Some(worker);
         self.events = Some(events);
@@ -823,7 +1045,9 @@ impl Worker {
             }
             SshSessionEvent::Sftp(SftpBrowserEvent::Closed) | SshSessionEvent::Disconnected => {
                 self.connected = false;
+                self.interrupt_transfers();
                 self.preparation.cancel();
+                self.local_open.cancel();
                 self.editing.reset();
                 self.status = "SFTP disconnected".into();
             }
@@ -832,7 +1056,11 @@ impl Worker {
                 self.status = "SFTP connected".into();
             }
             SshSessionEvent::SftpTransfer(event) => self.transfer(event),
-            SshSessionEvent::SftpWrite(event) => self.edit_event(event)?,
+            SshSessionEvent::SftpWrite(event) => {
+                if !self.mutation_event(&event)? {
+                    self.edit_event(event)?;
+                }
+            }
             SshSessionEvent::HostKeyRejected {
                 expected, actual, ..
             } => {
@@ -916,107 +1144,11 @@ impl Worker {
             }
             _ => {}
         }
+        if !self.connected {
+            self.reset_mutation()?;
+            self.interrupt_transfers();
+        }
         self.publish()
-    }
-
-    fn transfer(&mut self, event: SftpTransferEvent) {
-        let id = match &event {
-            SftpTransferEvent::Queued { transfer_id, .. }
-            | SftpTransferEvent::Started { transfer_id, .. }
-            | SftpTransferEvent::Progress { transfer_id, .. }
-            | SftpTransferEvent::Paused { transfer_id, .. }
-            | SftpTransferEvent::Resumed { transfer_id, .. }
-            | SftpTransferEvent::DiscoveryFailed { transfer_id, .. }
-            | SftpTransferEvent::UploadConflict { transfer_id, .. }
-            | SftpTransferEvent::Skipped { transfer_id }
-            | SftpTransferEvent::Completed { transfer_id, .. }
-            | SftpTransferEvent::Cancelled { transfer_id }
-            | SftpTransferEvent::Failed { transfer_id, .. } => *transfer_id,
-        };
-        if !self.transfers.contains_key(&id) && self.transfers.len() >= MAX_TRANSFERS {
-            if let Some(done) = self.transfers.iter().find_map(|(id, item)| {
-                matches!(item.status.as_str(), "Completed" | "Cancelled" | "Skipped").then_some(*id)
-            }) {
-                self.transfers.remove(&done);
-            } else {
-                if matches!(event, SftpTransferEvent::Queued { .. })
-                    && let Some(worker) = &self.transport
-                {
-                    if let Err(error) = worker.request_cancel_sftp_transfer(id) {
-                        self.status = format!("Cannot cancel excess transfer: {error:#}");
-                    } else {
-                        self.status =
-                            "SFTP companion transfer limit reached; excess downloads cancelled"
-                                .into();
-                    }
-                }
-                return;
-            }
-        }
-        let item = self
-            .transfers
-            .entry(id)
-            .or_insert_with(|| SftpTransferView {
-                id,
-                name: "transfer".into(),
-                status: "Queued".into(),
-                downloaded_bytes: 0,
-                total_bytes: 0,
-                conflict: false,
-            });
-        if !matches!(event, SftpTransferEvent::UploadConflict { .. }) {
-            item.conflict = false;
-        }
-        match event {
-            SftpTransferEvent::Queued {
-                name, total_bytes, ..
-            } => {
-                item.name = name;
-                item.total_bytes = total_bytes;
-                item.status = "Queued".into();
-            }
-            SftpTransferEvent::Started {
-                name, total_bytes, ..
-            } => {
-                item.name = name;
-                item.total_bytes = total_bytes;
-                item.status = "Transferring".into();
-            }
-            SftpTransferEvent::Progress {
-                downloaded_bytes,
-                total_bytes,
-                ..
-            } => {
-                item.downloaded_bytes = downloaded_bytes;
-                item.total_bytes = total_bytes;
-                item.status = "Transferring".into();
-            }
-            SftpTransferEvent::Paused {
-                downloaded_bytes,
-                total_bytes,
-                ..
-            } => {
-                item.downloaded_bytes = downloaded_bytes;
-                item.total_bytes = total_bytes;
-                item.status = "Paused".into();
-            }
-            SftpTransferEvent::Resumed { .. } => item.status = "Transferring".into(),
-            SftpTransferEvent::Completed { total_bytes, .. } => {
-                item.downloaded_bytes = total_bytes;
-                item.total_bytes = total_bytes;
-                item.status = "Completed".into();
-            }
-            SftpTransferEvent::Cancelled { .. } => item.status = "Cancelled".into(),
-            SftpTransferEvent::Failed { message, .. }
-            | SftpTransferEvent::DiscoveryFailed { message, .. } => {
-                item.status = format!("Failed: {message}")
-            }
-            SftpTransferEvent::Skipped { .. } => item.status = "Skipped".into(),
-            SftpTransferEvent::UploadConflict { .. } => {
-                item.status = "Conflict".into();
-                item.conflict = true;
-            }
-        }
     }
 
     fn auth_prompt(&self) -> TerminalPrompt {
@@ -1031,10 +1163,13 @@ impl Worker {
     }
 
     fn next_request(&mut self) {
+        self.last_download_batch = None;
         self.request_id = self.request_id.wrapping_add(1).max(1);
     }
 
     async fn stop_transport(&mut self) -> Result<()> {
+        self.reset_mutation()?;
+        self.local_open.cancel();
         self.probe = None;
         self.pending_secret = None;
         if let Some(task) = self.probe_task.take() {
@@ -1110,6 +1245,8 @@ impl Worker {
             upload_preparing: self.preparation.active(),
             icons,
             transfers: self.transfers.values().cloned().collect(),
+            last_batch: self.last_batch.clone(),
+            last_download_batch: self.last_download_batch.clone(),
             edits: self.editing.edits.snapshots(),
             edit_auto_upload: self.editing.edits.auto_upload,
         };
@@ -1154,76 +1291,33 @@ fn validate_local_directory_input(path: &Path) -> Result<()> {
 struct LocalListing {
     path: String,
     entries: Vec<LocalEntryView>,
+    files: HashMap<String, crate::local_files::LocalDirectoryEntry>,
 }
 
 fn read_local_directory(path: PathBuf) -> Result<LocalListing> {
     validate_local_directory_input(&path)?;
-    let resolved = std::fs::canonicalize(&path)
-        .with_context(|| format!("cannot resolve local directory {path:?}"))?;
-    let metadata = std::fs::symlink_metadata(&resolved)
-        .with_context(|| format!("cannot inspect local directory {resolved:?}"))?;
-    anyhow::ensure!(
-        metadata.is_dir() && !metadata.file_type().is_symlink(),
-        "local path is not a directory"
-    );
-    let mut entries = Vec::new();
-    let mut text_bytes = 0_usize;
-    for item in std::fs::read_dir(&resolved)
-        .with_context(|| format!("cannot read local directory {resolved:?}"))?
-    {
-        let Ok(item) = item else { continue };
-        if entries.len() >= MAX_LOCAL_ENTRIES {
-            break;
-        }
-        let name = item.file_name().to_string_lossy().into_owned();
-        if name.is_empty()
-            || name.chars().count() > MAX_LOCAL_NAME_CHARS
-            || name.chars().any(char::is_control)
-        {
-            continue;
-        }
-        let entry_path = item.path();
-        let path = entry_path.display().to_string();
-        if path.len() > MAX_LOCAL_PATH_BYTES || path.chars().any(char::is_control) {
-            continue;
-        }
-        if text_bytes
-            .saturating_add(name.len())
-            .saturating_add(path.len())
-            > MAX_LOCAL_TEXT_BYTES
-        {
-            break;
-        }
-        let Ok(file_type) = item.file_type() else {
-            continue;
-        };
-        if file_type.is_symlink() {
-            continue;
-        }
-        let Ok(metadata) = item.metadata() else {
-            continue;
-        };
-        text_bytes = text_bytes
-            .saturating_add(name.len())
-            .saturating_add(path.len());
-        let icon = icon_for_name(&name, file_type.is_dir(), false);
-        entries.push(LocalEntryView {
-            name,
-            path,
-            is_dir: file_type.is_dir(),
-            size: metadata.len(),
-            icon,
-        });
-    }
-    entries.sort_by(|left, right| {
-        right
-            .is_dir
-            .cmp(&left.is_dir)
-            .then_with(|| left.name.to_lowercase().cmp(&right.name.to_lowercase()))
-    });
+    let listing = crate::local_files::read_directory(&path, MAX_LOCAL_ENTRIES, true)?;
+    let mut files = HashMap::new();
+    let entries = listing
+        .entries
+        .into_iter()
+        .filter(|entry| !entry.is_symlink && (entry.is_dir || entry.is_regular_file()))
+        .map(|entry| {
+            let view = LocalEntryView {
+                name: entry.name.clone(),
+                path: entry.path.clone(),
+                is_dir: entry.is_dir,
+                size: entry.size,
+                icon: icon_for_name(&entry.name, entry.is_dir, false),
+            };
+            files.insert(entry.path.clone(), entry);
+            view
+        })
+        .collect();
     Ok(LocalListing {
-        path: resolved.display().to_string(),
+        path: listing.path,
         entries,
+        files,
     })
 }
 
@@ -1287,6 +1381,8 @@ mod tests {
             upload_preparing: false,
             icons: Arc::new(HashMap::new()),
             transfers: Vec::new(),
+            last_batch: None,
+            last_download_batch: None,
             edits: Vec::new(),
             edit_auto_upload: true,
         };

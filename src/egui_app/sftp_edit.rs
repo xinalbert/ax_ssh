@@ -1,5 +1,6 @@
 //! External-edit controls contain public metadata and user intent only.
 
+use super::i18n::tr;
 use anyhow::Result;
 use ax_ssh::controller::{SftpClient, SftpView};
 use eframe::egui;
@@ -25,11 +26,17 @@ impl EditControls {
         }
         let mut action = None;
         ui.separator();
-        ui.strong("External editing");
-        ui.label("Save in the system application. Copies remain available after editing stops.");
+        ui.strong(tr!("External editing", ui.ctx()));
+        ui.label(tr!(
+            "Save in the system application. Copies remain available after editing stops.",
+            ui.ctx()
+        ));
         let mut automatic = view.edit_auto_upload;
         if ui
-            .checkbox(&mut automatic, "Upload saved changes automatically")
+            .checkbox(
+                &mut automatic,
+                tr!("Upload saved changes automatically", ui.ctx()),
+            )
             .changed()
         {
             action = Some(EditAction::AutoUpload(automatic));
@@ -45,7 +52,7 @@ impl EditControls {
                     if ui
                         .add_enabled(
                             edit.local_path.is_some() && !edit.pending,
-                            egui::Button::new("Upload changes"),
+                            egui::Button::new(tr!("Upload changes", ui.ctx())),
                         )
                         .clicked()
                     {
@@ -54,13 +61,13 @@ impl EditControls {
                     if ui
                         .add_enabled(
                             edit.local_path.is_some(),
-                            egui::Button::new("Reopen editor"),
+                            egui::Button::new(tr!("Reopen editor", ui.ctx())),
                         )
                         .clicked()
                     {
                         action = Some(EditAction::Reopen(edit.id));
                     }
-                    if ui.button("Stop editing").clicked() {
+                    if ui.button(tr!("Stop editing", ui.ctx())).clicked() {
                         action = Some(EditAction::Stop(edit.id));
                     }
                 });

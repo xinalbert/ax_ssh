@@ -55,7 +55,8 @@ Uniform Type Identifiers on macOS, Windows Shell and GDI APIs on Windows, and
 freedesktop icon themes plus MIME mappings on Linux. Operating-system artwork
 is resolved at runtime and is not copied into this repository.
 
-Linux vector icons use `resvg`/`usvg` 0.48.1 and `tiny-skia` under
+Linux vector file icons and egui build-time system icon rasterization use
+`resvg`/`usvg` 0.48.1 and `tiny-skia` under
 `MIT OR Apache-2.0`; upstream notices remain in their crates. Vector decoding
 disables external/embedded images and system-font discovery.
 

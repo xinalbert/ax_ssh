@@ -30,6 +30,7 @@ pub(super) enum Event {
     Output(TerminalOutputChunk),
     Ended(String),
     AuthenticationFailed,
+    Notice(String),
     HostKey {
         expected: Option<String>,
         actual: String,
@@ -53,6 +54,7 @@ impl Transport {
         secret: Zeroizing<String>,
         attempt: Uuid,
         size: TerminalSize,
+        settings: SshTerminalSettings,
     ) -> (Self, Events, ConnectionIdentity) {
         let runtime = Handle::current();
         let profile_id = profile.id;
@@ -66,10 +68,7 @@ impl Transport {
                     secret,
                     size.columns(),
                     size.rows(),
-                    SshTerminalSettings {
-                        automatic_microphone: false,
-                        ..Default::default()
-                    },
+                    settings,
                 );
                 (
                     Self::Ssh(worker),
@@ -212,6 +211,15 @@ impl Events {
             Self::Ssh(events) => match events.recv().await? {
                 SshSessionEvent::Connected => Event::Connected,
                 SshSessionEvent::Output(chunk) => Event::Output(chunk),
+                SshSessionEvent::X11ForwardingEnabled => {
+                    Event::Notice("Connected · X11 forwarding enabled".into())
+                }
+                SshSessionEvent::X11ForwardingUnavailable(message) => {
+                    Event::Notice(format!("Connected · X11 unavailable: {message}"))
+                }
+                SshSessionEvent::MicrophoneUnavailable(message) => {
+                    Event::Notice(format!("Connected · Microphone unavailable: {message}"))
+                }
                 SshSessionEvent::HostKeyRejected {
                     expected, actual, ..
                 } => Event::HostKey { expected, actual },

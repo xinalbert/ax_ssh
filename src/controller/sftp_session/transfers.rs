@@ -4,8 +4,11 @@ use super::*;
 use crate::sftp::SftpUploadRequest;
 use std::sync::atomic::{AtomicBool, Ordering};
 
-const MAX_ROOTS: usize = 64;
+pub const MAX_SFTP_UPLOAD_ROOTS: usize = 64;
 const MAX_PATH_TEXT: usize = 256 * 1024;
+
+mod selection;
+pub(super) use selection::LocalSource;
 
 #[derive(Default)]
 pub(super) struct Preparation {
@@ -17,7 +20,7 @@ pub(super) struct Prepared {
     generation: u64,
     request_id: u64,
     directory: String,
-    local_source: Option<(String, u64)>,
+    local_source: Option<LocalSource>,
     cancelled: Arc<AtomicBool>,
     result: Result<Vec<SftpUploadRequest>>,
 }
@@ -43,7 +46,7 @@ impl Preparation {
 
 pub(super) fn validate_paths(paths: &[PathBuf]) -> Result<()> {
     anyhow::ensure!(
-        !paths.is_empty() && paths.len() <= MAX_ROOTS,
+        !paths.is_empty() && paths.len() <= MAX_SFTP_UPLOAD_ROOTS,
         "drop must contain 1–64 local paths"
     );
     let mut bytes = 0usize;
@@ -67,7 +70,7 @@ impl Worker {
         generation: u64,
         request_id: u64,
         directory: &str,
-        source: Option<&(String, u64)>,
+        source: Option<&LocalSource>,
     ) -> bool {
         self.connected
             && generation == self.generation
@@ -75,11 +78,7 @@ impl Worker {
             && self.request_id == request_id
             && !directory.is_empty()
             && self.path == directory
-            && source.is_none_or(|(path, revision)| {
-                !self.local_loading
-                    && self.local_revision == *revision
-                    && self.local_entries.iter().any(|entry| &entry.path == path)
-            })
+            && source.is_none_or(|source| source.current(self))
     }
 
     pub(super) fn prepare_upload(
@@ -87,7 +86,7 @@ impl Worker {
         paths: Vec<PathBuf>,
         directory: String,
         request_id: u64,
-        local_source: Option<(String, u64)>,
+        local_source: Option<LocalSource>,
         explicit_target: Option<String>,
     ) -> Result<()> {
         validate_paths(&paths)?;
@@ -109,11 +108,13 @@ impl Worker {
         let cancelled = Arc::new(AtomicBool::new(false));
         let cancellation = cancelled.clone();
         let generation = self.generation;
+        let filters = self.settings.filters.effective_patterns();
         self.preparation.cancelled = Some(cancelled.clone());
         self.preparation.task = Some(self.runtime.spawn_blocking(move || {
             let result = (|| {
-                let filters =
-                    crate::config::SftpTransferFilterSettings::default().effective_patterns();
+                if let Some(source) = &local_source {
+                    source.validate(&cancellation)?;
+                }
                 let mut files = crate::local_upload::discover_local_uploads_cancellable(
                     paths,
                     &directory,
@@ -134,7 +135,7 @@ impl Worker {
                     "upload batch exceeds the 64-transfer companion limit"
                 );
                 let batch = Uuid::new_v4();
-                files
+                let requests = files
                     .into_iter()
                     .map(|file| {
                         anyhow::ensure!(
@@ -150,7 +151,11 @@ impl Worker {
                             file.remote_directories,
                         )
                     })
-                    .collect()
+                    .collect::<Result<Vec<_>>>()?;
+                if let Some(source) = &local_source {
+                    source.validate(&cancellation)?;
+                }
+                Ok(requests)
             })();
             Prepared {
                 generation,
@@ -180,10 +185,7 @@ impl Worker {
             "upload preparation discarded: directory or connection changed"
         );
         let requests = prepared.result?;
-        anyhow::ensure!(
-            self.transfers.len().saturating_add(requests.len()) <= MAX_TRANSFERS,
-            "SFTP transfer history is full"
-        );
+        let evictions = self.transfer_evictions(requests.len())?;
         let items: Vec<_> = requests
             .iter()
             .map(|request| SftpTransferView {
@@ -193,12 +195,17 @@ impl Worker {
                 downloaded_bytes: 0,
                 total_bytes: request.total_bytes(),
                 conflict: false,
+                phase: SftpTransferPhase::Queued,
+                pausable: false,
             })
             .collect();
         self.transport
             .as_ref()
             .context("SFTP is disconnected")?
             .request_prepared_sftp_uploads(requests)?;
+        for id in evictions {
+            self.transfers.remove(&id);
+        }
         for item in items {
             self.transfers.insert(item.id, item);
         }
@@ -238,10 +245,7 @@ impl Worker {
             self.connected && !self.loading,
             "SFTP directory is not ready"
         );
-        anyhow::ensure!(
-            self.transfers.len() < MAX_TRANSFERS,
-            "SFTP transfer history is full"
-        );
+        let evictions = self.transfer_evictions(1)?;
         let id = Uuid::new_v4();
         self.transport
             .as_ref()
@@ -250,8 +254,11 @@ impl Worker {
                 id,
                 path.clone(),
                 local_directory,
-                crate::config::SftpTransferFilterSettings::default().effective_patterns(),
+                self.settings.filters.effective_patterns(),
             )?;
+        for id in evictions {
+            self.transfers.remove(&id);
+        }
         self.transfers.insert(
             id,
             SftpTransferView {
@@ -261,6 +268,8 @@ impl Worker {
                 downloaded_bytes: 0,
                 total_bytes: 0,
                 conflict: false,
+                phase: SftpTransferPhase::Queued,
+                pausable: true,
             },
         );
         Ok(())

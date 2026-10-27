@@ -33,6 +33,9 @@ impl Owner {
         } else {
             self.layout(WorkspaceAction::NewLocal)?;
         }
+        (self.configure_uploads)(usize::from(
+            self.sessions.settings.sftp_transfers.global_uploads,
+        ));
         self.ready = true;
         self.status = "Workspace ready · saved sessions use fresh authentication".into();
         self.publish()

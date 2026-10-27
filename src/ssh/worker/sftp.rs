@@ -391,6 +391,12 @@ pub(super) async fn run_sftp_session(
                             )
                             .await;
                             Ok(())
+                        } else if available_sftp_transfer_slots(&transfers, &pending_by_transfer, &queued_requests, &discovery_by_transfer) == 0 {
+                            send_sftp_transfer_event(&event_tx, SftpTransferEvent::DiscoveryFailed {
+                                transfer_id, name: root.name().to_owned(),
+                                message: "SFTP download/discovery queue is full".into(),
+                            }, session_id).await;
+                            Ok(())
                         } else {
                             spawn_pending_sftp_discovery(
                                 &mut discoveries,
@@ -1232,6 +1238,36 @@ mod tests {
         assert_eq!(
             available_sftp_transfer_slots(&[], &pending, &queued, &HashMap::new()),
             MAX_RECURSIVE_DOWNLOAD_FILES - 3
+        );
+        let mut discoveries = HashMap::new();
+        for index in 0..MAX_RECURSIVE_DOWNLOAD_FILES - 3 {
+            let id = Uuid::new_v4();
+            discoveries.insert(
+                id,
+                PendingDiscovery {
+                    task_id: task.id(),
+                    cancellation: None,
+                    cancelled: false,
+                    root: SftpDownloadRoot::new(
+                        id,
+                        format!("/srv/root{index}"),
+                        std::path::PathBuf::from("/local"),
+                        vec![],
+                        u64::MAX,
+                    )
+                    .unwrap(),
+                },
+            );
+        }
+        assert_eq!(
+            available_sftp_transfer_slots(&[], &pending, &queued, &discoveries),
+            0
+        );
+        let released = *discoveries.keys().next().unwrap();
+        discoveries.remove(&released);
+        assert_eq!(
+            available_sftp_transfer_slots(&[], &pending, &queued, &discoveries),
+            1
         );
         openings.abort_all();
     }

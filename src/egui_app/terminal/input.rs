@@ -8,24 +8,26 @@ use eframe::egui::{self, Event, ImeEvent, Key, Modifiers, PointerButton, Respons
 
 use super::geometry::Grid;
 
+mod mouse;
+
 #[derive(Default)]
 pub(super) struct Input {
     pub(super) preedit: String,
     wheel: egui::Vec2,
-    remote_press: Option<TerminalMouseButton>,
+    mouse: mouse::MouseInput,
+    interaction: mouse::Interaction,
     pending_committed_text: Option<(String, u64)>,
 }
 
 pub(super) struct Selection<'a> {
     pub(super) range: &'a mut Option<TerminalSelectionRange>,
-    pub(super) anchor: &'a mut Option<(usize, usize)>,
 }
 
 impl Input {
     pub(super) fn clear(&mut self) {
         self.preedit.clear();
         self.wheel = egui::Vec2::ZERO;
-        self.remote_press = None;
+        self.mouse = mouse::MouseInput::default();
         self.pending_committed_text = None;
     }
 
@@ -37,24 +39,22 @@ impl Input {
         modifiers: Modifiers,
         pixels_per_point: f32,
     ) -> Result<()> {
-        let Some(button) = self.remote_press.take() else {
-            return Ok(());
-        };
-        let pos = pos.unwrap_or(grid.origin);
-        let (row, column) = grid.hit(pos);
-        let (pixel_x, pixel_y) = grid.pixel_hit(pos, pixels_per_point);
-        client.mouse(
-            mouse(
-                TerminalMouseEventKind::Release,
-                button,
-                row,
-                column,
-                modifiers,
-            ),
-            pixel_x,
-            pixel_y,
-            1,
-        )
+        self.mouse
+            .cancel(client, grid, pos, modifiers, pixels_per_point)
+    }
+
+    pub(super) fn configure(&mut self, appearance: &ax_ssh::config::AppearanceSettings) {
+        self.interaction = appearance.into();
+    }
+    pub(super) fn auto_copy(&self) -> bool {
+        self.interaction.auto_copy
+    }
+    pub(super) fn local_selection_allowed(
+        &self,
+        view: &TerminalView,
+        modifiers: Modifiers,
+    ) -> bool {
+        !view.terminal.mouse_button_reporting_active || !self.interaction.forward(modifiers)
     }
 
     pub(super) fn handle(
@@ -65,11 +65,19 @@ impl Input {
         view: &TerminalView,
         grid: &Grid,
         selection: Selection<'_>,
-    ) -> Result<()> {
-        let Selection {
-            range: selection,
-            anchor,
-        } = selection;
+    ) -> Result<bool> {
+        let Selection { range: selection } = selection;
+        if !ui.is_enabled() {
+            return Ok(false);
+        }
+        let mut completed = false;
+        let mouse_context = mouse::MouseContext {
+            ui,
+            response,
+            client,
+            view,
+            grid,
+        };
         let focused = ui.is_enabled() && response.has_focus() && ui.input(|i| i.focused);
         if focused {
             ui.memory_mut(|memory| {
@@ -85,6 +93,10 @@ impl Input {
             });
         }
         let frame = ui.ctx().cumulative_frame_nr();
+        #[cfg(target_os = "macos")]
+        let option_meta = crate::egui_app::native_input::active(ui.ctx());
+        #[cfg(not(target_os = "macos"))]
+        let option_meta = false;
         let events = ui.input(|i| i.events.clone());
         for event in events.iter().cloned() {
             match event {
@@ -101,14 +113,32 @@ impl Input {
                             client.key(
                                 TerminalKey::Text(text),
                                 TerminalModifiers {
-                                    alt: modifiers.alt && !cfg!(target_os = "macos"),
+                                    alt: modifiers.alt
+                                        && (!cfg!(target_os = "macos") || option_meta),
                                     ..Default::default()
                                 },
                             )?;
                         }
                     }
                 }
-                Event::Paste(text) if focused => client.paste(text.clone())?,
+                Event::Paste(text)
+                    if focused
+                        && crate::egui_app::clipboard::allows(ui.ctx(), response.id, view) =>
+                {
+                    client.paste(text.clone())?
+                }
+                Event::PasteImage(image)
+                    if focused
+                        && crate::egui_app::clipboard::allows(ui.ctx(), response.id, view) =>
+                {
+                    crate::egui_app::image_paste::request(
+                        ui.ctx(),
+                        response.id,
+                        client,
+                        view,
+                        image,
+                    )?;
+                }
                 Event::Copy if focused => {
                     if let Some(range) = selection {
                         client.copy(*range, view.selection_revision)?;
@@ -139,6 +169,7 @@ impl Input {
                         && key == Key::A
                         && (cfg!(target_os = "macos") || modifiers.shift)
                     {
+                        completed = true;
                         *selection = Some(TerminalSelectionRange {
                             start_row: 0,
                             start_column: 0,
@@ -146,100 +177,15 @@ impl Input {
                             end_column: view.terminal.max_columns.saturating_sub(1),
                         });
                     } else if let Some(key) = terminal_key(key, modifiers) {
-                        client.key(key, terminal_modifiers(modifiers))?;
+                        client.key(key, terminal_modifiers(modifiers, option_meta))?;
                     }
                 }
-                Event::PointerButton {
-                    pos,
-                    button,
-                    pressed,
-                    modifiers,
-                } if response.rect.contains(pos)
-                    || self.remote_press.is_some()
-                    || anchor.is_some() =>
-                {
-                    let (row, column) = grid.hit(pos);
-                    let (pixel_x, pixel_y) = grid.pixel_hit(pos, ui.ctx().pixels_per_point());
-                    let remote = view.terminal.mouse_button_reporting_active && !modifiers.shift;
-                    if pressed && remote {
-                        let button = mouse_button(button);
-                        self.remote_press = Some(button);
-                        *selection = None;
-                        client.mouse(
-                            mouse(
-                                TerminalMouseEventKind::Press,
-                                button,
-                                row,
-                                column,
-                                modifiers,
-                            ),
-                            pixel_x,
-                            pixel_y,
-                            1,
-                        )?;
-                    } else if !pressed && self.remote_press.is_some() {
-                        if let Some(button) = self.remote_press.take() {
-                            client.mouse(
-                                mouse(
-                                    TerminalMouseEventKind::Release,
-                                    button,
-                                    row,
-                                    column,
-                                    modifiers,
-                                ),
-                                pixel_x,
-                                pixel_y,
-                                1,
-                            )?;
-                        }
-                    } else if button == PointerButton::Primary {
-                        if pressed {
-                            *anchor = Some((row, column));
-                            *selection = None;
-                        } else if let Some(start) = anchor
-                            && *start != (row, column)
-                        {
-                            *selection = Some(range(*start, (row, column)));
-                        }
-                    }
-                }
-                Event::PointerMoved(pos) => {
-                    let (row, column) = grid.hit(pos);
-                    let (pixel_x, pixel_y) = grid.pixel_hit(pos, ui.ctx().pixels_per_point());
-                    if let Some(button) = self.remote_press {
-                        client.mouse(
-                            mouse(
-                                TerminalMouseEventKind::Motion,
-                                button,
-                                row,
-                                column,
-                                ui.input(|i| i.modifiers),
-                            ),
-                            pixel_x,
-                            pixel_y,
-                            1,
-                        )?;
-                    } else if view.terminal.mouse_reporting.motion
-                        && !ui.input(|i| i.modifiers.shift)
-                        && response.hovered()
-                    {
-                        client.mouse(
-                            mouse(
-                                TerminalMouseEventKind::Motion,
-                                TerminalMouseButton::None,
-                                row,
-                                column,
-                                ui.input(|i| i.modifiers),
-                            ),
-                            pixel_x,
-                            pixel_y,
-                            1,
-                        )?;
-                    } else if response.dragged()
-                        && let Some(start) = anchor
-                    {
-                        *selection = Some(range(*start, (row, column)));
-                    }
+                event @ (Event::PointerButton { .. }
+                | Event::PointerMoved(_)
+                | Event::PointerGone) => {
+                    completed |=
+                        self.mouse
+                            .handle(event, &mouse_context, selection, self.interaction)?;
                 }
                 Event::MouseWheel {
                     unit,
@@ -248,7 +194,9 @@ impl Input {
                     ..
                 } if response.hovered() => {
                     let steps = self.wheel_steps(unit, delta, grid);
-                    if view.terminal.mouse_wheel_reporting_active && !modifiers.shift {
+                    if view.terminal.mouse_wheel_reporting_active
+                        && self.interaction.forward(modifiers)
+                    {
                         let pos = ui.input(|i| i.pointer.hover_pos()).unwrap_or(grid.origin);
                         let (row, column) = grid.hit(pos);
                         let (pixel_x, pixel_y) = grid.pixel_hit(pos, ui.ctx().pixels_per_point());
@@ -287,16 +235,8 @@ impl Input {
                 _ => {}
             }
         }
-        if self.remote_press.is_some() && !ui.input(|input| input.pointer.any_down()) {
-            self.cancel_remote_press(
-                client,
-                grid,
-                ui.input(|input| input.pointer.interact_pos()),
-                ui.input(|input| input.modifiers),
-                ui.ctx().pixels_per_point(),
-            )?;
-        }
-        Ok(())
+        self.mouse.finish(&mouse_context)?;
+        Ok(completed)
     }
 
     fn wheel_steps(
@@ -375,9 +315,9 @@ impl Input {
     }
 }
 
-fn terminal_modifiers(modifiers: Modifiers) -> TerminalModifiers {
+fn terminal_modifiers(modifiers: Modifiers, option_meta: bool) -> TerminalModifiers {
     TerminalModifiers {
-        alt: modifiers.alt && !cfg!(target_os = "macos"),
+        alt: modifiers.alt && (!cfg!(target_os = "macos") || option_meta),
         control: modifiers.ctrl,
         meta: modifiers.mac_cmd,
         shift: modifiers.shift,
@@ -546,7 +486,7 @@ mod tests {
     #[test]
     fn command_modifiers_and_local_selection_are_distinct() {
         assert_eq!(
-            terminal_modifiers(Modifiers::CTRL | Modifiers::ALT),
+            terminal_modifiers(Modifiers::CTRL | Modifiers::ALT, false),
             TerminalModifiers {
                 alt: !cfg!(target_os = "macos"),
                 control: true,

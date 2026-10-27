@@ -5,6 +5,10 @@ use std::path::PathBuf;
 #[path = "build/languages.rs"]
 mod languages;
 
+#[cfg(feature = "egui-ui")]
+#[path = "build/system_icons.rs"]
+mod system_icons;
+
 fn main() {
     println!("cargo:rerun-if-env-changed=AXSSH_BUILD_REVISION");
     println!("cargo:rerun-if-changed=ui");
@@ -58,6 +62,10 @@ fn main() {
     let out_dir = PathBuf::from(env::var_os("OUT_DIR").expect("OUT_DIR is missing"));
     languages::generate(PathBuf::from("translations").as_path(), &out_dir)
         .expect("failed to generate bundled language registry");
+
+    #[cfg(feature = "egui-ui")]
+    system_icons::generate(PathBuf::from("assets/os-icons").as_path(), &out_dir)
+        .expect("failed to generate bundled system icons");
 
     #[cfg(feature = "slint-ui")]
     compile_slint();

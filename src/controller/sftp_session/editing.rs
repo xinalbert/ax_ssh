@@ -128,11 +128,11 @@ impl Editing {
     }
 }
 
-fn max_bytes() -> u64 {
-    crate::config::SftpTransferSettings::default().remote_edit_max_file_bytes()
-}
-
 impl Worker {
+    fn edit_max_bytes(&self) -> u64 {
+        self.settings.transfers.remote_edit_max_file_bytes()
+    }
+
     pub(super) fn begin_edit(&mut self, path: String) -> Result<()> {
         anyhow::ensure!(
             self.connected && !self.loading,
@@ -144,7 +144,7 @@ impl Worker {
             .find(|entry| entry.path == path)
             .context("remote entry is no longer in this directory")?;
         anyhow::ensure!(
-            !entry.is_dir && !entry.is_symlink && entry.size <= max_bytes(),
+            !entry.is_dir && !entry.is_symlink && entry.size <= self.edit_max_bytes(),
             "edit requires a regular remote file within the edit limit"
         );
         let (id, local, download) = self.editing.edits.open(path.clone())?;
@@ -164,7 +164,7 @@ impl Worker {
                     id,
                     SftpWriteOperation::ReadEditFile {
                         path,
-                        max_bytes: max_bytes(),
+                        max_bytes: self.edit_max_bytes(),
                     },
                 );
             if let Err(error) = result {
@@ -223,10 +223,11 @@ impl Worker {
                 }
                 let root = self.editing.root()?;
                 let generation = self.generation;
+                let max_bytes = self.edit_max_bytes();
                 self.editing.task = Some(self.runtime.spawn_blocking(move || JobResult {
                     generation,
                     id,
-                    result: create_copy_in(&root, &edit.path, &data, max_bytes()).map(|path| {
+                    result: create_copy_in(&root, &edit.path, &data, max_bytes).map(|path| {
                         Job::Copy {
                             path,
                             stamp: content_stamp(&data),
@@ -237,7 +238,12 @@ impl Worker {
                 }));
             }
             event => {
-                if let SftpWriteEvent::Failed { message, .. } = &event {
+                if let SftpWriteEvent::Failed {
+                    operation_id,
+                    message,
+                } = &event
+                    && self.editing.edits.get(*operation_id).is_some()
+                {
                     self.status = format!("External edit failed: {message}")
                         .chars()
                         .take(1024)
@@ -331,10 +337,11 @@ impl Worker {
                     }
                 }
                 if let Some(data) = data {
+                    let max_bytes = self.edit_max_bytes();
                     let worker = self.transport.as_ref();
                     self.editing
                         .edits
-                        .save(result.id, max_bytes(), data, |id, operation| {
+                        .save(result.id, max_bytes, data, |id, operation| {
                             worker
                                 .context("SFTP is disconnected")?
                                 .request_sftp_write(id, operation)
@@ -371,6 +378,7 @@ impl Worker {
         if !self.connected || self.editing.task.is_some() {
             return Ok(());
         }
+        let max_bytes = self.edit_max_bytes();
         while let Some(id) = self.editing.pending_open.pop_front() {
             let Some(path) = self.editing.edits.get(id).and_then(|edit| edit.local_path) else {
                 continue;
@@ -387,7 +395,7 @@ impl Worker {
                 JobResult {
                     generation,
                     id,
-                    result: read_copy(&path, max_bytes())
+                    result: read_copy(&path, max_bytes)
                         .and_then(|_| {
                             anyhow::ensure!(
                                 permit.load(Ordering::Acquire),
@@ -437,14 +445,14 @@ impl Worker {
             generation,
             id: edit.id,
             result: (|| {
-                let file = open_read_copy(&path, max_bytes())?;
+                let file = open_read_copy(&path, max_bytes)?;
                 let fingerprint = local_file_fingerprint(&file)?;
                 let data = if force
                     || (stable
                         && previous == Some(fingerprint)
                         && read_fingerprint != Some(fingerprint))
                 {
-                    Some(read_open_copy(file, max_bytes())?)
+                    Some(read_open_copy(file, max_bytes)?)
                 } else {
                     None
                 };

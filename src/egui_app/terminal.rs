@@ -20,22 +20,100 @@ pub(super) struct TerminalPane {
     input: input::Input,
     size: Option<TerminalSize>,
     generation: Option<u64>,
+    font_revision: u64,
     last_grid: Option<geometry::Grid>,
     last_client: Option<TerminalClient>,
     last_ppp: f32,
     widget_id: Option<egui::Id>,
     selection_revision: i32,
     selection: Option<TerminalSelectionRange>,
-    anchor: Option<(usize, usize)>,
     focused: bool,
     last_input_frame: Option<u64>,
     next_selection_request: u64,
     pending_selection: Option<u64>,
+    last_clipboard_frame: Option<u64>,
 }
 
 impl TerminalPane {
+    pub(super) fn remote_clipboard(
+        &mut self,
+        ui: &mut egui::Ui,
+        client: &TerminalClient,
+        view: &TerminalView,
+        enabled: bool,
+    ) -> Result<()> {
+        use super::i18n::tr;
+        if !enabled || !ui.is_enabled() {
+            return Ok(());
+        }
+        let client = client.for_view(view);
+        let frame = ui.ctx().cumulative_frame_nr();
+        let admitted = !ui.is_sizing_pass() && self.last_clipboard_frame != Some(frame);
+        if admitted && let Some(text) = client.take_remote_clipboard()? {
+            ui.ctx().copy_text(text);
+        }
+        if let Some(token) = client.clipboard_read()? {
+            ui.label(tr!("Remote clipboard request", ui.ctx()));
+            ui.label(tr!(
+                "A remote application wants to read your default clipboard.",
+                ui.ctx()
+            ));
+            let mut answer = None;
+            let pending = super::remote_clipboard::pending(ui.ctx(), token);
+            ui.horizontal(|ui| {
+                if ui
+                    .add_enabled(!pending, egui::Button::new(tr!("Allow", ui.ctx())))
+                    .clicked()
+                {
+                    answer = Some(true);
+                }
+                if ui
+                    .add_enabled(!pending, egui::Button::new(tr!("Deny", ui.ctx())))
+                    .clicked()
+                {
+                    answer = Some(false);
+                }
+            });
+            if admitted && let Some(allow) = answer {
+                self.last_clipboard_frame = Some(frame);
+                if allow {
+                    let id = self
+                        .widget_id
+                        .ok_or_else(|| anyhow::anyhow!("terminal is not visible"))?;
+                    super::remote_clipboard::request(ui.ctx(), id, &client, view, token)?;
+                } else {
+                    client.respond_clipboard(token, None, view.selection_revision)?;
+                }
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn configure(&mut self, appearance: &ax_ssh::config::AppearanceSettings) {
         self.appearance = Some(appearance.clone());
+    }
+
+    pub(super) fn configure_interaction(
+        &mut self,
+        appearance: &ax_ssh::config::AppearanceSettings,
+    ) {
+        self.input.configure(appearance);
+    }
+
+    pub(super) fn request_paste(&self, ctx: &egui::Context) -> Result<()> {
+        let client = self
+            .last_client
+            .as_ref()
+            .ok_or_else(|| anyhow::anyhow!("terminal is not visible"))?;
+        let view = client.view()?;
+        anyhow::ensure!(
+            self.generation == Some(view.generation),
+            "terminal connection changed"
+        );
+        let id = self
+            .widget_id
+            .ok_or_else(|| anyhow::anyhow!("terminal is not visible"))?;
+        super::clipboard::request(ctx, id, client, &view)
     }
 
     pub(super) fn surrender_focus(&self, ctx: &egui::Context) {
@@ -49,6 +127,7 @@ impl TerminalPane {
 
     pub(super) fn suspend(&mut self) -> Result<()> {
         if let Some(client) = &self.last_client {
+            client.presentation_focus(false);
             if let Some(grid) = &self.last_grid {
                 self.input.cancel_remote_press(
                     client,
@@ -64,8 +143,14 @@ impl TerminalPane {
         }
         self.input.clear();
         self.focused = false;
+        self.selection = None;
+        self.pending_selection = None;
         self.clear_cache();
         Ok(())
+    }
+
+    pub(super) fn owns_widget(&self, id: egui::Id) -> bool {
+        self.widget_id == Some(id)
     }
 
     pub(super) fn focused(&self) -> bool {
@@ -89,13 +174,29 @@ impl TerminalPane {
         view: &TerminalView,
         request_focus: bool,
     ) -> Result<()> {
+        let revision = super::fonts::view(ui.ctx()).revision;
+        if self.font_revision != revision && !ui.is_sizing_pass() {
+            if let (Some(client), Some(grid)) = (&self.last_client, &self.last_grid) {
+                self.input.cancel_remote_press(
+                    client,
+                    grid,
+                    None,
+                    egui::Modifiers::default(),
+                    self.last_ppp,
+                )?;
+            }
+            self.font_revision = revision;
+            self.size = None;
+            self.clear_cache();
+            self.selection = None;
+            self.pending_selection = None;
+        }
         if self.generation != Some(view.generation) {
             self.generation = Some(view.generation);
             self.size = None;
             self.clear_cache();
             self.input.clear();
             self.selection = None;
-            self.anchor = None;
             self.pending_selection = None;
             self.focused = false;
         }
@@ -140,8 +241,9 @@ impl TerminalPane {
             self.size = Some(geometry.size);
         }
         if self.selection_revision != view.selection_revision {
+            self.input
+                .cancel_remote_press(client, &geometry, None, egui::Modifiers::NONE, ppp)?;
             self.selection = None;
-            self.anchor = None;
             self.selection_revision = view.selection_revision;
             self.pending_selection = None;
         }
@@ -155,6 +257,7 @@ impl TerminalPane {
         let focused = ui.is_enabled() && response.has_focus() && ui.input(|i| i.focused);
         if !ui.is_sizing_pass() && self.last_input_frame != Some(frame) {
             self.last_input_frame = Some(frame);
+            client.presentation_focus(focused);
             if focused != self.focused {
                 client.focus(focused)?;
                 self.focused = focused;
@@ -168,9 +271,10 @@ impl TerminalPane {
                     )?;
                     self.input.clear();
                     self.selection = None;
+                    self.pending_selection = None;
                 }
             }
-            self.input.handle(
+            let completed = self.input.handle(
                 ui,
                 &response,
                 client,
@@ -178,10 +282,13 @@ impl TerminalPane {
                 &geometry,
                 input::Selection {
                     range: &mut self.selection,
-                    anchor: &mut self.anchor,
                 },
             )?;
+            let mut completed = completed;
             if (response.double_clicked() || response.triple_clicked())
+                && self
+                    .input
+                    .local_selection_allowed(view, ui.input(|input| input.modifiers))
                 && let Some(pos) = response.interact_pointer_pos()
             {
                 let (row, column) = geometry.hit(pos);
@@ -206,6 +313,13 @@ impl TerminalPane {
             {
                 self.selection = result.range;
                 self.pending_selection = None;
+                completed = self.selection.is_some();
+            }
+            if completed
+                && self.input.auto_copy()
+                && let Some(range) = self.selection
+            {
+                client.copy(range, view.selection_revision)?;
             }
             if let Some(text) = client.take_clipboard()? {
                 ui.ctx().copy_text(text);
@@ -239,7 +353,7 @@ impl TerminalPane {
             &mut self.cache,
             font_size,
             ppp,
-            palette,
+            paint::Colors::new(palette, self.appearance.as_ref()),
         );
         if let Some(range) = self.selection {
             for row in range.start_row..=range.end_row {
@@ -355,6 +469,72 @@ impl TerminalPane {
 mod tests {
     use super::*;
     use std::sync::Arc;
+
+    #[tokio::test]
+    async fn applied_font_recomputes_grid_and_clears_selection_while_retaining_preedit() {
+        let runtime = tokio::runtime::Handle::current();
+        let terminal = ax_ssh::controller::TerminalSession::spawn(
+            &runtime,
+            "axssh-no-such-test-shell".into(),
+            Arc::new(|| {}),
+        );
+        let client = terminal.client();
+        let (fonts, mut font_client) = super::super::fonts::FontService::spawn(
+            &runtime,
+            super::super::fonts::Loader::bundled().unwrap(),
+            Arc::new(|| {}),
+        );
+        let ctx = egui::Context::default();
+        let mut appearance = ax_ssh::config::AppearanceSettings::default();
+        font_client.update(&ctx, &appearance).unwrap();
+        let mut pane = TerminalPane::default();
+        let view = client.view().unwrap();
+        let draw = |pane: &mut TerminalPane| {
+            let output = ctx.run_ui(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(
+                        egui::Pos2::ZERO,
+                        Vec2::new(900.0, 600.0),
+                    )),
+                    ..Default::default()
+                },
+                |ui| {
+                    pane.show(ui, &client, &view).unwrap();
+                },
+            );
+            output.drop_without_applying_deltas();
+        };
+        draw(&mut pane);
+        let old_cell = pane.last_grid.as_ref().unwrap().cell;
+        let old_size = pane.size;
+        pane.selection = Some(TerminalSelectionRange {
+            start_row: 0,
+            start_column: 0,
+            end_row: 0,
+            end_column: 2,
+        });
+        pane.input.preedit = "拼音".into();
+        appearance.terminal_font_family = "Iosevka Term".into();
+        tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                font_client.update(&ctx, &appearance).unwrap();
+                if !super::super::fonts::view(&ctx).pending {
+                    break;
+                }
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+        draw(&mut pane);
+        assert_ne!(pane.last_grid.as_ref().unwrap().cell.x, old_cell.x);
+        assert_ne!(pane.size, old_size);
+        assert!(pane.selection.is_none());
+        assert_eq!(pane.input.preedit, "拼音");
+        assert!(!pane.cache.is_empty());
+        fonts.shutdown().await.unwrap();
+        terminal.shutdown().await.unwrap();
+    }
 
     #[cfg(unix)]
     fn two_line_reader_script() -> std::path::PathBuf {
@@ -642,3 +822,6 @@ mod tests {
         std::fs::remove_file(script).expect("test shell script should be removed");
     }
 }
+
+#[cfg(all(test, unix))]
+mod interaction_tests;

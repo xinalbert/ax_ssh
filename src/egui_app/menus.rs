@@ -1,10 +1,14 @@
 //! One action table for native menus, Linux menus and keyboard routing.
+use super::i18n::{self, mark, tr};
 use ax_ssh::config::AppSettings;
+use ax_ssh::controller::WorkspaceView;
 use eframe::egui::{self, Key, KeyboardShortcut, Modifiers};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum Command {
     NewProfile,
+    ImportSessions,
+    ExportSelected,
     NewConnection,
     NewLocal,
     WorkspaceFile,
@@ -13,6 +17,7 @@ pub(super) enum Command {
     Paste,
     Settings,
     ToggleSidebar,
+    OpenSftp,
     SplitRight,
     SplitDown,
     PreviousTab,
@@ -27,43 +32,51 @@ pub(super) mod native;
 
 pub(super) const GROUPS: &[(&str, &[(Command, &str)])] = &[
     (
-        "File",
+        mark!("File"),
         &[
-            (Command::NewProfile, "New Server…"),
-            (Command::NewConnection, "New Connection"),
-            (Command::NewLocal, "New Local Shell"),
-            (Command::WorkspaceFile, "Open / Save Workspace…"),
-            (Command::SaveWorkspace, "Save Workspace"),
+            (Command::NewProfile, mark!("New Server…")),
+            (Command::ImportSessions, mark!("Import from Clipboard")),
+            (
+                Command::ExportSelected,
+                mark!("Export Selected to Clipboard"),
+            ),
+            (Command::NewConnection, mark!("New Connection")),
+            (Command::NewLocal, mark!("New Local Shell")),
+            (Command::WorkspaceFile, mark!("Open / Save Workspace…")),
+            (Command::SaveWorkspace, mark!("Save Workspace")),
         ],
     ),
     (
-        "Edit",
+        mark!("Edit"),
         &[
-            (Command::Copy, "Copy"),
-            (Command::Paste, "Paste"),
-            (Command::Settings, "Settings…"),
+            (Command::Copy, mark!("Copy")),
+            (Command::Paste, mark!("Paste")),
+            (Command::Settings, mark!("Settings…")),
         ],
     ),
     (
-        "View",
-        &[(Command::ToggleSidebar, "Toggle Session Sidebar")],
-    ),
-    (
-        "Pane",
+        mark!("View"),
         &[
-            (Command::SplitRight, "Split Columns"),
-            (Command::SplitDown, "Split Rows"),
+            (Command::ToggleSidebar, mark!("Toggle Session Sidebar")),
+            (Command::OpenSftp, mark!("SFTP")),
         ],
     ),
     (
-        "Window",
+        mark!("Pane"),
         &[
-            (Command::PreviousTab, "Previous Tab"),
-            (Command::NextTab, "Next Tab"),
-            (Command::CloseTab, "Close Current Tab"),
+            (Command::SplitRight, mark!("Split Columns")),
+            (Command::SplitDown, mark!("Split Rows")),
         ],
     ),
-    ("Help", &[(Command::About, "About AxSSH")]),
+    (
+        mark!("Window"),
+        &[
+            (Command::PreviousTab, mark!("Previous Tab")),
+            (Command::NextTab, mark!("Next Tab")),
+            (Command::CloseTab, mark!("Close Current Tab")),
+        ],
+    ),
+    (mark!("Help"), &[(Command::About, mark!("About AxSSH"))]),
 ];
 
 impl Command {
@@ -75,10 +88,13 @@ impl Command {
         };
         Some(match self {
             Self::NewProfile => settings.shortcuts.new_session.clone(),
+            Self::ImportSessions => settings.shortcuts.import_sessions.clone(),
+            Self::ExportSelected => settings.shortcuts.export_selected.clone(),
             Self::Settings => settings.shortcuts.open_settings.clone(),
             Self::ToggleSidebar => settings.shortcuts.toggle_sidebar.clone(),
             Self::Copy => settings.shortcuts.copy_selection.clone(),
             Self::Paste => settings.shortcuts.paste.clone(),
+            Self::OpenSftp => settings.shortcuts.open_sftp.clone(),
             Self::SplitRight => format!("{primary}+D"),
             Self::SplitDown => format!("{primary}+Shift+D"),
             Self::PreviousTab => "Ctrl+Shift+Tab".into(),
@@ -88,7 +104,19 @@ impl Command {
             _ => return None,
         })
     }
-    pub(super) fn enabled(self, ready: bool, blocked: bool, terminal: bool, tabs: usize) -> bool {
+    pub(super) fn enabled_for_view(self, view: &WorkspaceView, blocked: bool) -> bool {
+        let terminal = view
+            .tabs
+            .iter()
+            .any(|tab| Some(tab.id) == view.active_tab_id && !tab.settings);
+        self.enabled(view.ready, blocked, terminal, view.tabs.len())
+            && (self != Self::OpenSftp || sftp_target(view).is_some())
+            && (self != Self::ExportSelected
+                || !view.profiles.is_empty()
+                || !view.groups.is_empty())
+    }
+
+    fn enabled(self, ready: bool, blocked: bool, terminal: bool, tabs: usize) -> bool {
         if self == Self::Quit {
             return !blocked;
         }
@@ -101,6 +129,24 @@ impl Command {
                 _ => true,
             }
     }
+}
+
+/// Only saved SSH profiles can connect the existing SFTP companion.
+pub(super) fn sftp_target(view: &WorkspaceView) -> Option<uuid::Uuid> {
+    let tab = view
+        .tabs
+        .iter()
+        .find(|tab| Some(tab.id) == view.active_tab_id && !tab.settings)?;
+    let focused = tab.layout.panes.iter().find(|pane| pane.focused)?.tab_id;
+    tab.panes
+        .iter()
+        .find(|pane| {
+            pane.id == focused
+                && pane.sftp
+                && !pane.local
+                && pane.profile.as_ref().is_some_and(|p| p.ssh().is_some())
+        })
+        .map(|pane| pane.id)
 }
 
 pub(super) fn parse_shortcut(text: &str) -> anyhow::Result<KeyboardShortcut> {
@@ -169,9 +215,9 @@ pub(super) fn bar(
     let mut result = None;
     egui::MenuBar::new().ui(ui, |ui| {
         for (title, items) in GROUPS {
-            ui.menu_button(*title, |ui| {
+            ui.menu_button(i18n::current(ui.ctx()).text("", title), |ui| {
                 for (cmd, label) in *items {
-                    let button = egui::Button::new(*label)
+                    let button = egui::Button::new(i18n::current(ui.ctx()).text("", label))
                         .shortcut_text(cmd.shortcut(settings).unwrap_or_default());
                     if ui.add_enabled(enabled(*cmd), button).clicked() {
                         result = Some(*cmd);
@@ -180,7 +226,10 @@ pub(super) fn bar(
                 }
                 if *title == "File"
                     && ui
-                        .add_enabled(enabled(Command::Quit), egui::Button::new("Quit"))
+                        .add_enabled(
+                            enabled(Command::Quit),
+                            egui::Button::new(tr!("Quit", ui.ctx())),
+                        )
                         .clicked()
                 {
                     result = Some(Command::Quit);
@@ -195,6 +244,53 @@ pub(super) fn bar(
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn saved_transfer_chords_share_export_availability_and_modal_gates() {
+        let mut settings = AppSettings::default();
+        settings.shortcuts.import_sessions = "Ctrl+Alt+I".into();
+        settings.shortcuts.export_selected = "Ctrl+Alt+E".into();
+        let mut view = WorkspaceView {
+            ready: true,
+            busy: false,
+            status: String::new(),
+            error: None,
+            catalog_revision: 0,
+            settings: std::sync::Arc::new(settings),
+            profiles: std::sync::Arc::new(vec![]),
+            groups: std::sync::Arc::new(vec![]),
+            tabs: vec![],
+            active_tab_id: None,
+        };
+        assert!(!Command::ExportSelected.enabled_for_view(&view, false));
+        assert!(Command::ImportSessions.enabled_for_view(&view, false));
+        view.groups = std::sync::Arc::new(vec!["Empty group".into()]);
+        for command in [Command::ImportSessions, Command::ExportSelected] {
+            for blocked in [true, false] {
+                let chord = parse_shortcut(&command.shortcut(&view.settings).unwrap()).unwrap();
+                egui::Context::default()
+                    .run_ui(
+                        egui::RawInput {
+                            events: vec![egui::Event::Key {
+                                key: chord.logical_key,
+                                physical_key: None,
+                                pressed: true,
+                                repeat: false,
+                                modifiers: chord.modifiers,
+                            }],
+                            ..Default::default()
+                        },
+                        |ui| {
+                            assert_eq!(
+                                keyboard(ui, &view.settings, false, |cmd| cmd
+                                    .enabled_for_view(&view, blocked)),
+                                (!blocked).then_some(command)
+                            );
+                        },
+                    )
+                    .drop_without_applying_deltas();
+            }
+        }
+    }
     #[test]
     fn shortcuts_parse_and_modal_gates_cover_every_menu_action() {
         let settings = AppSettings::default();
@@ -216,6 +312,70 @@ mod tests {
 #[cfg(test)]
 mod routing_tests {
     use super::*;
+    #[test]
+    fn sftp_chord_is_consumed_once_only_when_enabled_and_never_on_repeat() {
+        let settings = AppSettings::default();
+        let chord = parse_shortcut(&settings.shortcuts.open_sftp).unwrap();
+        for (enabled, repeat, expected) in [
+            (true, false, Some(Command::OpenSftp)),
+            (false, false, None),
+            (true, true, None),
+        ] {
+            let ctx = egui::Context::default();
+            if repeat {
+                ctx.run_ui(
+                    egui::RawInput {
+                        events: vec![egui::Event::Key {
+                            key: chord.logical_key,
+                            physical_key: None,
+                            pressed: true,
+                            repeat: false,
+                            modifiers: chord.modifiers,
+                        }],
+                        ..Default::default()
+                    },
+                    |_| {},
+                )
+                .drop_without_applying_deltas();
+            }
+            ctx.run_ui(
+                egui::RawInput {
+                    events: vec![egui::Event::Key {
+                        key: chord.logical_key,
+                        physical_key: None,
+                        pressed: true,
+                        repeat,
+                        modifiers: chord.modifiers,
+                    }],
+                    ..Default::default()
+                },
+                |ui| {
+                    assert_eq!(
+                        keyboard(ui, &settings, false, |cmd| cmd != Command::OpenSftp
+                            || enabled),
+                        expected
+                    );
+                    assert_eq!(
+                        ui.input(|input| input
+                            .events
+                            .iter()
+                            .any(|event| matches!(event, egui::Event::Key { key: Key::M, .. }))),
+                        expected.is_none()
+                    );
+                    assert_eq!(
+                        keyboard(ui, &settings, false, |_| true),
+                        if enabled {
+                            None
+                        } else {
+                            Some(Command::OpenSftp)
+                        }
+                    );
+                },
+            )
+            .drop_without_applying_deltas();
+        }
+    }
+
     #[test]
     fn exact_chords_ignore_repeats_and_do_not_steal_alt_combinations() {
         let settings = AppSettings::default();

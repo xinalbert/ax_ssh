@@ -9,12 +9,14 @@ impl Worker {
     }
 
     pub(super) async fn stop_transport(&mut self) -> Result<()> {
+        self.clear_remote_clipboard()?;
+        let images = self.stop_images().await;
         // Drop the receiver before joining: a full event queue must not block cleanup.
         self.events = Events::Idle;
         if let Some(transport) = self.transport.take() {
             transport.shutdown().await?;
         }
-        Ok(())
+        images
     }
 
     async fn replace(&mut self) -> Result<()> {
@@ -22,6 +24,7 @@ impl Worker {
         self.prompt = None;
         self.pending_secret = None;
         self.profile = None;
+        self.microphone_forwarding = false;
         self.reconnect.cancel();
         self.retry_deadline = None;
         self.status = "Disconnecting…".into();
@@ -36,7 +39,8 @@ impl Worker {
             .checked_add(1)
             .context("connection generation exhausted")?;
         let size = self.model.size();
-        self.model = new_model(size);
+        self.model = new_model_with_settings(size, &self.settings);
+        self.clear_remote_clipboard()?;
         self.viewport.reset();
         self.last_resize = None;
         let mut shared = self
@@ -50,9 +54,11 @@ impl Worker {
 
     pub(super) async fn dispatch(&mut self, queued: QueuedCommand) -> Result<()> {
         match queued.command {
-            Command::Connect(profile, secret, automatic) => {
+            Command::Connect(profile, secret, options) => {
                 self.replace().await?;
-                self.reconnect.prepare_manual_retry(automatic);
+                self.reconnect
+                    .prepare_manual_retry(options.automatic_reconnect);
+                self.microphone_forwarding = options.microphone_forwarding;
                 self.profile = Some(*profile);
                 self.start_remote(secret)?;
                 self.publish()?;
@@ -66,6 +72,9 @@ impl Worker {
                 self.identity = ConnectionIdentity::Local;
                 self.status = "Starting local shell…".into();
                 self.publish()?;
+            }
+            Command::PrepareImage(id, _, _) if queued.generation != self.generation => {
+                self.clear_image_ticket(id)?;
             }
             _ if queued.generation != self.generation => {}
             Command::Disconnect => {
@@ -103,6 +112,8 @@ impl Worker {
                 self.start_remote(secret)?;
                 self.publish()?;
             }
+            Command::PrepareImage(id, png, revision) => self.prepare_image(id, png, revision)?,
+            Command::FinishImage(id, accept) => self.finish_image(id, accept).await?,
             command => self.command(command)?,
         }
         Ok(())
@@ -129,8 +140,17 @@ impl Worker {
 
     fn start_authenticated(&mut self, secret: Zeroizing<String>) -> Result<()> {
         let profile = self.profile.as_ref().context("missing temporary profile")?;
-        let (transport, events, identity) =
-            Transport::start(profile, secret, Uuid::new_v4(), self.model.size());
+        let (transport, events, identity) = Transport::start(
+            profile,
+            secret,
+            Uuid::new_v4(),
+            self.model.size(),
+            crate::ssh::SshTerminalSettings {
+                x11: self.x11_settings.clone(),
+                audio_format: self.audio_format,
+                automatic_microphone: self.microphone_forwarding,
+            },
+        );
         self.transport = Some(transport);
         self.events = events;
         self.identity = identity;
@@ -193,6 +213,7 @@ impl Worker {
             }
             Some(Event::Connected) => {
                 self.connected = true;
+                self.clear_remote_clipboard()?;
                 self.status = "Connected".into();
                 self.prompt = None;
                 if self.reconnect.enabled() {
@@ -201,12 +222,17 @@ impl Worker {
                 self.publish()?;
             }
             Some(Event::Output(chunk)) => {
-                let effects = TerminalOutput::process(&mut self.model, &chunk.data);
+                let mut effects = TerminalOutput::process(&mut self.model, &chunk.data);
+                self.offer_clipboard(&mut effects)?;
                 for response in effects.responses {
                     self.transport()?.send(response)?;
                 }
-                // Title and OSC 52 actions remain disabled in the experimental frontend.
+                // Window titles remain disabled in the experimental frontend.
                 self.viewport.defer_output();
+            }
+            Some(Event::Notice(status)) => {
+                self.status = status.chars().take(512).collect();
+                self.publish()?;
             }
             Some(Event::AuthenticationFailed) => {
                 self.connected = false;

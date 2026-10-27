@@ -1,17 +1,19 @@
 //! Workspace composition; only UI drafts, focus and bounded Painter caches live here.
 
+use super::i18n::tr;
 use super::{connection::ConnectionForm, terminal::TerminalPane};
 use anyhow::Result;
 use ax_ssh::controller::{
-    CatalogAction, PaneDirection, SftpClient, WorkspaceAction, WorkspaceClient, WorkspaceView,
+    CatalogAction, PaneDirection, WorkspaceAction, WorkspaceClient, WorkspaceView,
 };
 use eframe::egui::{self, Color32, Rect, Sense, Stroke, Vec2};
 use std::collections::{HashMap, HashSet};
-use std::path::PathBuf;
 use uuid::Uuid;
 
 mod editor;
+mod sftp;
 mod tabs;
+mod transfer;
 use editor::Editor;
 
 struct PaneUi {
@@ -23,7 +25,11 @@ struct PaneUi {
 
 #[derive(Default)]
 struct SftpPane {
+    generation: Option<u64>,
+    prompt_id: Option<Uuid>,
+    last_action_frame: Option<u64>,
     path: String,
+    focus_requested: bool,
     local_directory: String,
     upload_source: String,
     upload_remote: String,
@@ -31,6 +37,10 @@ struct SftpPane {
     icons: super::file_icons::FileIconTextures,
     edits: super::sftp_edit::EditControls,
     drops: super::sftp_drop::Drops,
+    transfers: sftp::TransferControls,
+    remote_selection: sftp::RemoteSelection,
+    local_selection: sftp::LocalSelection,
+    entry_dialog: Option<sftp::EntryDialog>,
     error: Option<String>,
 }
 
@@ -45,6 +55,7 @@ pub(super) enum Action {
 
 #[derive(Default)]
 pub(super) struct WorkspaceUi {
+    icons: super::system_icons::Icons,
     pub(super) native_menu: bool,
     pub(super) menu_command: Option<super::menus::Command>,
     settings: Option<super::settings::SettingsUi>,
@@ -69,10 +80,50 @@ pub(super) struct WorkspaceUi {
     last_active: Option<Uuid>,
     last_focused: Option<Uuid>,
     focus_after_change: bool,
+    sftp_focus: Option<Uuid>,
+    transfer: Option<transfer::TransferUi>,
 }
 
 impl WorkspaceUi {
+    pub(super) fn font_appearance<'a>(
+        &'a self,
+        saved: &'a ax_ssh::config::AppSettings,
+    ) -> &'a ax_ssh::config::AppearanceSettings {
+        &self
+            .settings
+            .as_ref()
+            .map_or(saved, |draft| draft.effective(saved))
+            .appearance
+    }
+
+    pub(super) fn permits_paste(&self, view: &WorkspaceView, owner: egui::Id) -> bool {
+        !self.blocked(view)
+            && self.menu_command.is_none()
+            && view
+                .tabs
+                .iter()
+                .find(|tab| Some(tab.id) == view.active_tab_id)
+                .filter(|tab| !tab.settings)
+                .and_then(|tab| tab.layout.panes.iter().find(|pane| pane.focused))
+                .and_then(|pane| self.panes.get(&pane.tab_id))
+                .is_some_and(|pane| pane.terminal.owns_widget(owner))
+    }
+
+    #[cfg(target_os = "macos")]
+    pub(super) fn terminal_keyboard_active(
+        &self,
+        ctx: &egui::Context,
+        view: &WorkspaceView,
+    ) -> bool {
+        ctx.memory(|memory| memory.focused())
+            .is_some_and(|owner| self.permits_paste(view, owner))
+    }
+
     pub(super) fn clear_caches(&mut self) {
+        self.icons.clear();
+        if let Some(settings) = &mut self.settings {
+            settings.clear_caches();
+        }
         for pane in self.panes.values_mut() {
             pane.terminal.clear_cache();
             pane.sftp.icons.clear();
@@ -104,18 +155,33 @@ impl WorkspaceUi {
                 settings.request_close(true);
             }
         }
-        let effective = self
+        let mut effective = self
             .settings
             .as_ref()
             .map(|draft| draft.effective(&view.settings))
             .unwrap_or(&view.settings)
             .clone();
+        effective.appearance.theme = ax_ssh::config::ThemeSettings::normalized(
+            effective.appearance.theme.mode.as_setting(),
+            effective.appearance.theme.palette.as_setting(),
+            effective.appearance.theme.custom_light.clone(),
+            effective.appearance.theme.custom_dark.clone(),
+        );
         self.theme.apply(ui.ctx(), &effective.appearance.theme);
         let title = view
             .tabs
             .iter()
             .find(|tab| Some(tab.id) == view.active_tab_id)
-            .map(|tab| format!("{} — AxSSH", tab.title))
+            .map(|tab| {
+                format!(
+                    "{} — AxSSH",
+                    if tab.settings {
+                        tr!("Settings", ui.ctx())
+                    } else {
+                        &tab.title
+                    }
+                )
+            })
             .unwrap_or_else(|| "AxSSH".into());
         if self.last_title.as_ref() != Some(&title) {
             ui.ctx()
@@ -144,14 +210,8 @@ impl WorkspaceUi {
         let mut action = None;
         let can_act =
             !ui.is_sizing_pass() && self.last_action_frame != Some(ui.ctx().cumulative_frame_nr());
-        let terminal = view
-            .tabs
-            .iter()
-            .any(|tab| Some(tab.id) == view.active_tab_id && !tab.settings);
         let blocked = self.blocked(&view);
-        let enabled = |cmd: super::menus::Command| {
-            cmd.enabled(view.ready, blocked, terminal, view.tabs.len())
-        };
+        let enabled = |cmd: super::menus::Command| cmd.enabled_for_view(&view, blocked);
         let mut command = None;
         if can_act {
             command = self
@@ -167,7 +227,12 @@ impl WorkspaceUi {
                 command = Some(cmd);
             }
             ui.add_enabled_ui(!blocked && view.ready, |ui| {
-                if let Some(next) = self.tabs(ui, &view, f32::from(effective.workspace.tab_width)) {
+                if let Some(next) = self.tabs(
+                    ui,
+                    &view,
+                    f32::from(effective.workspace.tab_width),
+                    &effective.appearance,
+                ) {
                     action = Some(next);
                 }
             });
@@ -181,13 +246,22 @@ impl WorkspaceUi {
                 self.last_action_frame = Some(ui.ctx().cumulative_frame_nr());
             }
         }
+        let sftp_focus = if ui.is_sizing_pass() {
+            None
+        } else {
+            self.sftp_focus.take().filter(|id| {
+                view.ready && !blocked && super::menus::sftp_target(&view) == Some(*id)
+            })
+        };
         if !self.sidebar_hidden {
             egui::Panel::left("saved-sessions")
                 .exact_size(f32::from(effective.workspace.sidebar_width))
                 .resizable(false)
                 .show(ui, |ui| {
                     ui.add_enabled_ui(view.ready && !blocked, |ui| {
-                        if let Some(next) = self.sidebar(ui, &view) {
+                        if let Some(next) =
+                            self.sidebar(ui, &view, &effective.workspace, &effective.appearance)
+                        {
                             action = Some(next);
                         }
                     });
@@ -205,7 +279,7 @@ impl WorkspaceUi {
                     .iter()
                     .find(|tab| Some(tab.id) == view.active_tab_id)
                 else {
-                    ui.label("Open a local shell or saved connection to start.");
+                    ui.label(tr!("Open a saved session or create a new tab.", ui.ctx()));
                     return Ok(());
                 };
                 if tab.settings {
@@ -241,10 +315,10 @@ impl WorkspaceUi {
                 self.last_active = view.active_tab_id;
                 self.last_focused = focused;
                 ui.horizontal_wrapped(|ui| {
-                    if ui.button("Split columns").clicked() {
+                    if ui.button(tr!("Split Columns", ui.ctx())).clicked() {
                         action = Some(Action::Layout(WorkspaceAction::Split(PaneDirection::Right)));
                     }
-                    if ui.button("Split rows").clicked() {
+                    if ui.button(tr!("Split Rows", ui.ctx())).clicked() {
                         action = Some(Action::Layout(WorkspaceAction::Split(PaneDirection::Down)));
                     }
                     for (label, direction) in [
@@ -253,12 +327,16 @@ impl WorkspaceUi {
                         ("↓", PaneDirection::Down),
                         ("→", PaneDirection::Right),
                     ] {
-                        if ui.button(label).on_hover_text("Focus pane").clicked() {
+                        if ui
+                            .button(label)
+                            .on_hover_text(tr!("Focus pane", ui.ctx()))
+                            .clicked()
+                        {
                             action =
                                 Some(Action::Layout(WorkspaceAction::FocusDirection(direction)));
                         }
                     }
-                    if ui.button("Close pane").clicked()
+                    if ui.button(tr!("Close pane", ui.ctx())).clicked()
                         && let Some(id) = focused
                     {
                         action = Some(Action::Layout(WorkspaceAction::ClosePane(id)));
@@ -274,15 +352,7 @@ impl WorkspaceUi {
                     }
                 }
                 self.visible = visible;
-                let blocked = view.busy
-                    || self.editor.is_some()
-                    || self.groups_open
-                    || self.file_open
-                    || self.delete.is_some()
-                    || self
-                        .settings
-                        .as_ref()
-                        .is_some_and(|settings| settings.confirm_close);
+                let blocked = self.blocked(&view);
                 for placement in &tab.layout.panes {
                     let Some(metadata) = tab.panes.iter().find(|pane| pane.id == placement.tab_id)
                     else {
@@ -309,6 +379,8 @@ impl WorkspaceUi {
                         sftp: SftpPane::default(),
                     });
                     pane.terminal.configure(&effective.appearance);
+                    pane.terminal
+                        .configure_interaction(&view.settings.appearance);
                     let rect = Rect::from_min_size(
                         base.min
                             + Vec2::new(placement.x * base.width(), placement.y * base.height()),
@@ -343,6 +415,7 @@ impl WorkspaceUi {
                     }
                     let focus = placement.focused
                         && !blocked
+                        && sftp_focus != Some(metadata.id)
                         && ((request_focus && (metadata.local || terminal_view.connected))
                             || (terminal_view.connected && !pane.connected));
                     pane.connected = terminal_view.connected;
@@ -360,6 +433,7 @@ impl WorkspaceUi {
                                     if metadata.sftp
                                         && let Some(sftp_client) = client.sftp(metadata.id)?
                                     {
+                                        pane.sftp.focus_requested = sftp_focus == Some(metadata.id);
                                         pane.sftp.show(
                                             ui,
                                             &sftp_client,
@@ -368,10 +442,20 @@ impl WorkspaceUi {
                                             self.native_drop_position,
                                         )?;
                                     }
+                                    if pane.sftp.entry_dialog.is_some() {
+                                        pane.terminal.suspend()?;
+                                        return Ok(());
+                                    }
                                     if terminal_view.prompt.is_some() {
                                         pane.terminal.suspend()?;
                                         return Ok(());
                                     }
+                                    pane.terminal.remote_clipboard(
+                                        ui,
+                                        &terminal_client,
+                                        &terminal_view,
+                                        view.settings.terminal.osc52_clipboard,
+                                    )?;
                                     pane.terminal.show_with_focus(
                                         ui,
                                         &terminal_client,
@@ -447,18 +531,24 @@ impl WorkspaceUi {
                 .iter()
                 .any(|tab| tab.panes.iter().any(|pane| pane.id == *id))
         });
+        self.entry_dialogs(ui, client, &view)?;
+        self.transfer_dialog(ui, client, &view)?;
         if let Some(settings) = &mut self.settings {
             settings.close_dialog(ui.ctx(), client, &view);
         }
         if self.about_open {
-            egui::Window::new("About AxSSH")
+            egui::Window::new(tr!("About AxSSH", ui.ctx()))
+                .id(egui::Id::unique("about-dialog"))
                 .open(&mut self.about_open)
                 .collapsible(false)
                 .resizable(false)
                 .show(ui.ctx(), |ui| {
                     ui.heading("AxSSH");
                     ui.label(format!("{} · egui 0.37.0", env!("CARGO_PKG_VERSION")));
-                    ui.hyperlink_to("Source and licenses", "https://github.com/xinalbert/ax_ssh");
+                    ui.hyperlink_to(
+                        tr!("Source and licenses", ui.ctx()),
+                        "https://github.com/xinalbert/ax_ssh",
+                    );
                 });
         }
         if let Some(next) = self.dialogs(ui.ctx(), &view) {
@@ -475,7 +565,11 @@ impl WorkspaceUi {
     }
 
     pub(super) fn blocked(&self, view: &WorkspaceView) -> bool {
-        view.busy
+        self.panes
+            .values()
+            .any(|pane| pane.sftp.entry_dialog.is_some())
+            || view.busy
+            || self.transfer.is_some()
             || self.editor.is_some()
             || self.groups_open
             || self.file_open
@@ -495,6 +589,14 @@ impl WorkspaceUi {
         use super::menus::Command;
         let layout = match command {
             Command::NewProfile => return Ok(Some(Action::Edit(None))),
+            Command::ImportSessions => {
+                self.transfer = Some(transfer::TransferUi::import(view));
+                return Ok(None);
+            }
+            Command::ExportSelected => {
+                self.transfer = Some(transfer::TransferUi::export(view));
+                return Ok(None);
+            }
             Command::NewConnection => WorkspaceAction::NewConnection,
             Command::NewLocal => WorkspaceAction::NewLocal,
             Command::SaveWorkspace => WorkspaceAction::SaveNow,
@@ -517,6 +619,10 @@ impl WorkspaceUi {
                 self.sidebar_hidden = !self.sidebar_hidden;
                 return Ok(None);
             }
+            Command::OpenSftp => {
+                self.sftp_focus = super::menus::sftp_target(view);
+                return Ok(None);
+            }
             Command::About => {
                 self.about_open = true;
                 return Ok(None);
@@ -529,12 +635,22 @@ impl WorkspaceUi {
                 }
                 return Ok(None);
             }
-            Command::Copy | Command::Paste => {
-                ui.ctx().send_viewport_cmd(if command == Command::Copy {
-                    egui::ViewportCommand::RequestCopy
-                } else {
-                    egui::ViewportCommand::RequestPaste
-                });
+            Command::Paste => {
+                if let Some(id) = view
+                    .tabs
+                    .iter()
+                    .find(|tab| Some(tab.id) == view.active_tab_id)
+                    .and_then(|tab| tab.layout.panes.iter().find(|pane| pane.focused))
+                    .map(|pane| pane.tab_id)
+                    && let Some(pane) = self.panes.get(&id)
+                {
+                    pane.terminal.request_paste(ui.ctx())?;
+                }
+                return Ok(None);
+            }
+            Command::Copy => {
+                ui.ctx()
+                    .send_viewport_cmd(egui::ViewportCommand::RequestCopy);
                 return Ok(None);
             }
         };
@@ -620,275 +736,6 @@ impl WorkspaceUi {
             Action::Catalog(action) => self
                 .transactions
                 .push(client.catalog(view.catalog_revision, action)?),
-        }
-        Ok(())
-    }
-}
-
-impl SftpPane {
-    fn show(
-        &mut self,
-        ui: &mut egui::Ui,
-        client: &SftpClient,
-        profile: Option<&ax_ssh::config::SessionProfile>,
-        pane_id: Uuid,
-        native_position: Option<egui::Pos2>,
-    ) -> Result<()> {
-        let view = client.view()?;
-        let client = client.for_view(&view);
-        let mut edit_action = None;
-        self.icons.sync(ui.ctx(), &view.icons);
-        if self.path.is_empty() && !view.home.is_empty() {
-            self.path = view.home.clone();
-        }
-        if self.local_directory.is_empty() {
-            self.local_directory = ".".into();
-        }
-        ui.separator();
-        ui.horizontal(|ui| {
-            ui.strong("SFTP companion");
-            if ui.button("Connect").clicked()
-                && let Some(profile) = profile.cloned()
-            {
-                let secret =
-                    std::mem::replace(&mut self.secret, zeroize::Zeroizing::new(String::new()));
-                if let Err(error) = client.connect(profile, secret) {
-                    self.error = Some(format!("{error:#}"));
-                }
-            }
-            if ui.button("Disconnect").clicked() {
-                let _ = client.disconnect();
-            }
-        });
-        if !view.connected {
-            ui.horizontal(|ui| {
-                ui.label("Password / key passphrase");
-                let mut output = egui::TextEdit::singleline(&mut *self.secret)
-                    .password(true)
-                    .char_limit(16 * 1024)
-                    .show(ui);
-                output.state.clear_undoer();
-                output.state.store(ui.ctx(), output.response.id);
-            });
-        }
-        if let Some(prompt) = &view.prompt {
-            ui.colored_label(
-                egui::Color32::YELLOW,
-                format!(
-                    "SSH prompt for {}@{}:{}",
-                    prompt.username, prompt.host, prompt.port
-                ),
-            );
-            if matches!(
-                prompt.kind,
-                ax_ssh::controller::TerminalPromptKind::HostKey {
-                    confirmable: false,
-                    ..
-                }
-            ) {
-                ui.label("Host key rejected by trust policy");
-            } else if ui.button("Retry with fresh credentials").clicked() {
-                let secret =
-                    std::mem::replace(&mut self.secret, zeroize::Zeroizing::new(String::new()));
-                if let Err(error) = client.respond(prompt.id, secret) {
-                    self.error = Some(format!("{error:#}"));
-                }
-            }
-        }
-        ui.label(&view.status);
-        ui.horizontal(|ui| {
-            ui.label("Remote path");
-            ui.add(egui::TextEdit::singleline(&mut self.path).char_limit(4096));
-            if ui.button("List").clicked() {
-                let path = if self.path.trim().is_empty() {
-                    view.home.clone()
-                } else {
-                    self.path.trim().to_owned()
-                };
-                if let Err(error) = client.list(path) {
-                    self.error = Some(format!("{error:#}"));
-                }
-            }
-            if view.has_more && ui.button("More").clicked() {
-                let _ = client.load_more();
-            }
-        });
-        ui.horizontal(|ui| {
-            ui.label("Download directory");
-            ui.add(egui::TextEdit::singleline(&mut self.local_directory).char_limit(4096));
-            if ui.button("Browse local").clicked()
-                && let Err(error) = client.list_local(PathBuf::from(self.local_directory.trim()))
-            {
-                self.error = Some(format!("{error:#}"));
-            }
-        });
-        let local_response = egui::Frame::group(ui.style()).show(ui, |ui| {
-            ui.set_min_width(ui.available_width());
-            ui.label("Local files · drop remote entries here to download");
-            if view.local_loading {
-                ui.label("Reading local directory…");
-            }
-            ui.label(&view.local_path);
-            egui::ScrollArea::vertical()
-                .id_salt("local-files")
-                .max_height(140.0)
-                .show(ui, |ui| {
-                    for entry in &view.local_entries {
-                        ui.horizontal(|ui| {
-                            self.icons.show(ui, &entry.icon);
-                            super::sftp_drop::Drops::source(
-                                ui,
-                                pane_id,
-                                &view,
-                                &entry.path,
-                                &entry.name,
-                                true,
-                            );
-                            if entry.is_dir
-                                && ui.small_button("Open").clicked()
-                                && let Err(error) = client.list_local(entry.path.clone().into())
-                            {
-                                self.error = Some(format!("{error:#}"));
-                            }
-                            if !entry.is_dir && ui.small_button("Use upload").clicked() {
-                                self.upload_source = entry.path.clone();
-                                self.upload_remote =
-                                    format!("{}/{}", view.path.trim_end_matches('/'), entry.name);
-                            }
-                        });
-                    }
-                });
-        });
-        if let Err(error) = self.drops.target(
-            ui,
-            &local_response.response,
-            pane_id,
-            &view,
-            &client,
-            super::sftp_drop::Target {
-                remote: false,
-                native_position: None,
-            },
-        ) {
-            self.error = Some(format!("{error:#}"));
-        }
-        ui.horizontal(|ui| {
-            ui.label("Upload file");
-            ui.add(egui::TextEdit::singleline(&mut self.upload_source).char_limit(4096));
-            ui.label("Remote path");
-            ui.add(egui::TextEdit::singleline(&mut self.upload_remote).char_limit(4096));
-            if ui.button("Upload").clicked()
-                && let Err(error) = client.upload(
-                    PathBuf::from(self.upload_source.trim()),
-                    self.upload_remote.trim().to_owned(),
-                )
-            {
-                self.error = Some(format!("{error:#}"));
-            }
-        });
-        let remote_response = egui::Frame::group(ui.style()).show(ui, |ui| {
-            ui.set_min_width(ui.available_width());
-            ui.label("Remote files · drop local files or folders here to upload");
-            egui::ScrollArea::vertical()
-                .id_salt("remote-files")
-                .max_height(180.0)
-                .show(ui, |ui| {
-                    for entry in &view.entries {
-                        ui.horizontal(|ui| {
-                            self.icons.show(ui, &entry.icon);
-                            super::sftp_drop::Drops::source(
-                                ui,
-                                pane_id,
-                                &view,
-                                &entry.path,
-                                &entry.name,
-                                false,
-                            );
-                            if ui
-                                .add_enabled(
-                                    view.connected
-                                        && !view.loading
-                                        && !entry.is_dir
-                                        && !entry.is_symlink,
-                                    egui::Button::new("Edit externally"),
-                                )
-                                .clicked()
-                            {
-                                edit_action =
-                                    Some(super::sftp_edit::EditAction::Open(entry.path.clone()));
-                            }
-                            if !entry.is_dir
-                                && ui.small_button("Download").clicked()
-                                && let Err(error) = client.download(
-                                    entry.path.clone(),
-                                    self.local_directory.clone().into(),
-                                )
-                            {
-                                self.error = Some(format!("{error:#}"));
-                            }
-                        });
-                    }
-                });
-        });
-        if let Err(error) = self.drops.target(
-            ui,
-            &remote_response.response,
-            pane_id,
-            &view,
-            &client,
-            super::sftp_drop::Target {
-                remote: true,
-                native_position,
-            },
-        ) {
-            self.error = Some(format!("{error:#}"));
-        }
-        if view.upload_preparing
-            && ui.button("Cancel upload preparation").clicked()
-            && let Err(error) = client.cancel_upload_preparation()
-        {
-            self.error = Some(format!("{error:#}"));
-        }
-        if let Some(action) = super::sftp_edit::EditControls::show(ui, &view) {
-            edit_action = Some(action);
-        }
-        if let Some(action) = edit_action
-            && let Err(error) = self.edits.apply(
-                ui.ctx().cumulative_frame_nr(),
-                ui.is_sizing_pass(),
-                action,
-                &client,
-            )
-        {
-            self.error = Some(format!("{error:#}"));
-        }
-        for transfer in &view.transfers {
-            ui.horizontal(|ui| {
-                ui.label(format!(
-                    "{} · {} / {} · {}",
-                    transfer.name, transfer.downloaded_bytes, transfer.total_bytes, transfer.status
-                ));
-                if transfer.conflict {
-                    if ui.small_button("Overwrite").clicked() {
-                        let _ = client.resolve_conflict(
-                            transfer.id,
-                            ax_ssh::sftp::SftpUploadConflictChoice::Overwrite,
-                        );
-                    }
-                    if ui.small_button("Skip").clicked() {
-                        let _ = client.resolve_conflict(
-                            transfer.id,
-                            ax_ssh::sftp::SftpUploadConflictChoice::Skip,
-                        );
-                    }
-                }
-                if ui.small_button("Cancel").clicked() {
-                    let _ = client.cancel(transfer.id);
-                }
-            });
-        }
-        if let Some(error) = &self.error {
-            ui.colored_label(egui::Color32::LIGHT_RED, error);
         }
         Ok(())
     }

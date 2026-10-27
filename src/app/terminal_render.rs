@@ -11,7 +11,6 @@ use ax_ssh::terminal::{
 };
 
 mod geometry;
-mod highlighting;
 mod typography;
 
 pub(super) use typography::FontRole;
@@ -25,12 +24,10 @@ pub(super) fn batchable_symbol(character: char) -> bool {
     typography::fixed_symbol(character)
 }
 
-use self::highlighting::HighlightSpan;
-
-const MAX_SEMANTIC_HIGHLIGHT_BYTES: usize = 512;
-const MIN_TEXT_BRIGHTNESS: f64 = 0.60;
-const MAX_TEXT_BRIGHTNESS: f64 = 1.20;
-const DIM_TEXT_BRIGHTNESS_FACTOR: f64 = 0.70;
+use ax_ssh::controller::semantic::{
+    self as highlighting, HighlightSpan, SemanticHighlight,
+    highlight_run as semantic_highlight_spans,
+};
 
 pub(super) fn prepare_semantic_highlighting() {
     highlighting::prepare();
@@ -47,14 +44,6 @@ impl RgbColor {
     pub(super) const fn new(red: u8, green: u8, blue: u8) -> Self {
         Self { red, green, blue }
     }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum SemanticHighlight {
-    Success,
-    Info,
-    Warning,
-    Error,
 }
 
 struct SemanticPalette {
@@ -470,26 +459,6 @@ fn terminal_render_cache_key(
     hash
 }
 
-fn semantic_highlight_spans(text: &str, cells: usize, style: TerminalStyle) -> Vec<HighlightSpan> {
-    // An ASCII run with one terminal cell per byte can be split without
-    // changing its cell geometry. Wide and combining text keeps its original
-    // terminal styling; Cmd/Ctrl target feedback remains available for it.
-    if !text.is_ascii()
-        || text.is_empty()
-        || text.len() > MAX_SEMANTIC_HIGHLIGHT_BYTES
-        || cells != text.len()
-        || style.foreground != TerminalColor::Default
-        || style.background != TerminalColor::Default
-        || style.inverse
-        || style.dim
-        || style.hidden
-    {
-        return Vec::new();
-    }
-
-    highlighting::spans(text)
-}
-
 fn split_semantic_run(
     run: RenderedTerminalRun,
     highlights: Vec<HighlightSpan>,
@@ -579,72 +548,12 @@ fn indexed_color(index: u8, palette: &TerminalPalette) -> RgbColor {
 }
 
 fn adjust_text_foreground(color: RgbColor, brightness: f64, dim: bool) -> RgbColor {
-    let brightness = if brightness.is_finite() {
-        brightness.clamp(MIN_TEXT_BRIGHTNESS, MAX_TEXT_BRIGHTNESS)
-    } else {
-        1.0
-    };
-    let factor = if dim {
-        brightness * DIM_TEXT_BRIGHTNESS_FACTOR
-    } else {
-        brightness
-    };
-    if factor == 1.0 {
-        return color;
-    }
-
-    let red = f64::from(color.red) / 255.0;
-    let green = f64::from(color.green) / 255.0;
-    let blue = f64::from(color.blue) / 255.0;
-    let maximum = red.max(green).max(blue);
-    let minimum = red.min(green).min(blue);
-    let lightness = (maximum + minimum) / 2.0;
-    let delta = maximum - minimum;
-    let (hue, saturation) = if delta == 0.0 {
-        (0.0, 0.0)
-    } else {
-        let saturation = delta / (1.0 - (2.0 * lightness - 1.0).abs());
-        let hue = if maximum == red {
-            ((green - blue) / delta).rem_euclid(6.0)
-        } else if maximum == green {
-            (blue - red) / delta + 2.0
-        } else {
-            (red - green) / delta + 4.0
-        } / 6.0;
-        (hue, saturation)
-    };
-    hsl_to_rgb(hue, saturation, (lightness * factor).clamp(0.0, 1.0))
-}
-
-fn hsl_to_rgb(hue: f64, saturation: f64, lightness: f64) -> RgbColor {
-    let channel = |offset: f64| {
-        let value = if saturation == 0.0 {
-            lightness
-        } else {
-            let q = if lightness < 0.5 {
-                lightness * (1.0 + saturation)
-            } else {
-                lightness + saturation - lightness * saturation
-            };
-            let p = 2.0 * lightness - q;
-            hue_channel(p, q, hue + offset)
-        };
-        (value * 255.0).round().clamp(0.0, 255.0) as u8
-    };
-    RgbColor::new(channel(1.0 / 3.0), channel(0.0), channel(-1.0 / 3.0))
-}
-
-fn hue_channel(p: f64, q: f64, hue: f64) -> f64 {
-    let hue = hue.rem_euclid(1.0);
-    if hue < 1.0 / 6.0 {
-        p + (q - p) * 6.0 * hue
-    } else if hue < 0.5 {
-        q
-    } else if hue < 2.0 / 3.0 {
-        p + (q - p) * (2.0 / 3.0 - hue) * 6.0
-    } else {
-        p
-    }
+    let [red, green, blue] = ax_ssh::controller::adjust_terminal_text_rgb(
+        [color.red, color.green, color.blue],
+        brightness,
+        dim,
+    );
+    RgbColor::new(red, green, blue)
 }
 
 struct TerminalPalette {

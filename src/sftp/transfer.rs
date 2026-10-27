@@ -585,7 +585,7 @@ pub fn snapshot_local_file_for_open(
     )
 }
 
-fn snapshot_local_file_for_open_at(
+pub(crate) fn snapshot_local_file_for_open_at(
     source: &mut LocalFile,
     name: &str,
     cache_dir: &Path,
@@ -602,6 +602,7 @@ fn snapshot_local_file_for_open_at(
         anyhow::bail!("validated local file is no longer a regular file");
     }
     let expected_bytes = metadata.len();
+    let fingerprint = crate::file_identity::local_file_fingerprint(source)?;
     if expected_bytes > max_file_bytes {
         anyhow::bail!(
             "local file is {expected_bytes} bytes, exceeding the {max_file_bytes}-byte open limit"
@@ -651,6 +652,10 @@ fn snapshot_local_file_for_open_at(
     if cancellation.load(Ordering::Acquire) {
         anyhow::bail!("local file open snapshot was cancelled");
     }
+    anyhow::ensure!(
+        crate::file_identity::local_file_fingerprint(source)? == fingerprint,
+        "local file changed while creating its open snapshot"
+    );
     pending.finish()
 }
 

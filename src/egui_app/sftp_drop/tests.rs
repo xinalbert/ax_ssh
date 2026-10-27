@@ -2,6 +2,17 @@ use super::*;
 use ax_ssh::controller::SftpSession;
 use std::sync::Arc;
 
+#[test]
+fn selected_drag_payload_keeps_the_bounded_selection_and_falls_back_to_one_path() {
+    let selected = vec!["/local/one".into(), "/local/two".into()];
+    assert_eq!(Drops::paths_for("/local/two", Some(&selected)), selected);
+    assert_eq!(
+        Drops::paths_for("/local/other", Some(&selected)),
+        vec!["/local/other"]
+    );
+    assert_eq!(Drops::paths_for("/local/one", None), vec!["/local/one"]);
+}
+
 #[derive(Debug)]
 struct NativePath(PathBuf);
 impl egui::DroppedFile for NativePath {
@@ -162,7 +173,7 @@ async fn internal_drag_rejects_another_pane_or_connection_without_an_upload() {
                 pane: source_pane,
                 generation,
                 revision: 0,
-                path: "/fixture/file".into(),
+                paths: vec!["/fixture/file".into()],
                 local: true,
             },
         );

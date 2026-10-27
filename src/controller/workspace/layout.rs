@@ -17,16 +17,32 @@ impl Owner {
             !self.panes.contains_key(&id),
             "terminal identity already exists"
         );
-        let terminal = if local {
-            TerminalSession::spawn(
+        let terminal = TerminalSession::with_settings(
+            &self.runtime,
+            local.then(|| self.sessions.settings.terminal.local_shell.clone()),
+            self.sessions.settings.terminal.clone(),
+            self.wake.clone(),
+        );
+        terminal.configure_x11(self.sessions.settings.x11.clone());
+        terminal.configure_audio(&self.sessions.settings.audio);
+        terminal.configure_refresh(
+            self.sessions
+                .settings
+                .appearance
+                .focused_terminal_refresh_fps,
+            self.sessions
+                .settings
+                .appearance
+                .unfocused_terminal_refresh_fps,
+        );
+        let sftp = (!local).then(|| {
+            SftpSession::with_settings(
                 &self.runtime,
-                self.sessions.settings.terminal.local_shell.clone(),
+                self.sessions.settings.sftp_transfers.clone(),
+                self.sessions.settings.sftp_transfer_filters.clone(),
                 self.wake.clone(),
             )
-        } else {
-            TerminalSession::idle(&self.runtime, self.wake.clone())
-        };
-        let sftp = (!local).then(|| SftpSession::idle(&self.runtime, self.wake.clone()));
+        });
         self.panes.insert(
             id,
             Pane {

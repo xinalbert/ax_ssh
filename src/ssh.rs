@@ -49,6 +49,7 @@ pub fn remove_known_host(host: &str, port: u16, fingerprint: &str) -> Result<boo
 
 mod known_hosts;
 mod private_keys;
+mod shell_setup;
 mod system_release;
 mod worker;
 #[cfg(all(test, feature = "egui-ui"))]
@@ -778,10 +779,12 @@ impl SshConnection {
         x11: Option<&x11::X11Forwarding>,
         audio_source: Option<&str>,
     ) -> Result<(SshShell, X11RequestStatus)> {
-        let channel = self.handle.channel_open_session().await?;
+        let mut channel = self.handle.channel_open_session().await?;
         channel
             .request_pty(
-                true,
+                // With X11, its request is the only outstanding reply: russh
+                // request methods enqueue messages rather than await acceptance.
+                x11.is_none(),
                 "xterm-256color",
                 size.columns(),
                 size.rows(),
@@ -790,33 +793,9 @@ impl SshConnection {
                 INTERACTIVE_TERMINAL_MODES,
             )
             .await?;
-        let x11_status = match x11 {
-            Some(x11) => {
-                let fake_cookie = x11.fake_cookie_hex();
-                match timeout(
-                    CONNECT_TIMEOUT,
-                    channel.request_x11(
-                        true,
-                        false,
-                        x11::X11_AUTH_PROTOCOL,
-                        fake_cookie.as_str(),
-                        x11.screen(),
-                    ),
-                )
-                .await
-                {
-                    Ok(Ok(())) => X11RequestStatus::Enabled,
-                    Ok(Err(error)) => {
-                        debug!(%error, "SSH server rejected the X11 forwarding request");
-                        X11RequestStatus::Rejected
-                    }
-                    Err(_) => {
-                        debug!("SSH X11 forwarding request timed out");
-                        X11RequestStatus::Rejected
-                    }
-                }
-            }
-            None => X11RequestStatus::NotRequested,
+        let (x11_status, initial_output) = match x11 {
+            Some(x11) => shell_setup::request_x11(&mut channel, x11).await?,
+            None => (X11RequestStatus::NotRequested, Vec::new()),
         };
         if let Some(source) = audio_source {
             // PULSE_SOURCE is the standard client selector. Servers may deny
@@ -826,7 +805,13 @@ impl SshConnection {
             }
         }
         channel.request_shell(true).await?;
-        Ok((SshShell { channel }, x11_status))
+        Ok((
+            SshShell {
+                channel,
+                initial_output,
+            },
+            x11_status,
+        ))
     }
 
     pub(crate) async fn open_sftp_stream(&self) -> Result<ChannelStream<client::Msg>> {
@@ -858,6 +843,7 @@ enum X11RequestStatus {
 
 pub struct SshShell {
     channel: Channel<russh::client::Msg>,
+    initial_output: Vec<u8>,
 }
 
 fn terminal_event_from_channel_message(message: Option<ChannelMsg>) -> Option<SshEvent> {
@@ -898,6 +884,9 @@ impl SshShell {
     /// exit, while an exhausted event stream is a transport disconnect; neither
     /// is an idle state that a caller should poll again.
     pub async fn next_event(&mut self) -> Result<SshEvent> {
+        if !self.initial_output.is_empty() {
+            return Ok(SshEvent::Output(std::mem::take(&mut self.initial_output)));
+        }
         loop {
             // Transport keepalive/inactivity owns liveness. A quiet interactive shell is valid.
             if let Some(event) = terminal_event_from_channel_message(self.channel.wait().await) {

@@ -3,6 +3,8 @@
 mod edit;
 mod transfer;
 
+#[cfg(feature = "egui-ui")]
+pub(crate) use transfer::snapshot_local_file_for_open_at;
 pub(crate) use transfer::{
     MAX_RECURSIVE_DOWNLOAD_FILES, SFTP_TRANSFER_EVENT_CAPACITY, SftpDownloadHandle,
     SftpDownloadRequest, SftpDownloadRoot, SftpUploadHandle, SftpUploadRequest,

@@ -109,14 +109,33 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     };
     let x11_requested = x11_forwarding.is_some();
     let initial_size = *resize_rx.borrow_and_update();
-    let (mut shell, x11_request_status) = match connection
-        .open_shell(
+    let opened = {
+        let opening = connection.open_shell(
             initial_size,
             x11_forwarding.as_ref(),
             audio_source.as_deref(),
-        )
-        .await
-    {
+        );
+        tokio::pin!(opening);
+        loop {
+            tokio::select! {
+                result = &mut opening => break Some(result),
+                command = command_rx.recv() => {
+                    if matches!(command, None | Some(SshCommand::Disconnect)) {
+                        break None;
+                    }
+                }
+            }
+        }
+    };
+    let Some(opened) = opened else {
+        shutdown_media_tasks(&media_stop, &mut media_tasks).await;
+        if let Err(error) = connection.disconnect().await {
+            warn!(%error, "cannot disconnect during shell setup");
+        }
+        send_event(&event_tx, SshSessionEvent::Disconnected, session_id).await;
+        return;
+    };
+    let (mut shell, x11_request_status) = match opened {
         Ok(shell) => shell,
         Err(error) => {
             warn!(session_id = %session_id, %error, "SSH worker failed to open interactive shell");
