@@ -19,7 +19,6 @@ impl SessionEditorState {
                 sftp_per_tab_transfers: i32::from(
                     sessions.settings.sftp_transfers.per_tab_transfers,
                 ),
-                sftp_max_file_gib: sessions.settings.sftp_transfers.max_file_gib as i32,
                 sftp_rate_limit_mib_per_second: sessions
                     .settings
                     .sftp_transfers
@@ -153,7 +152,6 @@ impl SessionEditorState {
             sftp_local_path,
             sftp_override_limits,
             sftp_per_tab_transfers: i32::from(sftp_policy.per_tab_transfers),
-            sftp_max_file_gib: sftp_policy.max_file_gib as i32,
             sftp_rate_limit_mib_per_second: sftp_policy.rate_limit_mib_per_second as i32,
             credential_storage,
             default_credential_storage,

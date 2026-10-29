@@ -28,7 +28,6 @@ export struct SessionEditorViewState {
     sftp_local_path: string,
     sftp_override_limits: bool,
     sftp_per_tab_transfers: int,
-    sftp_max_file_gib: int,
     sftp_rate_limit_mib_per_second: int,
     credential_storage: string,
     default_credential_storage: string,
@@ -51,7 +50,7 @@ export component SessionEditorPane inherits Rectangle {
     in property <SessionEditorViewState> source;
     callback save(
         string, string, string, string, string, string, string, string,
-        string, string, bool, int, int, int, string, bool, string, string, string, string, string, string, string, string, string, string, bool, bool,
+        string, string, bool, int, int, string, bool, string, string, string, string, string, string, string, string, string, string, bool, bool,
     );
     callback refresh-serial-ports();
     callback serial-mode-changed(bool);
@@ -78,7 +77,6 @@ export component SessionEditorPane inherits Rectangle {
     private property <string> sftp-local-path-draft;
     private property <bool> sftp-override-limits-draft: false;
     private property <int> sftp-per-tab-transfers-draft: 2;
-    private property <int> sftp-max-file-gib-draft: 20;
     private property <int> sftp-rate-limit-mib-per-second-draft: 0;
     private property <string> password-draft;
     private property <bool> remember-password-draft: false;
@@ -116,7 +114,6 @@ export component SessionEditorPane inherits Rectangle {
             root.sftp-local-path-draft,
             root.sftp-override-limits-draft,
             root.sftp-per-tab-transfers-draft,
-            root.sftp-max-file-gib-draft,
             root.sftp-rate-limit-mib-per-second-draft,
             root.password-draft,
             root.remember-password-draft,
@@ -152,7 +149,6 @@ export component SessionEditorPane inherits Rectangle {
         root.sftp-local-path-draft = root.source.sftp_local_path;
         root.sftp-override-limits-draft = root.source.sftp_override_limits;
         root.sftp-per-tab-transfers-draft = root.source.sftp_per_tab_transfers;
-        root.sftp-max-file-gib-draft = root.source.sftp_max_file_gib;
         root.sftp-rate-limit-mib-per-second-draft = root.source.sftp_rate_limit_mib_per_second;
         // Passwords are intentionally never part of the source snapshot.
         root.password-draft = "";
@@ -647,7 +643,7 @@ export component SessionEditorPane inherits Rectangle {
                     spacing: Theme.space-md;
                     SessionEditorSectionHeading {
                         label: @tr("SFTP transfer limits");
-                        description: @tr("Override the global SFTP settings for this server; 0 GiB means unlimited.");
+                        description: @tr("Override bandwidth and simultaneous transfers for new connections to this server.");
                     }
                     CheckBox {
                         text: @tr("Use server-specific limits");
@@ -658,19 +654,6 @@ export component SessionEditorPane inherits Rectangle {
                         height: self.preferred-height;
                         vertical-stretch: 0;
                         spacing: Theme.space-xl;
-                        SessionEditorField {
-                            horizontal-stretch: 1;
-                            label: @tr("Maximum file size (GiB)");
-                            SpinBox {
-                                width: parent.width;
-                                height: Theme.editor-input-row-height;
-                                minimum: 0;
-                                maximum: 1024;
-                                enabled: root.sftp-override-limits-draft;
-                                value <=> root.sftp-max-file-gib-draft;
-                                accessible-label: @tr("Server SFTP maximum file size in GiB");
-                            }
-                        }
                         SessionEditorField {
                             horizontal-stretch: 1;
                             label: @tr("Bandwidth limit (MiB/s; 0 unlimited)");

@@ -177,7 +177,6 @@ pub(super) fn wire_files(
                 if new_name.is_empty()
                     || new_name == "."
                     || new_name == ".."
-                    || new_name.chars().count() > MAX_REMOTE_NAME_CHARS
                     || new_name.contains(['/', '\\'])
                     || new_name.chars().any(char::is_control)
                 {

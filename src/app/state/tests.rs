@@ -1368,6 +1368,16 @@ fn sftp_transfer_state_covers_progress_pause_resume_and_terminal_phases() {
 }
 
 #[test]
+fn sftp_transfer_rows_do_not_drop_entries_after_512() {
+    let mut sftp = SftpBrowserState::default();
+    for index in 0..520 {
+        sftp.queue_transfer(Uuid::new_v4(), format!("file-{index}.bin"), 1)
+            .expect("all transfer rows should be retained");
+    }
+    assert_eq!(sftp.transfers.len(), 520);
+}
+
+#[test]
 fn completed_sftp_download_is_retained_without_opening() {
     let mut sftp = SftpBrowserState::default();
     let transfer_id = Uuid::new_v4();

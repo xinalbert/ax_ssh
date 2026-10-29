@@ -1,64 +1,60 @@
 use super::*;
+use std::collections::HashSet;
 
 #[test]
-fn local_upload_discovery_keeps_all_selected_files_and_nested_paths() {
-    let root = std::env::temp_dir().join(format!("ax-ssh-upload-tree-{}", Uuid::new_v4()));
-    let folder = root.join("folder");
-    let nested = folder.join("nested");
-    std::fs::create_dir_all(&nested).expect("nested fixture directory");
-    std::fs::write(folder.join("first.txt"), b"one").expect("first fixture file");
-    std::fs::write(nested.join("second.txt"), b"two").expect("second fixture file");
-    std::fs::write(nested.join(".DS_Store"), b"excluded").expect("filtered fixture file");
-    std::fs::write(root.join("third.txt"), b"three").expect("selected fixture file");
-    #[cfg(unix)]
-    std::os::unix::fs::symlink(root.join("third.txt"), nested.join("linked.txt"))
-        .expect("symlink fixture");
-
-    let files = discover_local_uploads(
-        vec![folder, root.join("third.txt")],
-        "/srv",
-        &[".DS_Store".to_owned()],
-        20 * 1024 * 1024 * 1024,
-    )
-    .expect("all eligible nested files should be discovered");
-    let targets = files
-        .iter()
-        .map(|file| file.remote_path.as_str())
-        .collect::<HashSet<_>>();
+fn local_upload_names_have_no_client_character_count_cap() {
+    let name = format!("{}.txt", "n".repeat(600));
     assert_eq!(
-        targets,
-        HashSet::from([
-            "/srv/folder/first.txt",
-            "/srv/folder/nested/second.txt",
-            "/srv/third.txt",
-        ])
+        upload_local_name(std::path::Path::new(&name)).unwrap(),
+        name
     );
-    let nested_file = files
-        .iter()
-        .find(|file| file.remote_path.ends_with("second.txt"))
-        .expect("nested file should be present");
-    assert_eq!(
-        nested_file.remote_directories,
-        ["/srv/folder", "/srv/folder/nested"]
-    );
-    std::fs::remove_dir_all(root).expect("fixture should be removed");
+    assert!(upload_local_name(std::path::Path::new("line\nbreak")).is_err());
 }
 
-#[test]
-fn local_upload_discovery_uses_per_file_limit_without_batch_byte_cap() {
-    let path = std::env::temp_dir().join(format!("ax-ssh-sparse-upload-{}", Uuid::new_v4()));
-    let file = std::fs::File::create(&path).expect("create sparse fixture");
-    file.set_len(19 * 1024 * 1024 * 1024)
-        .expect("size sparse fixture");
-    drop(file);
-    let accepted = discover_local_uploads(vec![path.clone()], "/srv", &[], 20 * 1024 * 1024 * 1024)
-        .expect("single file below the configured limit");
-    assert_eq!(accepted.len(), 1);
-    let unlimited = discover_local_uploads(vec![path.clone()], "/srv", &[], u64::MAX)
-        .expect("zero-sized policy limit should allow this file");
-    assert_eq!(unlimited.len(), 1);
-    assert!(
-        discover_local_uploads(vec![path.clone()], "/srv", &[], 10 * 1024 * 1024 * 1024).is_err()
+#[tokio::test]
+async fn streaming_upload_discovery_keeps_more_than_512_files_and_deep_paths() {
+    let root = std::env::temp_dir().join(format!("ax-ssh-stream-upload-{}", Uuid::new_v4()));
+    std::fs::create_dir_all(&root).expect("create upload fixture root");
+    for index in 0..520 {
+        std::fs::write(root.join(format!("file-{index:03}.txt")), b"content")
+            .expect("create upload fixture file");
+    }
+    let mut deep = root.clone();
+    for index in 0..20 {
+        deep.push(format!("level-{index:02}"));
+    }
+    std::fs::create_dir_all(&deep).expect("create deep upload fixture");
+    std::fs::write(deep.join("last.txt"), b"deep").expect("create deep upload file");
+    #[cfg(unix)]
+    std::os::unix::fs::symlink(root.join("file-000.txt"), root.join("linked-file.txt"))
+        .expect("create link that should be reported without stopping the scan");
+
+    let (sender, mut receiver) = tokio::sync::mpsc::channel(8);
+    let scan_root = root.clone();
+    let discovery = tokio::task::spawn_blocking(move || {
+        discover_local_uploads_streaming(vec![scan_root], "/srv", &[], &sender)
+    });
+    let mut remote_paths = HashSet::new();
+    while let Some(file) = receiver.recv().await {
+        remote_paths.insert(file.remote_path);
+    }
+    let summary = discovery
+        .await
+        .expect("streaming discovery task")
+        .expect("streaming discovery succeeds");
+    assert_eq!(summary.discovered_files, 521);
+    #[cfg(unix)]
+    assert_eq!(summary.skipped_entries, 1);
+    #[cfg(not(unix))]
+    assert_eq!(summary.skipped_entries, 0);
+    assert_eq!(remote_paths.len(), 521);
+    let root_name = root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .expect("fixture root name");
+    let deep_remote_path = format!(
+        "/srv/{root_name}/level-00/level-01/level-02/level-03/level-04/level-05/level-06/level-07/level-08/level-09/level-10/level-11/level-12/level-13/level-14/level-15/level-16/level-17/level-18/level-19/last.txt"
     );
-    std::fs::remove_file(path).expect("remove sparse fixture");
+    assert!(remote_paths.contains(&deep_remote_path));
+    std::fs::remove_dir_all(root).expect("remove upload fixture");
 }

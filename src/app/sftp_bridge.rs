@@ -12,9 +12,7 @@ pub(super) use self::navigation::{load_local_directory, navigate_sftp_tab_to_pat
 use self::transfers::*;
 
 use super::local_files::{
-    LOCAL_DIRECTORY_PATH_LIMIT, LocalDirectoryEntry,
-    MAX_LOCAL_UPLOAD_FILES as MAX_DROPPED_LOCAL_PATHS, PreparedLocalUpload, discover_local_uploads,
-    read_local_directory, validate_local_file_for_open,
+    LocalDirectoryEntry, PreparedLocalUpload, read_local_directory, validate_local_file_for_open,
 };
 use super::*;
 use std::path::{Path, PathBuf};
@@ -23,8 +21,6 @@ use std::sync::atomic::{AtomicBool, Ordering};
 const LOCAL_DIRECTORY_TIMEOUT: Duration = Duration::from_secs(5);
 const LOCAL_OPEN_TIMEOUT: Duration = Duration::from_secs(5);
 const LOCAL_SNAPSHOT_TIMEOUT: Duration = Duration::from_secs(30 * 60);
-const MAX_REMOTE_NAME_CHARS: usize = 512;
-const MAX_DROPPED_LOCAL_DATA_BYTES: usize = LOCAL_DIRECTORY_PATH_LIMIT * MAX_DROPPED_LOCAL_PATHS;
 const LOCAL_DRAG_PREFIX: &str = "axssh-local-path:";
 const REMOTE_DRAG_PREFIX: &str = "axssh-remote-path:";
 const SFTP_DRAG_TARGET: &str = "ax_ssh::sftp_drag";
@@ -86,18 +82,6 @@ fn active_sftp_transfer_filter_patterns(state: &Arc<Mutex<AppState>>) -> Result<
         .effective_patterns())
 }
 
-fn sftp_max_file_bytes_for_tab(state: &Arc<Mutex<AppState>>, tab_id: Uuid) -> Result<u64> {
-    let app = state
-        .lock()
-        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
-    app.terminal(tab_id)
-        .context("SFTP tab is no longer available")?
-        .worker
-        .as_ref()
-        .context("SFTP tab has no worker")?
-        .sftp_max_file_bytes()
-}
-
 fn prepare_selected_local_upload(
     state: &Arc<Mutex<AppState>>,
     router: &WindowRouter,
@@ -128,11 +112,10 @@ fn prepare_selected_local_upload(
         .entries
         .iter()
         .filter(|entry| terminal.sftp.local.selected.contains(&entry.path))
-        .filter(|entry| !entry.is_symlink)
         .map(|entry| PathBuf::from(&entry.path))
         .collect::<Vec<_>>();
-    if selected.is_empty() || selected.len() > MAX_DROPPED_LOCAL_PATHS {
-        anyhow::bail!("select up to {MAX_DROPPED_LOCAL_PATHS} local files or folders to upload");
+    if selected.is_empty() {
+        anyhow::bail!("select at least one local file or folder to upload");
     }
     Ok((tab_id, remote_directory, selected))
 }

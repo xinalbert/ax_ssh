@@ -419,15 +419,13 @@ pub(super) async fn find_keep_both_path(
         .rsplit_once('.')
         .filter(|(stem, _)| !stem.is_empty())
         .map_or((name, ""), |(stem, extension)| (stem, extension));
-    for number in 1..=MAX_KEEP_BOTH_CANDIDATES {
+    let mut number = 1_u64;
+    loop {
         let candidate_name = if extension.is_empty() {
             format!("{stem} ({number})")
         } else {
             format!("{stem} ({number}).{extension}")
         };
-        if candidate_name.chars().count() > MAX_NAME_CHARS {
-            anyhow::bail!("remote file name is too long to keep both copies");
-        }
         let candidate = format!("{parent}/{candidate_name}");
         validate_remote_path(&candidate)?;
         if inspect_remote_upload_target(session, &candidate)
@@ -436,8 +434,10 @@ pub(super) async fn find_keep_both_path(
         {
             return Ok(candidate);
         }
+        number = number
+            .checked_add(1)
+            .context("no available remote name for another copy")?;
     }
-    anyhow::bail!("no available remote name for another copy")
 }
 
 pub(super) async fn posix_rename_upload(

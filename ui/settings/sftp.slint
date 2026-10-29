@@ -10,7 +10,6 @@ export component SftpSettingsPage inherits SettingsPage {
     in-out property <string> draft-sftp-filter-custom-patterns;
     in-out property <int> draft-sftp-per-tab-transfers;
     in-out property <int> draft-sftp-global-uploads;
-    in-out property <int> draft-sftp-max-file-gib;
     in-out property <int> draft-sftp-rate-limit-mib-per-second;
     in-out property <int> draft-sftp-local-open-max-file-mib;
     in-out property <int> draft-sftp-remote-edit-max-file-mib;
@@ -18,20 +17,6 @@ export component SftpSettingsPage inherits SettingsPage {
     callback restore-sftp-filter-defaults();
 
     SettingsSectionHeading { label: @tr("SFTP TRANSFERS"); }
-    SettingsRow {
-        label: @tr("Maximum file size (GiB)");
-        description: @tr("Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB");
-        SettingsField {
-            SpinBox {
-                width: Theme.settings-wide-number-width;
-                height: Theme.settings-control-height;
-                minimum: 0;
-                maximum: 1024;
-                value <=> root.draft-sftp-max-file-gib;
-                accessible-label: @tr("Maximum SFTP file size in GiB");
-            }
-        }
-    }
     SettingsRow {
         label: @tr("Bandwidth limit (MiB/s)");
         description: @tr("Shared by uploads and downloads in each SFTP tab; 0 means unlimited");

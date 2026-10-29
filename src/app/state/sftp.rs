@@ -129,14 +129,98 @@ impl SftpBrowserState {
         )
     }
 
-    pub(in crate::app) fn can_queue_uploads(&self, count: usize) -> bool {
-        count <= SFTP_TRANSFER_HISTORY_LIMIT
-            && self
-                .transfers
-                .iter()
-                .filter(|transfer| transfer.phase.active())
-                .count()
-                <= SFTP_TRANSFER_HISTORY_LIMIT - count
+    pub(in crate::app) fn queue_transfer_event(
+        &mut self,
+        id: Uuid,
+        name: String,
+        total_bytes: u64,
+        upload: bool,
+        local_path: Option<std::path::PathBuf>,
+        remote_path: Option<String>,
+    ) -> Result<()> {
+        self.queue_transfer_with_pause(
+            id,
+            name,
+            total_bytes,
+            if upload {
+                SftpTransferDirection::Upload
+            } else {
+                SftpTransferDirection::Download
+            },
+            local_path,
+            remote_path,
+        )
+    }
+
+    pub(in crate::app) fn reserve_download_root(&mut self, id: Uuid) -> bool {
+        if self.pending_download_roots.contains(&id) {
+            return false;
+        }
+        self.pending_download_roots.insert(id);
+        true
+    }
+
+    pub(in crate::app) fn begin_download_discovery(
+        &mut self,
+        id: Uuid,
+        name: String,
+        local_path: PathBuf,
+        remote_path: String,
+    ) -> Result<()> {
+        self.queue_transfer_event(id, name, 0, false, Some(local_path), Some(remote_path))?;
+        self.scanning_download_roots.insert(id);
+        self.set_transfer_status(id, "Scanning directory…");
+        Ok(())
+    }
+
+    pub(in crate::app) fn finish_download_root(
+        &mut self,
+        id: Uuid,
+        discovered_files: usize,
+        skipped_entries: usize,
+        message: Option<String>,
+    ) {
+        self.pending_download_roots.remove(&id);
+        if !self.scanning_download_roots.remove(&id) {
+            return;
+        }
+        let status = if discovered_files > 0 && skipped_entries == 0 {
+            format!("Scanned {discovered_files} files")
+        } else if discovered_files > 0 {
+            format!(
+                "Scanned {discovered_files} files; skipped {skipped_entries}. {}",
+                message.unwrap_or_else(|| "Some entries could not be read".to_owned())
+            )
+        } else {
+            format!(
+                "Scanned {discovered_files} files; skipped {skipped_entries}. {}",
+                message.unwrap_or_else(|| {
+                    if discovered_files == 0 {
+                        "No regular files were eligible for download".to_owned()
+                    } else {
+                        "Some entries could not be read".to_owned()
+                    }
+                })
+            )
+        };
+        let phase = if discovered_files > 0 {
+            SftpTransferPhase::Completed
+        } else {
+            SftpTransferPhase::Failed
+        };
+        self.finish_transfer(id, phase, status);
+    }
+
+    pub(in crate::app) fn fail_download_root(&mut self, id: Uuid, name: String, message: String) {
+        self.pending_download_roots.remove(&id);
+        self.scanning_download_roots.remove(&id);
+        self.record_transfer_failure(id, name, message);
+    }
+
+    pub(in crate::app) fn set_transfer_status(&mut self, id: Uuid, status: &str) {
+        if let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) {
+            transfer.status = status.to_owned();
+        }
     }
 
     fn queue_transfer_with_pause(
@@ -170,19 +254,6 @@ impl SftpBrowserState {
                 }
             }
             return Ok(());
-        }
-        if self.transfers.len() >= SFTP_TRANSFER_HISTORY_LIMIT {
-            let removable = self
-                .transfers
-                .iter()
-                .position(|transfer| !transfer.phase.cancellable());
-            if let Some(index) = removable {
-                if let Some(removed) = self.transfers.remove(index) {
-                    self.selected_transfers.remove(&removed.id);
-                }
-            } else {
-                anyhow::bail!("SFTP transfer history is full");
-            }
         }
         self.transfers.push_back(SftpTransferState {
             id,
@@ -590,6 +661,8 @@ impl SftpBrowserState {
         phase: SftpTransferPhase,
         status: String,
     ) {
+        self.pending_download_roots.remove(&id);
+        self.scanning_download_roots.remove(&id);
         self.upload_conflicts
             .retain(|conflict| conflict.transfer_id != id);
         let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
@@ -597,7 +670,8 @@ impl SftpBrowserState {
         };
         let allowed = matches!(
             (transfer.phase, phase),
-            (SftpTransferPhase::Queued, SftpTransferPhase::Cancelled)
+            (SftpTransferPhase::Queued, SftpTransferPhase::Completed)
+                | (SftpTransferPhase::Queued, SftpTransferPhase::Cancelled)
                 | (SftpTransferPhase::Queued, SftpTransferPhase::Failed)
                 | (SftpTransferPhase::Queued, SftpTransferPhase::Skipped)
                 | (
@@ -1291,6 +1365,8 @@ impl SftpTransferState {
             status: self.status.clone(),
             selected,
             has_local_path: self.local_path.is_some(),
+            local_path: self.local_path.clone(),
+            remote_path: self.remote_path.clone(),
         }
     }
 }

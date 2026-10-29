@@ -403,6 +403,9 @@ msgstr "{0}を削除しますか？このグループのサーバーは「未分
 msgid "Deny"
 msgstr "拒否"
 
+msgid "Destination: {0}"
+msgstr "転送先: {0}"
+
 msgid "Detect again on next connection"
 msgstr "次回の接続時に再検出"
 
@@ -444,6 +447,9 @@ msgstr "複製"
 
 msgid "Duplicate Group"
 msgstr "グループを複製"
+
+msgid "ETA"
+msgstr "残り時間"
 
 msgid "Edit"
 msgstr "編集"
@@ -715,20 +721,11 @@ msgstr "接続サイドバーのユーザー名とIPv4アドレスの中央オ�
 msgid "Maximize Window"
 msgstr "ウィンドウを最大化"
 
-msgid "Maximum SFTP file size in GiB"
-msgstr "SFTPファイルサイズの上限（GiB）"
-
-msgid "Maximum file size (GiB)"
-msgstr "ファイルサイズの上限（GiB）"
-
 msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
 msgstr "外部編集でダウンロード／アップロードするファイルの上限；既定は4 MiB、範囲は1～64 MiB"
 
 msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
 msgstr "1つのSFTPタブでの同時アップロード／ダウンロード数の上限"
-
-msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
-msgstr "転送する1ファイルのサイズ上限；0は無制限、既定は20 GiB"
 
 msgid "Maximum uploads shared by all SFTP tabs"
 msgstr "すべてのSFTPタブで共有するアップロード数の上限"
@@ -880,8 +877,8 @@ msgstr "任意；接続時または保存時のみ入力"
 msgid "Overlay"
 msgstr "オーバーレイ"
 
-msgid "Override the global SFTP settings for this server; 0 GiB means unlimited."
-msgstr "このサーバーで全体のSFTP設定を上書き；0 GiBは無制限。"
+msgid "Override bandwidth and simultaneous transfers for new connections to this server."
+msgstr "このサーバーへの新規接続で、帯域幅と同時転送数を個別に設定します。"
 
 msgid "Overwrite"
 msgstr "上書き"
@@ -1276,9 +1273,6 @@ msgstr "シリアル通信"
 msgid "Server SFTP bandwidth limit in MiB per second"
 msgstr "サーバーのSFTP帯域幅上限（MiB/秒）"
 
-msgid "Server SFTP maximum file size in GiB"
-msgstr "サーバーのSFTPファイルサイズ上限（GiB）"
-
 msgid "Server SFTP simultaneous transfers"
 msgstr "サーバーのSFTP同時転送数"
 
@@ -1362,6 +1356,9 @@ msgstr "名前順に並べ替え"
 
 msgid "Sort by size"
 msgstr "サイズ順に並べ替え"
+
+msgid "Source: {0}"
+msgstr "転送元: {0}"
 
 msgid "Speed"
 msgstr "速度"
@@ -1918,20 +1915,12 @@ msgid "Masks usernames and IPv4 addresses in the session sidebar"
 msgstr "接続サイドバーのユーザー名とIPv4アドレスを隠す"
 
 msgctxt "settings-search"
-msgid "Maximum file size (GiB)"
-msgstr "ファイルサイズの上限（GiB）"
-
-msgctxt "settings-search"
 msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
 msgstr "外部編集でダウンロード／アップロードするファイルの上限；既定は4 MiB、範囲は1～64 MiB"
 
 msgctxt "settings-search"
 msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
 msgstr "1つのSFTPタブでの同時アップロード／ダウンロード数の上限"
-
-msgctxt "settings-search"
-msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
-msgstr "転送する1ファイルのサイズ上限；0は無制限、既定は20 GiB"
 
 msgctxt "settings-search"
 msgid "Maximum uploads shared by all SFTP tabs"

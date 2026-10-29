@@ -109,7 +109,6 @@ export struct SettingsViewState {
     sftp_filter_platform_defaults: string,
     sftp_per_tab_transfers: int,
     sftp_global_uploads: int,
-    sftp_max_file_gib: int,
     sftp_rate_limit_mib_per_second: int,
     sftp_local_open_max_file_mib: int,
     sftp_remote_edit_max_file_mib: int,
@@ -233,7 +232,6 @@ export component SettingsPane inherits Rectangle {
         root.source.sftp_filter_platform_defaults;
     private property <int> sftp-per-tab-transfers: root.source.sftp_per_tab_transfers;
     private property <int> sftp-global-uploads: root.source.sftp_global_uploads;
-    private property <int> sftp-max-file-gib: root.source.sftp_max_file_gib;
     private property <int> sftp-rate-limit-mib-per-second: root.source.sftp_rate_limit_mib_per_second;
     private property <int> sftp-local-open-max-file-mib: root.source.sftp_local_open_max_file_mib;
     private property <int> sftp-remote-edit-max-file-mib: root.source.sftp_remote_edit_max_file_mib;
@@ -264,7 +262,7 @@ export component SettingsPane inherits Rectangle {
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
-        string, bool, bool, string, int, int, int, int, int, int, string, bool,
+        string, bool, bool, string, int, int, int, int, int, string, bool,
     );
     callback save-audio-settings(int, int, string, string);
     callback save-ui-language(int);
@@ -365,7 +363,6 @@ export component SettingsPane inherits Rectangle {
         root.sftp-filter-custom-patterns;
     private property <int> draft-sftp-per-tab-transfers: root.sftp-per-tab-transfers;
     private property <int> draft-sftp-global-uploads: root.sftp-global-uploads;
-    private property <int> draft-sftp-max-file-gib: root.sftp-max-file-gib;
     private property <int> draft-sftp-rate-limit-mib-per-second: root.sftp-rate-limit-mib-per-second;
     private property <int> draft-sftp-local-open-max-file-mib: root.sftp-local-open-max-file-mib;
     private property <int> draft-sftp-remote-edit-max-file-mib: root.sftp-remote-edit-max-file-mib;
@@ -510,7 +507,6 @@ export component SettingsPane inherits Rectangle {
             root.draft-sftp-filter-custom-patterns,
             root.draft-sftp-per-tab-transfers,
             root.draft-sftp-global-uploads,
-            root.draft-sftp-max-file-gib,
             root.draft-sftp-rate-limit-mib-per-second,
             root.draft-sftp-local-open-max-file-mib,
             root.draft-sftp-remote-edit-max-file-mib,
@@ -588,7 +584,6 @@ export component SettingsPane inherits Rectangle {
     changed draft-sftp-filter-custom-patterns => { root.schedule-preview(); }
     changed draft-sftp-per-tab-transfers => { root.schedule-preview(); }
     changed draft-sftp-global-uploads => { root.schedule-preview(); }
-    changed draft-sftp-max-file-gib => { root.schedule-preview(); }
     changed draft-sftp-rate-limit-mib-per-second => { root.schedule-preview(); }
     changed draft-sftp-local-open-max-file-mib => { root.schedule-preview(); }
     changed draft-sftp-remote-edit-max-file-mib => { root.schedule-preview(); }
@@ -803,7 +798,6 @@ export component SettingsPane inherits Rectangle {
                         draft-sftp-filter-custom-patterns <=> root.draft-sftp-filter-custom-patterns;
                         draft-sftp-per-tab-transfers <=> root.draft-sftp-per-tab-transfers;
                         draft-sftp-global-uploads <=> root.draft-sftp-global-uploads;
-                        draft-sftp-max-file-gib <=> root.draft-sftp-max-file-gib;
                         draft-sftp-rate-limit-mib-per-second <=> root.draft-sftp-rate-limit-mib-per-second;
                         draft-sftp-local-open-max-file-mib <=> root.draft-sftp-local-open-max-file-mib;
                         draft-sftp-remote-edit-max-file-mib <=> root.draft-sftp-remote-edit-max-file-mib;

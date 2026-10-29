@@ -271,11 +271,13 @@ unselected row first makes it the only selected row; right-clicking a selected
 row keeps the current multi-selection, so the menu action applies to that
 selection. Each file is written into
 the current **Local files** directory; directory downloads recursively preserve
-their selected directory tree. Remote symbolic links and non-regular entries
-are skipped or rejected, existing local files are never overwritten, and each
-file is subject to the configured SFTP file-size limit (20 GiB by default).
-Recursive discovery is bounded to 4,096 scanned entries, 512 files, 256
-directories, 16 levels, and 512 KiB of path text; there is no separate batch-byte cap.
+their selected directory tree. Existing local files are never overwritten.
+Discovery streams the tree through a bounded queue and waits for space as files
+finish, so large folders are not truncated by file-count, depth, or batch-size
+caps. Unreadable, unsupported, or explicitly filtered entries are reported while
+other files continue. Normal SFTP transfers have no client-imposed per-file size
+cap. Server and operating-system limits still apply and are reported for the
+affected file.
 
 SFTP transfers can omit generated system files. In **Settings > SFTP**, enable
 **Filter system files** to use the current platform preset (macOS includes
@@ -375,11 +377,12 @@ row carries that row. Local files and folders, or files and folders dragged from
 system file manager such as Finder, Windows Explorer, or a Linux file manager,
 dropped onto Remote files upload to the current remote directory. Folder uploads recursively discover regular
 files, preserve relative paths, and create needed remote directories. Empty folders
-without eligible files do not create a remote directory. Symbolic links and filtered
-names are skipped. A batch is bounded to 512 files, 256 directories,
-16 levels, 4,096 scanned entries, and 512 KiB of path text. Each file is
-limited by the configured maximum (20 GiB by default); there is no separate
-batch-byte cap. Exceeding a limit rejects the batch before upload.
+without eligible files do not create a remote directory. Upload discovery streams
+through a bounded queue and waits for capacity, without arbitrary file-count,
+depth, or batch-size caps. Links, unreadable entries, and explicitly filtered
+names appear in the result while scanning continues. Normal SFTP transfers have
+no client-imposed per-file size cap; server and operating-system limits still
+apply and are reported for the affected file.
 Dragging a remote file or folder onto Local files queues a download
 into the current local directory. Completed downloads remain there and never
 open automatically. On macOS, dragging a remote regular file can
@@ -896,17 +899,16 @@ English option. Interface options represent languages and regional variants;
 `uk` is the Ukrainian language code, not the British English locale.
 AxSSH translates its application-owned Slint interface; remote terminal content, user-provided
 names/paths, logs, and runtime technical error details remain unchanged.
-The SFTP page owns the transfer filter described above, the single-file maximum
-(0 for no client-side file-size cap, or 1-1024 GiB; default 20 GiB), and a
+The SFTP page owns the optional transfer filter described above and a
 per-connection upload-plus-download bandwidth cap (0-1024 MiB/s; 0 means
-unlimited). In an SSH server's editor,
-**Use server-specific limits** overrides the global file-size, bandwidth, and
-per-tab concurrency values for new SFTP connections to that server. The
+unlimited). Normal SFTP transfers have no client-imposed per-file size cap. In
+an SSH server's editor, **Use server-specific limits** overrides the bandwidth and per-tab
+concurrency values for new SFTP connections to that server. The
 process-wide simultaneous-upload limit remains global. A changed policy takes
 effect for a connection when its SFTP worker starts or reconnects; it does not
 interrupt transfers already running.
-The unlimited transfer-size setting applies to normal streaming uploads and
-downloads, including a remote file dragged to Finder. The separately
+The unlimited-by-default transfer-size policy applies to normal streaming uploads
+and downloads, including a remote file dragged to Finder. The separately
 configurable local-open snapshot limit affects only the cache copy used to
 open a local file from the SFTP pane, not those transfers.
 **Remote edit file limit (MiB)** separately controls remote Edit downloads and

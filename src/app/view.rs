@@ -7,7 +7,7 @@ use slint::Model;
 
 use super::file_icons::{FileIconKey, clear_global_cache, global_provider, prewarm_async};
 use super::local_files::LocalDirectoryEntry;
-use super::state::{SftpTransferPhase, SftpTransferSnapshot};
+use super::state::{SftpTransferDirection, SftpTransferPhase, SftpTransferSnapshot};
 use super::*;
 
 const ICON_PREWARM_PENDING_KEY_LIMIT: usize = 256;

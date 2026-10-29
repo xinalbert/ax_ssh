@@ -51,9 +51,7 @@ pub(super) fn wire_drag(
                     .local
                     .entries
                     .iter()
-                    .filter(|entry| {
-                        terminal.sftp.local.selected.contains(&entry.path) && !entry.is_symlink
-                    })
+                    .filter(|entry| terminal.sftp.local.selected.contains(&entry.path))
                     .map(|entry| PathBuf::from(&entry.path))
                     .collect())
             },
@@ -136,19 +134,16 @@ type SlintDataTransfer = slint::private_unstable_api::re_exports::DataTransfer;
 
 pub(super) fn local_file_drag_data(paths: &[PathBuf]) -> SlintDataTransfer {
     let mut data = SlintDataTransfer::default();
-    if !paths.is_empty() && paths.len() <= MAX_DROPPED_LOCAL_PATHS {
+    if !paths.is_empty() {
         let text = paths
             .iter()
             .filter_map(|path| path.to_str())
             .collect::<Vec<_>>()
             .join("\n");
-        if text.len() <= MAX_DROPPED_LOCAL_DATA_BYTES
-            && text.lines().count() == paths.len()
-            && text.lines().all(|path| {
-                !path.is_empty()
-                    && path.len() <= LOCAL_DIRECTORY_PATH_LIMIT
-                    && !path.chars().any(char::is_control)
-            })
+        if text.lines().count() == paths.len()
+            && text
+                .lines()
+                .all(|path| !path.is_empty() && !path.chars().any(char::is_control))
         {
             data.set_plain_text(format!("{LOCAL_DRAG_PREFIX}{text}").into());
         }
@@ -158,10 +153,7 @@ pub(super) fn local_file_drag_data(paths: &[PathBuf]) -> SlintDataTransfer {
 
 pub(super) fn remote_file_drag_data(path: &str) -> SlintDataTransfer {
     let mut data = SlintDataTransfer::default();
-    if path.len() <= LOCAL_DIRECTORY_PATH_LIMIT
-        && !path.is_empty()
-        && !path.chars().any(char::is_control)
-    {
+    if !path.is_empty() && !path.chars().any(char::is_control) {
         data.set_plain_text(format!("{REMOTE_DRAG_PREFIX}{path}").into());
     }
     data
@@ -205,11 +197,8 @@ pub(super) fn log_sftp_drag_drop(
 
 pub(super) fn parse_sftp_drag_payload(text: &str) -> Result<SftpDragPayload> {
     if let Some(path) = text.strip_prefix(REMOTE_DRAG_PREFIX) {
-        if path.is_empty()
-            || path.len() > LOCAL_DIRECTORY_PATH_LIMIT
-            || path.chars().any(char::is_control)
-        {
-            anyhow::bail!("dropped remote path is invalid or too long");
+        if path.is_empty() || path.chars().any(char::is_control) {
+            anyhow::bail!("dropped remote path is invalid");
         }
         return Ok(SftpDragPayload::Remote(path.to_owned()));
     }
@@ -220,8 +209,8 @@ pub(super) fn parse_sftp_drag_payload(text: &str) -> Result<SftpDragPayload> {
 }
 
 pub(super) fn parse_single_dropped_path(raw: &str) -> Result<PathBuf> {
-    if raw.len() > LOCAL_DIRECTORY_PATH_LIMIT || raw.chars().any(char::is_control) {
-        anyhow::bail!("dropped local file path is invalid or too long");
+    if raw.chars().any(char::is_control) {
+        anyhow::bail!("dropped local file path is invalid");
     }
     let path = if let Some(uri) = raw.strip_prefix("file://") {
         let (authority, encoded_path) = uri.split_once('/').unwrap_or((uri, ""));
@@ -252,9 +241,6 @@ pub(super) fn parse_single_dropped_path(raw: &str) -> Result<PathBuf> {
 /// removed while preserving first-seen order so the caller can queue them as
 /// independent transfers.
 pub(super) fn parse_dropped_local_paths(text: &str) -> Result<Vec<PathBuf>> {
-    if text.len() > MAX_DROPPED_LOCAL_DATA_BYTES {
-        anyhow::bail!("dropped data is too large");
-    }
     let mut seen = std::collections::HashSet::new();
     let mut paths = Vec::new();
     for raw in text.split(['\n', '\r']).map(str::trim) {
@@ -263,11 +249,6 @@ pub(super) fn parse_dropped_local_paths(text: &str) -> Result<Vec<PathBuf>> {
         }
         let path = parse_single_dropped_path(raw)?;
         if seen.insert(path.clone()) {
-            if paths.len() >= MAX_DROPPED_LOCAL_PATHS {
-                anyhow::bail!(
-                    "dropped data contains too many local files (maximum {MAX_DROPPED_LOCAL_PATHS})"
-                );
-            }
             paths.push(path);
         }
     }

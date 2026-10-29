@@ -2,56 +2,56 @@
 
 ## 当前目标
 
-- 目标 ID：20261022-release-tag
-- 目标：按仓库发布约束创建并推送 `2026-10-22` annotated tag。
-- 交付物：匹配标签的 Cargo/macOS 版本提交、发布前验证、远端 master 与附注标签，以及发布结果记录。
+- 目标 ID：20261029-sftp-complete-transfer
+- 目标：移除 SFTP 常规上传、下载和目录浏览中的客户端内容截断限制，确保队列背压不会丢弃后续文件，并呈现逐文件进度与路径。
+- 交付物：完整的递归发现、无客户端文件大小/路径名称长度/总目录文本预算限制、队列满等待、FileZilla 风格 Transfers 行、双语说明和回归验证。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`Cargo.toml`、`Cargo.lock`、`packaging/macos/Info.plist`、发布辅助脚本验证、实施记录与 GitHub 发布引用。
-- 不在本轮范围内：应用代码、UI 布局、依赖升级、配置 schema、SSH/凭据/transport、CI 修改、安装版替换。
-- 所有权与安全：仅同步发行元数据，不改变模块契约、主机信任、凭据生命周期或应用行为。
+- 当前范围：`src/sftp*`、`src/ssh/worker/sftp.rs`、`src/app/{local_files,sftp_bridge,state}.rs`、SFTP Slint 与设置搜索翻译、双语用户/架构文档和实施 tracker。
+- 不在本轮范围内：本地打开缓存和远程编辑的独立容量策略、SSH/SFTP 服务端或操作系统自身限制、其它传输协议。
+- 所有权与安全：Rust 负责发现、路径校验、worker 排队和 transfer 状态；Slint 仅展示行状态、路径、速度和 ETA。保留路径逃逸/控制字符/symlink/文件类型校验、取消/暂停及协议资源背压；本地打开快照和外部编辑的独立缓存限制不属于普通文件传输。
 
 ## 当前状态
 
-- 阶段：已完成
+- 阶段：验证中
 - 开工判定：允许开工
-- 是否需要联网：是，已完成
+- 是否需要联网：否
 - 多 agent：未使用
 
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| R1 | completed | 核对本地/远端状态并选择标签 | 工作区干净；GitHub master 与本地一致；本地、GitHub、Gitea 无当天标签 | 使用 `2026-10-22`；不移动或复用既有标签 |
-| R2 | completed | 同步发行版本并完成发布前门禁 | 精确 tag metadata verify、发布辅助测试、fmt/check/严格 Clippy/test、tracker/diff | 不改变依赖版本 |
-| R3 | completed | 提交并先推送 master，再推送附注标签 | 审查暂存内容、远端 commit/tag object、Release workflow 启动情况 | 附注标签指向包含匹配元数据的提交 |
+| S1 | completed | 移除常规单文件上限和超限跳过逻辑 | 配置/设置搜索/UI 不再暴露上限；旧配置字段可忽略 | 常规流式上传和下载支持任意服务端/系统可表示的大小 |
+| S2 | completed | 取消目录与路径名称字符预算 | 本地/远端目录不因总文本预算提前截断；长路径名称回归 | 分页只控制每次渲染行数 |
+| S3 | completed | 让发现、worker 和 UI 队列等待背压 | 超过 512 项、深目录和队列满场景回归 | 满队列等待；取消和断连仍按现有生命周期清理 |
+| S4 | completed | 同步 FileZilla 风格显示与中英文说明 | 翻译生成和双语文档/项目地图校验 | Transfers 展示名称、来源/目标、状态、速度和 ETA |
+| S5 | in_progress | 完成自动化门禁并等待目标平台验收 | fmt/check/严格 Clippy/full tests/diff 和专用校验 | 自动化门禁通过；真实服务器与 GUI 由用户验收 |
 
 ## 已完成
 
-- 读取根规范、项目技能、项目地图和发布流程；预检时 `master` 为 `8c3509f`，工作区干净。
-- GitHub 连接器核对远端 `master` 为 `8c3509faeef5fcc63c31a320df9ea3b720e9980c`，已有标签与本地一致，最新为 `2026-10-20`；Gitea 没有标签。
-- 确认当天首发标签 `2026-10-22` 未占用；14 项发布辅助测试和 fmt 已通过。
-- 用户已授权按要求打 tag，并更新执行权限继续完成发布流程。
-- 三份发行文件已同步：Cargo/macOS short `2026.10.22`、macOS build `20261022`；全部本机发布前门禁通过，无应用/依赖改动。
-- 发行提交 `b0a78c98756035fa51907b8010c707a98fd75eb6` 已先推送至 GitHub master；随后创建并推送 `2026-10-22`，远端附注对象为 `701f20b26b08bc485fcbdc864357f46cb9cdd5fa`，指向同一提交。
-- GitHub Release run `39716811503` 已启动，核验时为 `in_progress`；HTTP/2 推送传输失败后使用系统现有代理/HTTP 1.1 重试同一对象成功，没有移动/删除标签或修改全局 Git 配置。
+- 移除 Settings > SFTP 的常规传输单文件大小选项及配置字段，历史 JSON 的旧字段不再影响传输。
+- 移除上传/下载与递归发现阶段的客户端文件大小、文件名/路径字符数和目录总文本预算；移除本地目录名称/路径/文本预算，浏览器以 250 行分页完整枚举。
+- 移除 Transfers 历史窗口截断；上传/下载提交队列满时等待，发现通过有界通道背压，不拒绝超出窗口的后续文件。
+- 保留 unsafe path、控制字符、symlink、文件类型、原子发布与冲突确认等安全校验；保留数据分块、协议 frame、并发和读写窗口作为流程/资源边界。
+- 保留仅用于本地打开缓存和外部编辑的独立大小限制，这些不参与常规 SFTP 传输。
 
 ## 验证
 
-- 已完成：本地/远端编号与 HEAD 核对；版本精确校验；14 项发布辅助测试；fmt、locked/offline check、严格 all-targets Clippy、完整测试（399 library + 510 binary，Doc tests 0）；53 份 Markdown/源码入口、图标、翻译、12 项仓库/翻译测试、skill、tracker 和 diff 检查。
-- 未完成：自动发行的跨平台构建仍在运行，结果由 GitHub Actions 提供；本轮标签创建、推送和启动核验已完成。
+- 已完成：`cargo fmt --all -- --check`、`cargo check --locked --offline`、严格 Clippy、完整测试（库 401、应用 511、Doc tests 0）、11 个 locale 的 672 条翻译校验、tracker/Markdown 链接、`git diff --check` 和仓库检查。
+- 未完成：真实服务器大目录/大文件传输与目标平台 GUI 视觉验收；按仓库要求由用户在目标平台检查。
 
 ## 风险与阻塞
 
-- 标签已发布且不可变；后续新发行须选择下一未使用日期/修订，现有 workflow 可按仓库规则重跑。
-- 本机只验证 ARM64 macOS；其它平台由既有原生 CI 验证，本机结果不替代它们。
+- 不设客户端文件大小、文件/目录数量、递归深度、路径/名称字符数和目录文本总量上限；目标服务器与操作系统自身约束仍会使个别条目失败，应用会逐项报告。
+- SFTP 并发、分页、分块与协议请求超时仍保留；这些控制吞吐/内存和界面渲染节奏，不作为内容数量或文件大小门槛。
 
 ## 下一步
 
-- 查看 [Release workflow](https://github.com/xinalbert/ax_ssh/actions/runs/39716811503) 的跨平台构建结果；发布记录归档后只读核对 master 和干净工作区。
+- 请用户在目标平台检查 Transfers 行布局，并在真实服务器验证大目录/大文件传输；如有视觉或链路问题，根据反馈继续修正。
 
 ## 最后更新时间
 
-- 2026-10-22 11:27 +0800
+- 2026-10-29 19:38 +0800

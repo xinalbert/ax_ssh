@@ -403,6 +403,9 @@ msgstr "Supprimer {0} ? Les serveurs de ce groupe seront déplacés vers Sans gr
 msgid "Deny"
 msgstr "Refuser"
 
+msgid "Destination: {0}"
+msgstr "Destination : {0}"
+
 msgid "Detect again on next connection"
 msgstr "Détecter à nouveau à la prochaine connexion"
 
@@ -444,6 +447,9 @@ msgstr "Dupliquer"
 
 msgid "Duplicate Group"
 msgstr "Dupliquer le groupe"
+
+msgid "ETA"
+msgstr "Temps restant"
 
 msgid "Edit"
 msgstr "Modifier"
@@ -715,20 +721,11 @@ msgstr "Masquer les noms d’utilisateur et les octets IPv4 centraux dans la bar
 msgid "Maximize Window"
 msgstr "Agrandir la fenêtre"
 
-msgid "Maximum SFTP file size in GiB"
-msgstr "Taille maximale des fichiers SFTP en GiB"
-
-msgid "Maximum file size (GiB)"
-msgstr "Taille maximale d’un fichier (GiB)"
-
 msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
 msgstr "Taille maximale d’un fichier téléchargé ou envoyé pour l’édition externe ; 4 MiB par défaut, de 1 à 64 MiB"
 
 msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
 msgstr "Nombre maximal d’envois et de téléchargements simultanés dans un onglet SFTP"
-
-msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
-msgstr "Taille maximale d’un fichier envoyé ou téléchargé ; 0 = illimitée, 20 GiB par défaut"
 
 msgid "Maximum uploads shared by all SFTP tabs"
 msgstr "Nombre maximal d’envois partagés par tous les onglets SFTP"
@@ -880,8 +877,8 @@ msgstr "Facultatif ; saisir uniquement lors de la connexion ou de l’enregistre
 msgid "Overlay"
 msgstr "Superposition"
 
-msgid "Override the global SFTP settings for this server; 0 GiB means unlimited."
-msgstr "Remplacer les paramètres SFTP globaux pour ce serveur ; 0 GiB signifie illimité."
+msgid "Override bandwidth and simultaneous transfers for new connections to this server."
+msgstr "Remplacer la bande passante et le nombre de transferts simultanés pour les nouvelles connexions à ce serveur."
 
 msgid "Overwrite"
 msgstr "Écraser"
@@ -1276,9 +1273,6 @@ msgstr "Transport série"
 msgid "Server SFTP bandwidth limit in MiB per second"
 msgstr "Limite de bande passante SFTP du serveur en MiB par seconde"
 
-msgid "Server SFTP maximum file size in GiB"
-msgstr "Taille maximale des fichiers SFTP du serveur en GiB"
-
 msgid "Server SFTP simultaneous transfers"
 msgstr "Transferts SFTP simultanés du serveur"
 
@@ -1362,6 +1356,9 @@ msgstr "Trier par nom"
 
 msgid "Sort by size"
 msgstr "Trier par taille"
+
+msgid "Source: {0}"
+msgstr "Source : {0}"
 
 msgid "Speed"
 msgstr "Vitesse"
@@ -1918,20 +1915,12 @@ msgid "Masks usernames and IPv4 addresses in the session sidebar"
 msgstr "Masquer les noms d’utilisateur et les adresses IPv4 dans la barre latérale"
 
 msgctxt "settings-search"
-msgid "Maximum file size (GiB)"
-msgstr "Taille maximale d’un fichier (GiB)"
-
-msgctxt "settings-search"
 msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
 msgstr "Taille maximale d’un fichier téléchargé ou envoyé pour l’édition externe ; 4 MiB par défaut, de 1 à 64 MiB"
 
 msgctxt "settings-search"
 msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
 msgstr "Nombre maximal d’envois et de téléchargements simultanés dans un onglet SFTP"
-
-msgctxt "settings-search"
-msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
-msgstr "Taille maximale d’un fichier envoyé ou téléchargé ; 0 = illimitée, 20 GiB par défaut"
 
 msgctxt "settings-search"
 msgid "Maximum uploads shared by all SFTP tabs"

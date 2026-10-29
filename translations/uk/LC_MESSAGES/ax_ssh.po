@@ -403,6 +403,9 @@ msgstr "Видалити {0}? Сервери цієї групи буде пер
 msgid "Deny"
 msgstr "Відхилити"
 
+msgid "Destination: {0}"
+msgstr "Призначення: {0}"
+
 msgid "Detect again on next connection"
 msgstr "Визначити знову під час наступного з’єднання"
 
@@ -444,6 +447,9 @@ msgstr "Дублювати"
 
 msgid "Duplicate Group"
 msgstr "Дублювати групу"
+
+msgid "ETA"
+msgstr "Залишилося"
 
 msgid "Edit"
 msgstr "Редагувати"
@@ -715,20 +721,11 @@ msgstr "Маскувати імена користувачів і середні
 msgid "Maximize Window"
 msgstr "Розгорнути вікно"
 
-msgid "Maximum SFTP file size in GiB"
-msgstr "Максимальний розмір файлу SFTP у GiB"
-
-msgid "Maximum file size (GiB)"
-msgstr "Максимальний розмір файлу (GiB)"
-
 msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
 msgstr "Максимальний розмір файлу для завантаження й надсилання під час зовнішнього редагування; типово 4 MiB, діапазон 1–64 MiB"
 
 msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
 msgstr "Максимум одночасних надсилань і завантажень в одній вкладці SFTP"
-
-msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
-msgstr "Максимальний розмір одного надісланого або завантаженого файлу; 0 — без обмежень, типово 20 GiB"
 
 msgid "Maximum uploads shared by all SFTP tabs"
 msgstr "Максимум надсилань для всіх вкладок SFTP"
@@ -880,8 +877,8 @@ msgstr "Необов’язково; вводити лише під час з’
 msgid "Overlay"
 msgstr "Накладення"
 
-msgid "Override the global SFTP settings for this server; 0 GiB means unlimited."
-msgstr "Перевизначити загальні налаштування SFTP для цього сервера; 0 GiB — без обмежень."
+msgid "Override bandwidth and simultaneous transfers for new connections to this server."
+msgstr "Перевизначити пропускну здатність і кількість одночасних передавань для нових підключень до цього сервера."
 
 msgid "Overwrite"
 msgstr "Перезаписати"
@@ -1276,9 +1273,6 @@ msgstr "Послідовний транспорт"
 msgid "Server SFTP bandwidth limit in MiB per second"
 msgstr "Обмеження пропускної здатності SFTP сервера у MiB за секунду"
 
-msgid "Server SFTP maximum file size in GiB"
-msgstr "Максимальний розмір файлу SFTP сервера у GiB"
-
 msgid "Server SFTP simultaneous transfers"
 msgstr "Одночасні передачі SFTP сервера"
 
@@ -1362,6 +1356,9 @@ msgstr "Сортувати за назвою"
 
 msgid "Sort by size"
 msgstr "Сортувати за розміром"
+
+msgid "Source: {0}"
+msgstr "Джерело: {0}"
 
 msgid "Speed"
 msgstr "Швидкість"
@@ -1918,20 +1915,12 @@ msgid "Masks usernames and IPv4 addresses in the session sidebar"
 msgstr "Маскувати імена користувачів і адреси IPv4 на бічній панелі сеансів"
 
 msgctxt "settings-search"
-msgid "Maximum file size (GiB)"
-msgstr "Максимальний розмір файлу (GiB)"
-
-msgctxt "settings-search"
 msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
 msgstr "Максимальний розмір файлу для завантаження й надсилання під час зовнішнього редагування; типово 4 MiB, діапазон 1–64 MiB"
 
 msgctxt "settings-search"
 msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
 msgstr "Максимум одночасних надсилань і завантажень в одній вкладці SFTP"
-
-msgctxt "settings-search"
-msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
-msgstr "Максимальний розмір одного надісланого або завантаженого файлу; 0 — без обмежень, типово 20 GiB"
 
 msgctxt "settings-search"
 msgid "Maximum uploads shared by all SFTP tabs"

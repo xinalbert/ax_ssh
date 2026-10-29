@@ -78,7 +78,6 @@ pub(in crate::app) fn wire_session_editor(ui: &AppWindow, context: SessionEditor
               sftp_local_path,
               sftp_override_limits,
               sftp_per_tab_transfers,
-              sftp_max_file_gib,
               sftp_rate_limit_mib_per_second,
               password,
               remember_password,
@@ -165,7 +164,6 @@ pub(in crate::app) fn wire_session_editor(ui: &AppWindow, context: SessionEditor
                 ssh.sftp_transfer_policy = sftp_override_limits.then(|| {
                     ax_ssh::config::SftpTransferPolicy::normalized(
                         sftp_per_tab_transfers,
-                        sftp_max_file_gib,
                         sftp_rate_limit_mib_per_second,
                     )
                 });

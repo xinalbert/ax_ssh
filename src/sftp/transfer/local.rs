@@ -39,6 +39,12 @@ impl LocalDownloadTarget {
         self.components.join("/")
     }
 
+    pub(super) fn final_path(&self) -> PathBuf {
+        self.components
+            .iter()
+            .fold(self.root.clone(), |path, component| path.join(component))
+    }
+
     fn prepare(&self) -> Result<LocalPendingFile> {
         let root = fs::canonicalize(&self.root)
             .with_context(|| format!("cannot resolve local download directory {:?}", self.root))?;
@@ -264,8 +270,8 @@ pub(super) fn is_incomplete_local_write(error: &anyhow::Error) -> bool {
 }
 
 fn validate_local_components(components: &[String]) -> Result<()> {
-    if components.is_empty() || components.len() > MAX_RECURSIVE_DOWNLOAD_DEPTH + 1 {
-        anyhow::bail!("local download path has an invalid depth");
+    if components.is_empty() {
+        anyhow::bail!("local download path has no file name");
     }
     for component in components {
         if component.is_empty()
@@ -273,7 +279,6 @@ fn validate_local_components(components: &[String]) -> Result<()> {
             || component == ".."
             || component.contains(['/', '\\'])
             || component.chars().any(char::is_control)
-            || component.chars().count() > MAX_NAME_CHARS
             || Path::new(component)
                 .components()
                 .any(|part| !matches!(part, Component::Normal(_)))
@@ -358,6 +363,13 @@ mod tests {
         assert!(LocalDownloadTarget::new(directory.clone(), vec!["report.txt".to_owned()]).is_ok());
 
         fs::remove_dir(directory).expect("fixture directory should be removed");
+    }
+
+    #[test]
+    fn local_target_has_no_client_component_or_total_path_length_cap() {
+        let components = vec!["n".repeat(600), "d".repeat(4_500)];
+        assert!(validate_local_components(&components).is_ok());
+        assert!(validate_local_components(&["line\nbreak".to_owned()]).is_err());
     }
 
     #[test]

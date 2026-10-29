@@ -1732,12 +1732,10 @@ access an SFTP worker.
 The remote side remains the bounded SFTP browser, while
 `src/app/local_files.rs` reads local directory metadata only on a Tokio blocking
 boundary. Local results carry a Tab-local request identity so late reads cannot
-replace a newer path. The blocking read builds a bounded snapshot with 256
-characters per accepted name, a 2 MiB aggregate name/path text budget, and
-4 KiB paths before reaching Slint; unavailable entries are counted separately
-from budget truncation. The former fixed 250-entry read cap is removed, and
-application state releases the local snapshot in 250-entry pages while keeping
-the complete bounded snapshot available for sorting. The remote and local
+replace a newer path. The blocking read builds a complete snapshot of readable entries without
+client-imposed name, path, or aggregate-text limits; unavailable entries are
+counted separately. Application state releases the local snapshot in 250-entry
+pages while keeping the complete snapshot available for sorting. The remote and local
 browsers each keep bounded per-Tab back/forward path history in
 application state. Parent navigation resolves against the currently displayed
 directory, is unavailable at the root, and enters that history only after the
@@ -1751,10 +1749,10 @@ serialized and timed out, inbound SFTP frames are rejected above 256 KiB before
 `russh-sftp` parsing, and a raw directory cursor emits at most 250 entries per
 page. A page publishes the first useful server batch without waiting to fill
 250 rows or receive EOF; the final page is published before awaiting CLOSE.
-More may remain available until a later request confirms EOF. One directory
-stops when its 2 MiB names-and-paths budget is reached;
-individual paths/names are also validated and bounded before they enter the
-application snapshot. `More` releases another bounded local page or requests
+More may remain available until a later request confirms EOF. There is no
+directory-wide text budget or client-imposed path/name character-count cap;
+unsafe components are still rejected before they enter the application
+snapshot. `More` releases another local page or requests
 another remote page while one is available. `russh-sftp` still has an internal
 unbounded packet sender, so AxSSH limits the browser exposure to one session
 with one request in flight.
@@ -1829,54 +1827,54 @@ Download sends a small download-root intent to the worker. Worker-owned
 recursive discovery opens its own SFTP subsystem, rejects
 links and unsafe/non-regular entries, and produces owned file requests rooted
 in the current Local files directory. A directory retains its relative tree.
-Discovery scans at most 4,096 entries and is bounded to 512 files, 256
-directories, depth 16, and 512 KiB of path text. A configurable per-file cap
-(default 20 GiB, 1-1024 GiB for a finite limit) applies; 0 disables the
-client-side file-size cap for streamed transfers, and no separate aggregate-byte
-cap remains.
-Recursive discovery, queue, and private open-cache bounds remain.
-Each SFTP Tab permits a configurable number of active transfers
-(1-16, default 2), and each transfer owns a separate SFTP
-subsystem stream.
+Discovery walks directories iteratively and streams file requests through bounded
+queues with backpressure; it waits for capacity instead of dropping later files.
+It has no arbitrary count, depth, directory, aggregate-size, or per-file-size cap.
+The local and remote browsers page entries for rendering but do not stop
+enumeration at a fixed total text budget. Transfer paths and names have no
+client-imposed character-count cap; server and operating-system constraints
+remain authoritative and are reported for the affected entry.
+Invalid, unsupported, filtered, or unreadable entries are reported while eligible
+files continue. Each SFTP Tab permits a
+configurable number of simultaneous transfers (1-16, default 2), and each
+transfer owns a separate SFTP subsystem stream. Concurrency controls throughput
+and queueing; it does not discard accepted files.
 
 The process-wide upload limiter is also configurable from Settings > SFTP
 (1-32 simultaneous uploads, default 8). Lowering the setting does not cancel
 uploads that already hold a permit; it limits subsequent uploads. The transfer
-root also carries the effective bounded filename-filter patterns.
-The application bridge rejects matching direct upload/download intents, while
-the worker applies the same basename-only `*` matcher during recursive discovery
-to skip generated files and directories. The browser's Hidden toggle remains a
-display-only concern. `AppSettings` persists the current-platform preset, the
-enable flag, and normalized custom patterns; resetting the SFTP-page draft
-restores that preset and clears the custom list.
-`AppSettings::sftp_transfers` also stores global defaults for per-Tab concurrency,
-single-file size, and per-connection bandwidth. `SshConfig::sftp_transfer_policy`
-optionally overrides those three values for a server; the process-wide upload
-cap remains global. The effective policy is copied into a new SFTP worker, so
+root carries the configured basename-only filename-filter patterns. The
+application bridge and recursive worker apply the same `*` matcher when a user
+enables filtering; filters are disabled by default so system files are not
+silently omitted. The browser's Hidden toggle remains display-only. `AppSettings`
+persists the enable flag and normalized custom patterns.
+`AppSettings::sftp_transfers` stores global defaults for per-Tab concurrency and
+per-connection bandwidth. `SshConfig::sftp_transfer_policy` optionally overrides
+those values for a server; the process-wide upload cap remains global. The effective policy is copied into a new SFTP worker, so
 editing settings does not mutate an in-flight connection. A shared async rate
 limiter meters 64 KiB upload/write and download/read chunks across all transfers
 within that connection; zero means unlimited. No secret or russh handle enters Slint.
 
 Each request revalidates remote path and handle metadata, reads at most 64 KiB
 per request, uses a two-chunk writer queue, applies 15-second operation
-timeouts and a 30-day transfer deadline (recursive discovery remains 30 minutes),
-and reports owned queue, state,
-progress, and terminal events. Each transfer polls at most 16 ordered chunk
+timeouts and a 30-day transfer deadline, and reports owned queue, state, progress,
+and terminal events. Recursive discovery has per-operation timeouts and reports
+partial results while continuing past unreadable entries. Each transfer polls at most 16 ordered chunk
 requests, including completed replies waiting for an earlier reply; chunk
 storage in this window is at most 1 MiB. Short reads repair only their own
 offset range. Dropping the window cancels its borrowed request futures, with
 no detached request tasks. EOF/path/handle revalidation must succeed before
 the local writer can publish, including when all bytes have arrived. Progress
 is emitted at most once per 100 ms plus the final count; lifecycle events
-remain immediate. The application state owns bounded rows split
-into active, failed (including cancelled), and successful snapshots; Slint only
+remain immediate. The application state owns per-file rows split into active,
+failed (including cancelled), and successful snapshots; Slint only
 renders those DTOs and sends checkbox/batch pause, resume, or cancel intent.
 The active-page batch actions share the right side of the transfer page bar;
 they do not reserve a second toolbar row or introduce another callback path.
 Pause/resume is a worker-lifetime contract: the writer retains its partial file
 and the stream resumes at its current offset only while that worker lives.
 
-Each bounded transfer row retains its optional local path and remote target only
+Each transfer row retains its optional local path and remote target only
 inside application state. Terminal records can reveal a non-symlink local path
 from a blocking platform opener; Slint receives only a boolean capability and
 the opaque transfer ID. A successful upload, remote write, or download starts a
@@ -1912,14 +1910,16 @@ Completed local downloads are retained. Tab shutdown cancels and joins pending
 discovery, subsystem openings, and active transfers. The remote row context
 menu owns bounded Download, single-entry Rename, and Delete intents; the remote
 toolbar retains system-associated external edit operations. All selected local files and folders,
-internal drag roots, and native dropped roots enter one batch command. Blocking
-local discovery preserves relative paths, skips links and filtered names, and
-caps each batch at 4,096 scanned entries, 512 files, 256 directories, depth 16,
-and 512 KiB of path text; each file uses the configured size cap, with no batch-byte cap. The worker
-creates missing remote directories through its SFTP session, rejecting links or
-unexpected target types. The configured per-Tab transfer limit (1-16, default
-2) applies to uploads and downloads; remaining accepted files wait in the
-bounded worker queue. The application passes only a validated path and size;
+internal drag roots, and native dropped roots enter streaming discovery. Blocking
+local discovery preserves relative paths and sends eligible files through a
+bounded channel with backpressure; there are no arbitrary file-count,
+directory-count, depth, or batch-size caps. Links, invalid entries, unreadable
+entries, and explicitly filtered names are reported while scanning continues.
+Normal SFTP upload and download have no client-imposed per-file size cap. The
+worker creates missing remote directories through its SFTP session, rejecting
+links or unexpected target types. The per-Tab concurrency setting (1-16, default
+2) applies to uploads and downloads; remaining accepted files wait in the bounded
+worker queue. The application passes only a validated path and size;
 the worker opens the source once on a blocking task, revalidates its path and
 open-file identity per chunk, and streams through a two-chunk local queue into
 the 16-request window. Every write acknowledgement is checked before publish.

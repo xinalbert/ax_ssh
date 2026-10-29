@@ -446,7 +446,7 @@ pub(super) fn wire_navigation(
         log_ui_action("sftp.list-local");
         sync_window_active(&router_for_local, window_id, &state_for_local);
         let path = path.as_str().trim().to_owned();
-        if path.is_empty() || path.len() > LOCAL_DIRECTORY_PATH_LIMIT {
+        if path.is_empty() {
             set_status(&ui_for_local, "Choose a valid local directory path");
             return;
         }

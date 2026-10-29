@@ -281,7 +281,6 @@ fn shared_text_overflow_hover_preserves_full_label_and_button_click() {
                   _,
                   _,
                   _,
-                  _,
                   connect| {
                 assert!(connect, "Save & connect keeps its intent");
                 received.set(received.get() + 1);

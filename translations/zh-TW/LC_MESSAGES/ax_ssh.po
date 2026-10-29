@@ -403,6 +403,9 @@ msgstr "刪除 {0}？該組中的伺服器將移至“未分組”。"
 msgid "Deny"
 msgstr "拒絕"
 
+msgid "Destination: {0}"
+msgstr "目的地：{0}"
+
 msgid "Detect again on next connection"
 msgstr "下次連線時重新識別"
 
@@ -444,6 +447,9 @@ msgstr "建立副本"
 
 msgid "Duplicate Group"
 msgstr "建立組副本"
+
+msgid "ETA"
+msgstr "預計剩餘"
 
 msgid "Edit"
 msgstr "編輯"
@@ -715,20 +721,11 @@ msgstr "在會話側欄中遮蓋使用者名稱和 IPv4 地址的中間欄位"
 msgid "Maximize Window"
 msgstr "最大化視窗"
 
-msgid "Maximum SFTP file size in GiB"
-msgstr "SFTP 單檔案大小上限（GiB）"
-
-msgid "Maximum file size (GiB)"
-msgstr "單檔案大小上限（GiB）"
-
 msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
 msgstr "外部編輯下載和回傳的檔案大小上限；預設 4 MiB，範圍 1–64 MiB"
 
 msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
 msgstr "單個 SFTP 分頁允許同時進行的上傳和下載數"
-
-msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
-msgstr "單個上傳或下載檔案的大小上限；0 表示不限大小，預設 20 GiB"
 
 msgid "Maximum uploads shared by all SFTP tabs"
 msgstr "所有 SFTP 分頁共享的同時上傳數"
@@ -880,8 +877,8 @@ msgstr "可選；僅在連線或儲存時輸入"
 msgid "Overlay"
 msgstr "遮罩"
 
-msgid "Override the global SFTP settings for this server; 0 GiB means unlimited."
-msgstr "為此伺服器覆蓋全域性 SFTP 設定；0 GiB 表示不限大小。"
+msgid "Override bandwidth and simultaneous transfers for new connections to this server."
+msgstr "為此伺服器的新連線個別設定頻寬與同時傳輸數。"
 
 msgid "Overwrite"
 msgstr "覆蓋"
@@ -1276,9 +1273,6 @@ msgstr "串列埠傳輸"
 msgid "Server SFTP bandwidth limit in MiB per second"
 msgstr "伺服器 SFTP 頻寬上限（MiB/秒）"
 
-msgid "Server SFTP maximum file size in GiB"
-msgstr "伺服器 SFTP 單檔案大小上限（GiB）"
-
 msgid "Server SFTP simultaneous transfers"
 msgstr "伺服器 SFTP 同時傳輸數"
 
@@ -1362,6 +1356,9 @@ msgstr "按名稱排序"
 
 msgid "Sort by size"
 msgstr "按大小排序"
+
+msgid "Source: {0}"
+msgstr "來源：{0}"
 
 msgid "Speed"
 msgstr "速度"
@@ -1918,20 +1915,12 @@ msgid "Masks usernames and IPv4 addresses in the session sidebar"
 msgstr "遮蓋側欄中的使用者名稱和 IPv4 地址"
 
 msgctxt "settings-search"
-msgid "Maximum file size (GiB)"
-msgstr "單檔案大小上限（GiB）"
-
-msgctxt "settings-search"
 msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
 msgstr "外部編輯下載和回傳的檔案大小上限；預設 4 MiB，範圍 1–64 MiB"
 
 msgctxt "settings-search"
 msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
 msgstr "單個 SFTP 分頁允許同時進行的上傳和下載數"
-
-msgctxt "settings-search"
-msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
-msgstr "單個上傳或下載檔案的大小上限；0 表示不限大小，預設 20 GiB"
 
 msgctxt "settings-search"
 msgid "Maximum uploads shared by all SFTP tabs"

@@ -403,6 +403,9 @@ msgstr "{0}을(를) 삭제하시겠습니까? 이 그룹의 서버는 그룹 없
 msgid "Deny"
 msgstr "거부"
 
+msgid "Destination: {0}"
+msgstr "대상: {0}"
+
 msgid "Detect again on next connection"
 msgstr "다음 연결 시 다시 감지"
 
@@ -444,6 +447,9 @@ msgstr "복제"
 
 msgid "Duplicate Group"
 msgstr "그룹 복제"
+
+msgid "ETA"
+msgstr "남은 시간"
 
 msgid "Edit"
 msgstr "편집"
@@ -715,20 +721,11 @@ msgstr "세션 사이드바의 사용자 이름과 IPv4 중간 옥텟 마스킹"
 msgid "Maximize Window"
 msgstr "창 최대화"
 
-msgid "Maximum SFTP file size in GiB"
-msgstr "SFTP 최대 파일 크기 (GiB)"
-
-msgid "Maximum file size (GiB)"
-msgstr "최대 파일 크기 (GiB)"
-
 msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
 msgstr "외부 편집을 위해 다운로드 또는 업로드할 파일의 최대 크기, 기본 4MiB, 범위 1~64MiB"
 
 msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
 msgstr "SFTP 탭 하나의 최대 동시 업로드 및 다운로드 수"
-
-msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
-msgstr "업로드 또는 다운로드할 파일 하나의 최대 크기, 0은 무제한, 기본 20GiB"
 
 msgid "Maximum uploads shared by all SFTP tabs"
 msgstr "모든 SFTP 탭이 공유하는 최대 업로드 수"
@@ -880,8 +877,8 @@ msgstr "선택 사항, 연결하거나 저장할 때만 입력"
 msgid "Overlay"
 msgstr "오버레이"
 
-msgid "Override the global SFTP settings for this server; 0 GiB means unlimited."
-msgstr "이 서버에서 전체 SFTP 설정을 재정의합니다. 0GiB는 무제한입니다."
+msgid "Override bandwidth and simultaneous transfers for new connections to this server."
+msgstr "이 서버의 새 연결에 대해 대역폭과 동시 전송 수를 재정의합니다."
 
 msgid "Overwrite"
 msgstr "덮어쓰기"
@@ -1276,9 +1273,6 @@ msgstr "직렬 전송"
 msgid "Server SFTP bandwidth limit in MiB per second"
 msgstr "서버 SFTP 대역폭 제한 (초당 MiB)"
 
-msgid "Server SFTP maximum file size in GiB"
-msgstr "서버 SFTP 최대 파일 크기 (GiB)"
-
 msgid "Server SFTP simultaneous transfers"
 msgstr "서버 SFTP 동시 전송 수"
 
@@ -1362,6 +1356,9 @@ msgstr "이름순 정렬"
 
 msgid "Sort by size"
 msgstr "크기순 정렬"
+
+msgid "Source: {0}"
+msgstr "원본: {0}"
 
 msgid "Speed"
 msgstr "속도"
@@ -1918,20 +1915,12 @@ msgid "Masks usernames and IPv4 addresses in the session sidebar"
 msgstr "세션 사이드바의 사용자 이름과 IPv4 주소 마스킹"
 
 msgctxt "settings-search"
-msgid "Maximum file size (GiB)"
-msgstr "최대 파일 크기 (GiB)"
-
-msgctxt "settings-search"
 msgid "Maximum file size downloaded and uploaded for external editing; default 4 MiB, range 1–64 MiB"
 msgstr "외부 편집을 위해 다운로드 또는 업로드할 파일의 최대 크기, 기본 4MiB, 범위 1~64MiB"
 
 msgctxt "settings-search"
 msgid "Maximum simultaneous uploads and downloads in one SFTP tab"
 msgstr "SFTP 탭 하나의 최대 동시 업로드 및 다운로드 수"
-
-msgctxt "settings-search"
-msgid "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
-msgstr "업로드 또는 다운로드할 파일 하나의 최대 크기, 0은 무제한, 기본 20GiB"
 
 msgctxt "settings-search"
 msgid "Maximum uploads shared by all SFTP tabs"

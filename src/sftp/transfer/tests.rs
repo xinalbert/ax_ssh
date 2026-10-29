@@ -683,7 +683,7 @@ impl russh_sftp::server::Handler for DownloadTestServer {
 }
 
 #[test]
-fn download_paths_require_a_bounded_file_name() {
+fn download_paths_accept_long_file_names_and_reject_invalid_paths() {
     assert_eq!(
         validate_download_path("/srv/report.txt").expect("file path should validate"),
         "report.txt"
@@ -691,7 +691,7 @@ fn download_paths_require_a_bounded_file_name() {
     assert!(validate_download_path("/srv/").is_err());
     assert!(validate_download_path("..").is_err());
     assert!(validate_download_path("/srv/line\nbreak").is_err());
-    assert!(validate_download_path(&format!("/srv/{}", "a".repeat(MAX_NAME_CHARS + 1))).is_err());
+    assert!(validate_download_path(&format!("/srv/{}", "a".repeat(600))).is_ok());
 }
 
 #[test]
@@ -762,14 +762,14 @@ fn metadata_rejects_links_directories_and_unknown_types_without_fixed_size_cap()
 }
 
 #[test]
-fn recursive_discovery_entries_skip_unsafe_and_non_regular_paths() {
+fn recursive_discovery_entries_validate_names_types_and_unlimited_file_sizes() {
     let mut regular = FileAttributes::empty();
     regular.set_regular(true);
     regular.size = Some(7);
     let regular = File::new("report.txt", regular);
     assert!(matches!(
-        bounded_discovery_entry("/srv", regular),
-        Some((name, path, DiscoveryEntryKind::RegularFile, 7))
+        download_entry("/srv", regular),
+        Ok((name, path, false, 7))
             if name == "report.txt" && path == "/srv/report.txt"
     ));
 
@@ -777,37 +777,35 @@ fn recursive_discovery_entries_skip_unsafe_and_non_regular_paths() {
     large.set_regular(true);
     large.size = Some(2 * 1024 * 1024 * 1024 * 1024);
     assert!(matches!(
-        bounded_discovery_entry("/srv", File::new("large.bin", large)),
-        Some((_, _, DiscoveryEntryKind::RegularFile, 2_199_023_255_552))
+        download_entry("/srv", File::new("large.bin", large)),
+        Ok((_, _, false, 2_199_023_255_552))
     ));
 
     let mut directory = FileAttributes::empty();
     directory.set_dir(true);
     assert!(matches!(
-        bounded_discovery_entry("/srv", File::new("nested", directory)),
-        Some((name, path, DiscoveryEntryKind::Directory, 0))
+        download_entry("/srv", File::new("nested", directory)),
+        Ok((name, path, true, 0))
             if name == "nested" && path == "/srv/nested"
     ));
 
     let mut symlink = FileAttributes::empty();
     symlink.set_symlink(true);
-    assert!(bounded_discovery_entry("/srv", File::new("link", symlink)).is_none());
-    assert!(
-        bounded_discovery_entry("/srv", File::new("../escape", FileAttributes::empty())).is_none()
-    );
-    assert!(
-        bounded_discovery_entry("/srv", File::new("nested\\file", FileAttributes::empty()))
-            .is_none()
-    );
+    assert!(download_entry("/srv", File::new("link", symlink)).is_err());
+    assert!(download_entry("/srv", File::new("../escape", FileAttributes::empty())).is_err());
+    assert!(download_entry("/srv", File::new("nested\\file", FileAttributes::empty())).is_err());
+    let mut long_name = FileAttributes::empty();
+    long_name.set_regular(true);
+    long_name.size = Some(1);
+    assert!(download_entry("/srv", File::new("n".repeat(600), long_name)).is_ok());
 }
 
 #[test]
-fn recursive_discovery_budgets_bound_scanned_entries_and_pending_directories() {
-    let mut entries = MAX_RECURSIVE_DOWNLOAD_ENTRIES;
-    assert!(reserve_recursive_entry(&mut entries).is_err());
-
-    let mut directories = MAX_RECURSIVE_DOWNLOAD_DIRECTORIES;
-    assert!(reserve_recursive_directory(&mut directories).is_err());
+fn recursive_discovery_accepts_entries_without_count_or_size_budgets() {
+    let mut entries = FileAttributes::empty();
+    entries.set_regular(true);
+    entries.size = Some(1);
+    assert!(download_entry("/srv", File::new("file.txt", entries)).is_ok());
 }
 
 #[tokio::test]

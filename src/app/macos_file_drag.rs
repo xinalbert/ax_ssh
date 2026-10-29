@@ -29,8 +29,6 @@ use super::macos_window;
 
 const FILE_PROMISE_UTI: &str = "public.data";
 const FILE_PROMISE_ERROR_DOMAIN: &str = "AxSSHSftpFilePromise";
-const MAX_FILE_NAME_CHARS: usize = 512;
-const MAX_NATIVE_DRAGS: usize = 64;
 const MAX_MOUSE_DOWN_WINDOWS: usize = 64;
 
 type PromiseCompletion = RcBlock<dyn Fn(*mut NSError)>;
@@ -505,9 +503,6 @@ pub(super) fn begin_file_promise_drag(
     validate_file_name(&file_name)?;
     let mtm =
         MainThreadMarker::new().context("macOS native file drag must start on the main thread")?;
-    if ACTIVE_DRAGS.with(|drags| drags.borrow().len() >= MAX_NATIVE_DRAGS) {
-        anyhow::bail!("too many native file promises are pending");
-    }
     let drag_id = Uuid::new_v4();
 
     macos_window::with_native_view(window, |view| {
@@ -619,7 +614,6 @@ fn validate_file_name(file_name: &str) -> Result<()> {
         || file_name == ".."
         || file_name.contains(['/', '\\'])
         || file_name.chars().any(char::is_control)
-        || file_name.chars().count() > MAX_FILE_NAME_CHARS
     {
         anyhow::bail!("remote file name cannot be represented by a native drag")
     }

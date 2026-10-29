@@ -9,8 +9,9 @@ use super::settings::{default_toggle_sidebar_shortcut, previous_toggle_sidebar_s
 use super::{
     AppSettings, AppearanceSettings, CURRENT_SCHEMA_VERSION, DEFAULT_SIDEBAR_WIDTH,
     DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT, PLATFORM_SHORTCUT_SCHEMA_VERSION,
-    PREVIOUS_DEFAULT_SIDEBAR_WIDTH, SftpTransferPolicy, TERMINAL_TEXT_BRIGHTNESS_SCHEMA_VERSION,
-    THEME_SETTINGS_SCHEMA_VERSION, ThemeSettings, WORKSPACE_DENSITY_SCHEMA_VERSION,
+    PREVIOUS_DEFAULT_SIDEBAR_WIDTH, SFTP_FILTER_DEFAULTS_SCHEMA_VERSION, SftpTransferPolicy,
+    TERMINAL_TEXT_BRIGHTNESS_SCHEMA_VERSION, THEME_SETTINGS_SCHEMA_VERSION, ThemeSettings,
+    WORKSPACE_DENSITY_SCHEMA_VERSION,
 };
 
 pub const MAX_SESSION_NAME_CHARS: usize = 128;
@@ -813,11 +814,18 @@ impl<'de> Deserialize<'de> for SessionStore {
                 DEFAULT_TERMINAL_TEXT_BRIGHTNESS_PERCENT;
             settings.appearance.terminal_semantic_highlighting = false;
         }
+        if wire.version < SFTP_FILTER_DEFAULTS_SCHEMA_VERSION
+            && settings.sftp_transfer_filters.use_platform_defaults
+            && settings.sftp_transfer_filters.custom_patterns.is_empty()
+        {
+            settings.sftp_transfer_filters.enabled = false;
+        }
+        let sessions = wire.sessions;
         settings.normalize_in_place();
         let mut store = Self {
             version: wire.version.max(CURRENT_SCHEMA_VERSION),
             groups: wire.groups,
-            sessions: wire.sessions,
+            sessions,
             recent_workspaces: wire.recent_workspaces,
             settings,
         };

@@ -4,9 +4,9 @@ mod edit;
 mod transfer;
 
 pub(crate) use transfer::{
-    MAX_RECURSIVE_DOWNLOAD_FILES, SFTP_TRANSFER_EVENT_CAPACITY, SftpDownloadHandle,
-    SftpDownloadRequest, SftpDownloadRoot, SftpUploadHandle, SftpUploadRequest,
-    TransferRateLimiter, discover_download_requests,
+    SFTP_TRANSFER_EVENT_CAPACITY, SFTP_TRANSFER_QUEUE_WINDOW, SftpDiscoveredDownload,
+    SftpDiscoverySummary, SftpDownloadHandle, SftpDownloadRequest, SftpDownloadRoot,
+    SftpUploadHandle, SftpUploadRequest, TransferRateLimiter, discover_download_requests,
 };
 pub use transfer::{
     SftpTransferEvent, SftpUploadConflictChoice, cleanup_stale_sftp_open_cache,
@@ -32,12 +32,8 @@ use tracing::{debug, warn};
 const COMMAND_CAPACITY: usize = 16;
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(15);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
-const MAX_PATH_CHARS: usize = 4096;
-const MAX_NAME_CHARS: usize = 512;
 const MAX_PAGE_ENTRIES: usize = 250;
-const MAX_DIRECTORY_TEXT_BYTES: usize = 2 * 1024 * 1024;
 const MAX_PACKET_BYTES: u32 = 256 * 1024;
-pub const MAX_UPLOAD_BYTES: u64 = 1024 * 1024 * 1024 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SftpEntry {
@@ -275,10 +271,6 @@ where
             }
             SftpWriteOperation::Upload { path, data } => {
                 validate_remote_path(&path)?;
-                let limit = MAX_UPLOAD_BYTES;
-                if data.len() as u64 > limit {
-                    anyhow::bail!("upload content exceeds the {limit}-byte limit");
-                }
                 let name = path
                     .rsplit('/')
                     .next()
@@ -463,7 +455,6 @@ struct DirectoryCursor {
     path: String,
     handle: String,
     pending: VecDeque<File>,
-    total_text_bytes: usize,
     done: bool,
     truncated: bool,
 }
@@ -853,7 +844,6 @@ async fn open_directory(session: &RawSftpSession, path: String) -> Result<Direct
         path,
         handle,
         pending: VecDeque::new(),
-        total_text_bytes: 0,
         done: false,
         truncated: false,
     })
@@ -924,14 +914,6 @@ async fn read_page(
                 break;
             };
             if let Some(entry) = bounded_entry(&cursor.path, file) {
-                let text_bytes = entry.name.len().saturating_add(entry.path.len());
-                if cursor.total_text_bytes.saturating_add(text_bytes) > MAX_DIRECTORY_TEXT_BYTES {
-                    cursor.done = true;
-                    cursor.truncated = true;
-                    cursor.pending.clear();
-                    break;
-                }
-                cursor.total_text_bytes += text_bytes;
                 page.push(entry);
             }
         }
@@ -945,7 +927,6 @@ fn bounded_entry(parent: &str, file: File) -> Option<SftpEntry> {
     if name == "."
         || name == ".."
         || name.is_empty()
-        || name.chars().count() > MAX_NAME_CHARS
         || name.chars().any(char::is_control)
         || name.contains('/')
     {
@@ -1028,9 +1009,6 @@ fn join_remote(parent: &str, child: &str) -> String {
 }
 
 pub(crate) fn validate_remote_path(path: &str) -> Result<()> {
-    if path.chars().count() > MAX_PATH_CHARS {
-        anyhow::bail!("remote path cannot exceed {MAX_PATH_CHARS} characters");
-    }
     if path.chars().any(char::is_control) {
         anyhow::bail!("remote path cannot contain control characters");
     }

@@ -51,11 +51,6 @@
   ],
   [
     "SFTP",
-    "Maximum file size (GiB)",
-    "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB"
-  ],
-  [
-    "SFTP",
     "Local file open snapshot (MiB)",
     "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
   ],

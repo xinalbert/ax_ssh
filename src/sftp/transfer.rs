@@ -44,23 +44,17 @@ use tracing::{debug, warn};
 use uuid::Uuid;
 
 use super::{
-    MAX_NAME_CHARS, MAX_PACKET_BYTES, PacketLimitedStream, REQUEST_TIMEOUT, bounded_error,
-    validate_remote_path,
+    MAX_PACKET_BYTES, PacketLimitedStream, REQUEST_TIMEOUT, bounded_error, validate_remote_path,
 };
 
 pub(crate) const SFTP_TRANSFER_EVENT_CAPACITY: usize = 32;
+pub(crate) const SFTP_TRANSFER_QUEUE_WINDOW: usize = 512;
 
 const DOWNLOAD_CHUNK_BYTES: u32 = 64 * 1024;
 const WRITER_QUEUE_CAPACITY: usize = 2;
 const PROGRESS_INTERVAL: Duration = Duration::from_millis(100);
 const MAX_CACHE_OPEN_BYTES: u64 = 512 * 1024 * 1024;
-pub(crate) const MAX_RECURSIVE_DOWNLOAD_FILES: usize = 512;
-pub(crate) const MAX_RECURSIVE_DOWNLOAD_DIRECTORIES: usize = 256;
-pub(crate) const MAX_RECURSIVE_DOWNLOAD_DEPTH: usize = 16;
-pub(crate) const MAX_RECURSIVE_DOWNLOAD_TEXT_BYTES: usize = 512 * 1024;
-const MAX_RECURSIVE_DOWNLOAD_ENTRIES: usize = 4_096;
 const DOWNLOAD_TIMEOUT: Duration = Duration::from_secs(30 * 24 * 60 * 60);
-const DISCOVERY_TIMEOUT: Duration = Duration::from_secs(30 * 60);
 const SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(5);
 const WRITER_CLEANUP_TIMEOUT: Duration = Duration::from_secs(5);
 const CACHE_STALE_AFTER: Duration = Duration::from_secs(24 * 60 * 60);
@@ -72,7 +66,6 @@ const MAX_CACHE_FILES: usize = 128;
 
 static CACHE_QUOTA_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 const POSIX_RENAME_EXTENSION: &str = "posix-rename@openssh.com";
-const MAX_KEEP_BOTH_CANDIDATES: usize = 100;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SftpUploadConflictChoice {
@@ -86,6 +79,8 @@ pub enum SftpTransferEvent {
     Queued {
         transfer_id: Uuid,
         remote_path: String,
+        local_path: Option<PathBuf>,
+        upload: bool,
         name: String,
         total_bytes: u64,
     },
@@ -114,6 +109,12 @@ pub enum SftpTransferEvent {
         transfer_id: Uuid,
         name: String,
         message: String,
+    },
+    DiscoveryFinished {
+        transfer_id: Uuid,
+        discovered_files: usize,
+        skipped_entries: usize,
+        message: Option<String>,
     },
     UploadConflict {
         transfer_id: Uuid,
@@ -205,7 +206,6 @@ impl SftpUploadRequest {
             || name == ".."
             || name.chars().any(char::is_control)
             || name.contains(['/', '\\'])
-            || name.chars().count() > MAX_NAME_CHARS
         {
             anyhow::bail!("remote upload target name is invalid");
         }
@@ -244,6 +244,14 @@ impl SftpUploadRequest {
         &self.name
     }
 
+    pub(crate) fn local_path(&self) -> &Path {
+        &self.local_path
+    }
+
+    pub(crate) fn remote_path(&self) -> &str {
+        &self.remote_path
+    }
+
     pub(crate) fn total_bytes(&self) -> u64 {
         self.total_bytes
     }
@@ -256,6 +264,25 @@ pub(crate) struct SftpDownloadRequest {
     name: String,
     total_bytes: u64,
     local_target: Option<LocalDownloadTarget>,
+}
+
+pub(crate) enum SftpDiscoveredDownload {
+    Request {
+        root_transfer_id: Uuid,
+        request: SftpDownloadRequest,
+    },
+    Finished {
+        root_transfer_id: Uuid,
+        name: String,
+        outcome: std::result::Result<SftpDiscoverySummary, String>,
+    },
+}
+
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(crate) struct SftpDiscoverySummary {
+    pub(crate) discovered_files: usize,
+    pub(crate) skipped_entries: usize,
+    pub(crate) first_issue: Option<String>,
 }
 
 impl SftpDownloadRequest {
@@ -340,6 +367,12 @@ impl SftpDownloadRequest {
     pub(crate) fn total_bytes(&self) -> u64 {
         self.total_bytes
     }
+
+    pub(crate) fn local_path(&self) -> Option<PathBuf> {
+        self.local_target
+            .as_ref()
+            .map(LocalDownloadTarget::final_path)
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -349,7 +382,6 @@ pub(crate) struct SftpDownloadRoot {
     local_directory: PathBuf,
     name: String,
     filter_patterns: Vec<String>,
-    max_file_bytes: u64,
 }
 
 impl SftpDownloadRoot {
@@ -358,11 +390,25 @@ impl SftpDownloadRoot {
         remote_path: String,
         local_directory: PathBuf,
         filter_patterns: Vec<String>,
-        max_file_bytes: u64,
     ) -> Result<Self> {
         let name = validate_download_path(&remote_path)?.to_owned();
         if local_directory.as_os_str().is_empty() {
             anyhow::bail!("local download directory is empty");
+        }
+        if filter_patterns.len() > 64
+            || filter_patterns.iter().any(|pattern| {
+                pattern.is_empty()
+                    || pattern.chars().count() > 256
+                    || pattern.chars().any(char::is_control)
+                    || pattern.contains(['/', '\\'])
+            })
+            || filter_patterns
+                .iter()
+                .map(|pattern| pattern.chars().count())
+                .sum::<usize>()
+                > 16 * 1024
+        {
+            anyhow::bail!("SFTP transfer filter patterns are invalid or too large");
         }
         Ok(Self {
             transfer_id,
@@ -370,7 +416,6 @@ impl SftpDownloadRoot {
             local_directory,
             name,
             filter_patterns,
-            max_file_bytes,
         })
     }
 
@@ -380,6 +425,14 @@ impl SftpDownloadRoot {
 
     pub(crate) fn name(&self) -> &str {
         &self.name
+    }
+
+    pub(crate) fn remote_path(&self) -> &str {
+        &self.remote_path
+    }
+
+    pub(crate) fn local_path(&self) -> PathBuf {
+        self.local_directory.join(&self.name)
     }
 
     pub(crate) fn filter_patterns(&self) -> &[String] {

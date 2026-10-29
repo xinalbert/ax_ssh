@@ -1,6 +1,7 @@
 //! SFTP transfers intent wiring and bounded application operations.
 
 use super::*;
+use crate::app::local_files::discover_local_uploads_streaming;
 
 pub(super) fn wire_transfers(
     ui: &AppWindow,
@@ -11,6 +12,7 @@ pub(super) fn wire_transfers(
 ) {
     let ui_for_selected_remote_download = ui.as_weak();
     let state_for_selected_remote_download = state.clone();
+    let runtime_for_selected_remote_download = runtime.clone();
     let router_for_selected_remote_download = window_router.clone();
     ui.on_download_selected_remote_sftp(move || {
         log_ui_action("sftp.download-selected-remote");
@@ -19,30 +21,24 @@ pub(super) fn wire_transfers(
             window_id,
             &state_for_selected_remote_download,
         );
-        let filter_patterns =
-            active_sftp_transfer_filter_patterns(&state_for_selected_remote_download);
-        let result = filter_patterns.and_then(|filter_patterns| {
-            with_window_sftp_terminal(
-                &state_for_selected_remote_download,
-                &router_for_selected_remote_download,
-                window_id,
-                |terminal| {
-                    let selected = terminal
-                        .sftp
-                        .entries
-                        .iter()
-                        .filter(|entry| terminal.sftp.selected.contains(&entry.path))
-                        .cloned()
-                        .collect::<Vec<_>>();
-                    queue_remote_downloads(terminal, selected, &filter_patterns)
-                },
-            )
-        });
-        match result {
-            Ok(()) => dispatch_active_snapshot(
-                &ui_for_selected_remote_download,
-                &state_for_selected_remote_download,
-            ),
+        let prepared = prepare_selected_remote_downloads(
+            &state_for_selected_remote_download,
+            &router_for_selected_remote_download,
+            window_id,
+        );
+        match prepared {
+            Ok(prepared) => {
+                queue_selected_remote_downloads(
+                    &runtime_for_selected_remote_download,
+                    state_for_selected_remote_download.clone(),
+                    ui_for_selected_remote_download.clone(),
+                    prepared,
+                );
+                dispatch_active_snapshot(
+                    &ui_for_selected_remote_download,
+                    &state_for_selected_remote_download,
+                );
+            }
             Err(error) => {
                 set_status(
                     &ui_for_selected_remote_download,
@@ -363,60 +359,248 @@ pub(super) fn wire_transfers(
     });
 }
 
-pub(super) fn queue_upload_batch_for_tab(
+struct PreparedRemoteDownloads {
+    tab_id: Uuid,
+    entries: Vec<SftpEntry>,
+    local_directory: PathBuf,
+    submitter: ax_ssh::ssh::SftpDownloadSubmitter,
+    filters: Vec<String>,
+}
+
+fn prepare_selected_remote_downloads(
+    state: &Arc<Mutex<AppState>>,
+    router: &WindowRouter,
+    window_id: Uuid,
+) -> Result<PreparedRemoteDownloads> {
+    let tab_id = router.active_tab(window_id).context("no active SFTP tab")?;
+    let filters = active_sftp_transfer_filter_patterns(state)?;
+    with_sftp_terminal_for_tab(state, tab_id, |terminal| {
+        let entries = terminal
+            .sftp
+            .entries
+            .iter()
+            .filter(|entry| terminal.sftp.selected.contains(&entry.path))
+            .cloned()
+            .collect::<Vec<_>>();
+        if entries.is_empty() {
+            anyhow::bail!("no remote files or folders are selected");
+        }
+        let local_directory = PathBuf::from(&terminal.sftp.local.path);
+        let submitter = terminal
+            .worker
+            .as_ref()
+            .context("active SFTP tab has no worker")?
+            .sftp_download_submitter()?;
+        Ok(PreparedRemoteDownloads {
+            tab_id,
+            entries,
+            local_directory,
+            submitter,
+            filters,
+        })
+    })
+}
+
+fn queue_selected_remote_downloads(
+    runtime: &Handle,
+    state: Arc<Mutex<AppState>>,
+    ui: slint::Weak<AppWindow>,
+    prepared: PreparedRemoteDownloads,
+) {
+    let PreparedRemoteDownloads {
+        tab_id,
+        entries,
+        local_directory,
+        submitter,
+        filters,
+    } = prepared;
+    runtime.spawn(async move {
+        let mut queued = 0_usize;
+        let mut failed = 0_usize;
+        let mut skipped = 0_usize;
+        let mut first_issue = None;
+        for entry in entries {
+            let transfer_id = Uuid::new_v4();
+            let name = entry.name.clone();
+            let remote_path = entry.path.clone();
+            let local_path = local_directory.join(&name);
+            let filtered = ax_ssh::sftp::transfer_name_matches_filter(&name, &filters);
+            if filtered {
+                skipped = skipped.saturating_add(1);
+                let _ = with_sftp_terminal_for_tab(&state, tab_id, |terminal| {
+                    terminal.sftp.queue_transfer_event(
+                        transfer_id,
+                        name.clone(),
+                        entry.size,
+                        false,
+                        Some(local_path.clone()),
+                        Some(remote_path.clone()),
+                    )?;
+                    terminal.sftp.finish_transfer(
+                        transfer_id,
+                        SftpTransferPhase::Skipped,
+                        "Excluded by transfer filter".to_owned(),
+                    );
+                    Ok(())
+                });
+                dispatch_active_snapshot(&ui, &state);
+                continue;
+            }
+            if entry.is_symlink {
+                failed = failed.saturating_add(1);
+                first_issue.get_or_insert_with(|| "symbolic links cannot be downloaded".to_owned());
+                let _ = with_sftp_terminal_for_tab(&state, tab_id, |terminal| {
+                    terminal.sftp.queue_transfer_event(
+                        transfer_id,
+                        name.clone(),
+                        entry.size,
+                        false,
+                        Some(local_path.clone()),
+                        Some(remote_path.clone()),
+                    )?;
+                    terminal.sftp.finish_transfer(
+                        transfer_id,
+                        SftpTransferPhase::Failed,
+                        "Symbolic links cannot be downloaded".to_owned(),
+                    );
+                    Ok(())
+                });
+                dispatch_active_snapshot(&ui, &state);
+                continue;
+            }
+            let reserved = loop {
+                match with_sftp_terminal_for_tab(&state, tab_id, |terminal| {
+                    if !terminal.sftp.reserve_download_root(transfer_id) {
+                        return Ok(false);
+                    }
+                    let row = if entry.is_dir {
+                        terminal.sftp.begin_download_discovery(
+                            transfer_id,
+                            name.clone(),
+                            local_path.clone(),
+                            remote_path.clone(),
+                        )
+                    } else {
+                        terminal.sftp.queue_transfer_event(
+                            transfer_id,
+                            name.clone(),
+                            entry.size,
+                            false,
+                            Some(local_path.clone()),
+                            Some(remote_path.clone()),
+                        )
+                    };
+                    if let Err(error) = row {
+                        terminal.sftp.finish_download_root(transfer_id, 0, 0, None);
+                        return Err(error);
+                    }
+                    Ok(true)
+                }) {
+                    Ok(true) => break true,
+                    Ok(false) => {
+                        dispatch_active_snapshot(&ui, &state);
+                        tokio::time::sleep(Duration::from_millis(100)).await;
+                    }
+                    Err(error) => {
+                        failed = failed.saturating_add(1);
+                        first_issue.get_or_insert_with(|| error.to_string());
+                        break false;
+                    }
+                }
+            };
+            if !reserved {
+                continue;
+            }
+            dispatch_active_snapshot(&ui, &state);
+            if let Err(error) = submitter
+                .submit(
+                    transfer_id,
+                    remote_path.clone(),
+                    local_directory.clone(),
+                    filters.clone(),
+                )
+                .await
+            {
+                let _ = with_sftp_terminal_for_tab(&state, tab_id, |terminal| {
+                    terminal.sftp.finish_transfer(
+                        transfer_id,
+                        SftpTransferPhase::Failed,
+                        "Download request could not be queued".to_owned(),
+                    );
+                    Ok(())
+                });
+                failed = failed.saturating_add(1);
+                first_issue.get_or_insert_with(|| error.to_string());
+            } else {
+                queued = queued.saturating_add(1);
+            }
+            dispatch_active_snapshot(&ui, &state);
+        }
+        if failed > 0 || skipped > 0 {
+            let detail = first_issue.unwrap_or_else(|| "Some entries were skipped".to_owned());
+            set_status(
+                &ui,
+                &format!(
+                    "Queued {queued} entries; {failed} failed and {skipped} skipped. {detail}"
+                ),
+            );
+        }
+        dispatch_active_snapshot(&ui, &state);
+    });
+}
+
+async fn queue_upload_file_for_tab(
     state: &Arc<Mutex<AppState>>,
     tab_id: Uuid,
     batch_id: Uuid,
-    files: Vec<PreparedLocalUpload>,
+    file: PreparedLocalUpload,
 ) -> Result<()> {
-    with_sftp_terminal_for_tab(state, tab_id, |terminal| {
-        if !terminal.sftp.can_queue_uploads(files.len()) {
-            anyhow::bail!("SFTP transfer history has no room for this upload batch");
-        }
-        for file in &files {
-            let name = file
-                .remote_path
-                .rsplit('/')
-                .next()
-                .unwrap_or_default()
-                .to_owned();
-            terminal.sftp.queue_upload_transfer(
-                file.id,
-                name,
-                file.size,
-                file.local_path.clone(),
-                file.remote_path.clone(),
-            )?;
-        }
-        let requests = files
-            .iter()
-            .map(|file| {
-                (
-                    file.id,
-                    file.remote_path.clone(),
-                    file.local_path.clone(),
-                    file.size,
-                    file.remote_directories.clone(),
-                )
-            })
-            .collect();
-        let result = terminal
+    let (submitter, file) = with_sftp_terminal_for_tab(state, tab_id, |terminal| {
+        let name = file
+            .remote_path
+            .rsplit('/')
+            .next()
+            .unwrap_or_default()
+            .to_owned();
+        terminal.sftp.queue_upload_transfer(
+            file.id,
+            name,
+            file.size,
+            file.local_path.clone(),
+            file.remote_path.clone(),
+        )?;
+        let submitter = terminal
             .worker
             .as_ref()
-            .context("SFTP tab has no worker")
-            .and_then(|worker| worker.request_open_sftp_upload_batch(batch_id, requests));
-        if let Err(error) = result {
-            for file in &files {
-                terminal.sftp.finish_transfer(
-                    file.id,
-                    SftpTransferPhase::Failed,
-                    "Upload request was rejected".to_owned(),
-                );
-            }
-            return Err(error);
-        }
-        Ok(())
-    })
+            .context("SFTP tab has no worker")?
+            .sftp_upload_submitter()?;
+        Ok((submitter, file))
+    })?;
+    let transfer_id = file.id;
+    if let Err(error) = submitter
+        .submit(
+            batch_id,
+            vec![(
+                file.id,
+                file.remote_path,
+                file.local_path,
+                file.size,
+                file.remote_directories,
+            )],
+        )
+        .await
+    {
+        with_sftp_terminal_for_tab(state, tab_id, |terminal| {
+            terminal.sftp.finish_transfer(
+                transfer_id,
+                SftpTransferPhase::Failed,
+                "Upload request was rejected".to_owned(),
+            );
+            Ok(())
+        })?;
+        return Err(error);
+    }
+    Ok(())
 }
 
 pub(super) fn queue_local_upload_paths(
@@ -430,13 +614,6 @@ pub(super) fn queue_local_upload_paths(
 ) {
     let state_for_task = state.clone();
     runtime.spawn(async move {
-        let max_file_bytes = match sftp_max_file_bytes_for_tab(&state_for_task, tab_id) {
-            Ok(limit) => limit,
-            Err(error) => {
-                set_status(&ui, &format!("Cannot read SFTP transfer limits: {error}"));
-                return;
-            }
-        };
         let filters = match active_sftp_transfer_filter_patterns(&state_for_task) {
             Ok(filters) => filters,
             Err(error) => {
@@ -444,38 +621,70 @@ pub(super) fn queue_local_upload_paths(
                 return;
             }
         };
-        let read = tokio::task::spawn_blocking(move || {
-            discover_local_uploads(paths, &remote_directory, &filters, max_file_bytes)
-        })
-        .await;
-        let files = match read {
-            Ok(Ok(value)) => value,
-            Ok(Err(error)) => {
-                log_sftp_drag_drop("local-file-rejected", None, None);
-                set_status(&ui, &format!("Cannot prepare upload batch: {error}"));
-                return;
+        let (file_tx, mut file_rx) = tokio::sync::mpsc::channel(32);
+        let discovery = tokio::task::spawn_blocking(move || {
+            discover_local_uploads_streaming(paths, &remote_directory, &filters, &file_tx)
+        });
+        let mut file_count = 0_usize;
+        let mut failed_count = 0_usize;
+        let mut first_failure = None;
+        let mut total_bytes = 0_u64;
+        while let Some(file) = file_rx.recv().await {
+            total_bytes = total_bytes.saturating_add(file.size);
+            file_count = file_count.saturating_add(1);
+            if let Err(error) =
+                queue_upload_file_for_tab(&state_for_task, tab_id, batch_id, file).await
+            {
+                failed_count = failed_count.saturating_add(1);
+                first_failure.get_or_insert_with(|| error.to_string());
             }
-            Err(error) => {
-                log_sftp_drag_drop("inspection-task-failed", None, None);
-                set_status(&ui, &format!("Dropped upload task failed: {error}"));
-                return;
-            }
-        };
-        let file_count = files.len();
-        let total_bytes = files.iter().map(|file| file.size).sum();
-        log_sftp_drag_drop("local-file-validated", Some(file_count), Some(total_bytes));
-        let queued = queue_upload_batch_for_tab(&state_for_task, tab_id, batch_id, files);
-        match queued {
-            Ok(()) => {
+            dispatch_active_snapshot(&ui, &state_for_task);
+        }
+        match discovery.await {
+            Ok(Ok(summary)) if file_count > 0 => {
                 log_sftp_drag_drop("upload-queued", Some(file_count), Some(total_bytes));
-                dispatch_active_snapshot(&ui, &state_for_task);
+                if summary.skipped_entries > 0 || failed_count > 0 {
+                    let detail = summary
+                        .first_issue
+                        .or(first_failure)
+                        .unwrap_or_else(|| "some files could not be queued".to_owned());
+                    set_status(
+                        &ui,
+                        &format!(
+                            "Discovered {} files; {} failed or skipped. First issue: {detail}",
+                            summary.discovered_files,
+                            summary.skipped_entries.saturating_add(failed_count)
+                        ),
+                    );
+                }
+            }
+            Ok(Ok(summary)) if summary.skipped_entries > 0 => {
+                let detail = summary
+                    .first_issue
+                    .unwrap_or_else(|| "some local entries could not be read".to_owned());
+                set_status(
+                    &ui,
+                    &format!(
+                        "No files queued; skipped {} entries. First issue: {detail}",
+                        summary.skipped_entries
+                    ),
+                );
+            }
+            Ok(Ok(_)) => set_status(&ui, "Selected upload contains no eligible regular files"),
+            Ok(Err(error)) => {
+                log_sftp_drag_drop("local-file-rejected", Some(file_count), Some(total_bytes));
+                set_status(&ui, &format!("Cannot finish upload discovery: {error}"));
             }
             Err(error) => {
-                log_sftp_drag_drop("upload-rejected", Some(file_count), Some(total_bytes));
-                set_status(&ui, &format!("Cannot queue upload batch: {error}"));
-                dispatch_active_snapshot(&ui, &state_for_task);
+                log_sftp_drag_drop(
+                    "inspection-task-failed",
+                    Some(file_count),
+                    Some(total_bytes),
+                );
+                set_status(&ui, &format!("Dropped upload task failed: {error}"));
             }
         }
+        dispatch_active_snapshot(&ui, &state_for_task);
     });
 }
 
@@ -649,11 +858,6 @@ pub(super) fn queue_remote_downloads(
                 "Symbolic links cannot be downloaded".to_owned(),
             );
             continue;
-        }
-        if !entry.is_dir {
-            terminal
-                .sftp
-                .queue_transfer(transfer_id, entry.name.clone(), entry.size)?;
         }
         match worker.request_open_sftp_file(
             transfer_id,

@@ -1,6 +1,7 @@
 //! SFTP discovery operations owned by the transfer worker.
 
 use super::*;
+use crate::sftp::SftpDiscoveredDownload;
 
 pub(super) fn validate_download_path(path: &str) -> Result<&str> {
     validate_remote_path(path)?;
@@ -8,16 +9,14 @@ pub(super) fn validate_download_path(path: &str) -> Result<&str> {
     if name.is_empty() || name == "." || name == ".." {
         anyhow::bail!("remote download path must name a file");
     }
-    if name.chars().count() > MAX_NAME_CHARS {
-        anyhow::bail!("remote file name cannot exceed {MAX_NAME_CHARS} characters");
-    }
     Ok(name)
 }
 
 pub(crate) async fn discover_download_requests<S>(
     stream: S,
     root: SftpDownloadRoot,
-) -> Result<Vec<SftpDownloadRequest>>
+    discovered_tx: mpsc::Sender<SftpDiscoveredDownload>,
+) -> Result<SftpDiscoverySummary>
 where
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
@@ -35,17 +34,7 @@ where
         .await
         .context("SFTP recursive-download handshake timed out")?
         .context("SFTP recursive-download handshake failed")?;
-    let result = match timeout(
-        DISCOVERY_TIMEOUT,
-        discover_initialized_download_requests(&session, &root),
-    )
-    .await
-    {
-        Ok(result) => result,
-        Err(_) => Err(anyhow::anyhow!(
-            "SFTP recursive download exceeded the overall timeout"
-        )),
-    };
+    let result = discover_initialized_download_requests(&session, &root, discovered_tx).await;
     if let Err(error) = session.close_session() {
         debug!(%error, "failed to close SFTP recursive-download session");
     }
@@ -95,7 +84,15 @@ pub(super) fn wildcard_matches(pattern: &str, value: &str) -> bool {
 pub(super) async fn discover_initialized_download_requests(
     session: &RawSftpSession,
     root: &SftpDownloadRoot,
-) -> Result<Vec<SftpDownloadRequest>> {
+    discovered_tx: mpsc::Sender<SftpDiscoveredDownload>,
+) -> Result<SftpDiscoverySummary> {
+    if transfer_name_matches_filter(&root.name, root.filter_patterns()) {
+        return Ok(SftpDiscoverySummary {
+            discovered_files: 0,
+            skipped_entries: 1,
+            first_issue: Some("Excluded by transfer filter".to_owned()),
+        });
+    }
     let attrs = timeout(REQUEST_TIMEOUT, session.lstat(root.remote_path.clone()))
         .await
         .context("inspecting recursive-download root timed out")?
@@ -104,198 +101,191 @@ pub(super) async fn discover_initialized_download_requests(
         anyhow::bail!("remote symbolic links cannot be downloaded");
     }
     if attrs.attrs.is_regular() {
-        if transfer_name_matches_filter(&root.name, root.filter_patterns()) {
-            anyhow::bail!("remote path is excluded by SFTP transfer filters");
-        }
         let total_bytes = validate_regular_metadata(&attrs.attrs)?.size;
-        if total_bytes > root.max_file_bytes {
-            anyhow::bail!("remote file exceeds the configured SFTP file size limit");
-        }
-        return Ok(vec![SftpDownloadRequest::for_local_download(
+        let request = SftpDownloadRequest::for_local_download(
             root.transfer_id,
             root.remote_path.clone(),
             root.local_directory.clone(),
             vec![root.name.clone()],
             total_bytes,
-        )?]);
+        )?;
+        discovered_tx
+            .send(SftpDiscoveredDownload::Request {
+                root_transfer_id: root.transfer_id,
+                request,
+            })
+            .await
+            .context("SFTP download receiver stopped during discovery")?;
+        return Ok(SftpDiscoverySummary {
+            discovered_files: 1,
+            skipped_entries: 0,
+            first_issue: None,
+        });
     }
     if !attrs.attrs.is_dir() {
         anyhow::bail!("remote path is neither a regular file nor a directory");
     }
 
-    let mut requests = Vec::new();
-    let mut pending = std::collections::VecDeque::from([(
-        root.remote_path.clone(),
-        vec![root.name.clone()],
-        0_usize,
-    )]);
-    let mut directories = 1_usize;
-    let mut scanned_entries = 0_usize;
-    let mut total_text_bytes = root.remote_path.len().saturating_add(root.name.len());
-    while let Some((remote_directory, local_components, depth)) = pending.pop_front() {
-        let handle = timeout(REQUEST_TIMEOUT, session.opendir(remote_directory.clone()))
-            .await
-            .context("opening remote download directory timed out")?
-            .with_context(|| format!("cannot open remote directory {remote_directory:?}"))?
-            .handle;
-        let directory_result = discover_directory_entries(
-            session,
-            &handle,
-            &remote_directory,
-            &local_components,
-            depth,
-            &mut pending,
-            &mut requests,
-            &mut scanned_entries,
-            &mut directories,
-            &mut total_text_bytes,
-            root,
-        )
-        .await;
-        close_remote_handle(session, handle).await;
-        directory_result?;
-    }
-    if requests.is_empty() {
-        anyhow::bail!("remote directory contains no regular files eligible for download");
-    }
-    Ok(requests)
-}
-
-#[allow(clippy::too_many_arguments)]
-pub(super) async fn discover_directory_entries(
-    session: &RawSftpSession,
-    handle: &str,
-    remote_directory: &str,
-    local_components: &[String],
-    depth: usize,
-    pending: &mut std::collections::VecDeque<(String, Vec<String>, usize)>,
-    requests: &mut Vec<SftpDownloadRequest>,
-    scanned_entries: &mut usize,
-    directories: &mut usize,
-    total_text_bytes: &mut usize,
-    root: &SftpDownloadRoot,
-) -> Result<()> {
-    loop {
-        let response = timeout(REQUEST_TIMEOUT, session.readdir(handle.to_owned()))
-            .await
-            .context("reading remote download directory timed out")?;
-        let files = match response {
-            Ok(names) if names.files.is_empty() => break,
-            Ok(names) => names.files,
-            Err(russh_sftp::client::error::Error::Status(status))
-                if status.status_code == StatusCode::Eof =>
-            {
-                break;
-            }
-            Err(error) => return Err(error).context("cannot read remote download directory"),
-        };
-        for file in files {
-            reserve_recursive_entry(scanned_entries)?;
-            let Some((name, path, kind, size)) = bounded_discovery_entry(remote_directory, file)
-            else {
-                continue;
+    let handle = timeout(REQUEST_TIMEOUT, session.opendir(root.remote_path.clone()))
+        .await
+        .context("opening remote download directory timed out")?
+        .with_context(|| format!("cannot open remote directory {:?}", root.remote_path))?
+        .handle;
+    let mut pending = vec![DownloadDirectoryFrame {
+        remote_directory: root.remote_path.clone(),
+        local_components: vec![root.name.clone()],
+        handle,
+        entries: std::collections::VecDeque::new(),
+    }];
+    let mut summary = SftpDiscoverySummary::default();
+    while !pending.is_empty() {
+        let frame = pending
+            .last_mut()
+            .context("download directory stack is empty")?;
+        if let Some(file) = frame.entries.pop_front() {
+            let entry = download_entry(&frame.remote_directory, file);
+            let (name, path, is_directory, size) = match entry {
+                Ok(entry) => entry,
+                Err(error) => {
+                    record_discovery_issue(&mut summary, error);
+                    continue;
+                }
             };
             if transfer_name_matches_filter(&name, root.filter_patterns()) {
+                record_discovery_issue(&mut summary, "Excluded by transfer filter");
                 continue;
             }
-            *total_text_bytes = total_text_bytes
-                .saturating_add(name.len())
-                .saturating_add(path.len());
-            if *total_text_bytes > MAX_RECURSIVE_DOWNLOAD_TEXT_BYTES {
-                anyhow::bail!(
-                    "remote download tree exceeds the {MAX_RECURSIVE_DOWNLOAD_TEXT_BYTES}-byte text limit"
-                );
-            }
-            let mut child_components = local_components.to_vec();
-            child_components.push(name);
-            match kind {
-                DiscoveryEntryKind::Directory => {
-                    if depth >= MAX_RECURSIVE_DOWNLOAD_DEPTH {
-                        anyhow::bail!(
-                            "remote download tree exceeds the {MAX_RECURSIVE_DOWNLOAD_DEPTH}-level depth limit"
+            let mut child_components = frame.local_components.clone();
+            child_components.push(name.clone());
+            if is_directory {
+                match timeout(REQUEST_TIMEOUT, session.opendir(path.clone())).await {
+                    Ok(Ok(response)) => pending.push(DownloadDirectoryFrame {
+                        remote_directory: path,
+                        local_components: child_components,
+                        handle: response.handle,
+                        entries: std::collections::VecDeque::new(),
+                    }),
+                    Ok(Err(error)) => {
+                        record_discovery_issue(
+                            &mut summary,
+                            anyhow::Error::new(error)
+                                .context("cannot open nested remote download directory"),
                         );
                     }
-                    reserve_recursive_directory(directories)?;
-                    pending.push_back((path, child_components, depth + 1));
+                    Err(_) => {
+                        record_discovery_issue(
+                            &mut summary,
+                            "opening nested remote download directory timed out",
+                        );
+                    }
                 }
-                DiscoveryEntryKind::RegularFile => {
-                    if requests.len() >= MAX_RECURSIVE_DOWNLOAD_FILES {
-                        anyhow::bail!(
-                            "remote download tree exceeds the {MAX_RECURSIVE_DOWNLOAD_FILES}-file limit"
-                        );
-                    }
-                    if size > root.max_file_bytes {
-                        anyhow::bail!("remote file exceeds the configured SFTP file size limit");
-                    }
-                    requests.push(SftpDownloadRequest::for_local_download(
-                        if requests.is_empty() {
-                            root.transfer_id
-                        } else {
-                            Uuid::new_v4()
-                        },
-                        path,
-                        root.local_directory.clone(),
-                        child_components,
-                        size,
-                    )?);
+                continue;
+            }
+            let request = match SftpDownloadRequest::for_local_download(
+                Uuid::new_v4(),
+                path,
+                root.local_directory.clone(),
+                child_components,
+                size,
+            ) {
+                Ok(request) => request,
+                Err(error) => {
+                    record_discovery_issue(&mut summary, error);
+                    continue;
+                }
+            };
+            discovered_tx
+                .send(SftpDiscoveredDownload::Request {
+                    root_transfer_id: root.transfer_id,
+                    request,
+                })
+                .await
+                .context("SFTP download receiver stopped during discovery")?;
+            summary.discovered_files = summary.discovered_files.saturating_add(1);
+            continue;
+        }
+
+        let handle = frame.handle.clone();
+        let response = timeout(REQUEST_TIMEOUT, session.readdir(handle.clone())).await;
+        match response {
+            Ok(Ok(names)) if !names.files.is_empty() => frame.entries = names.files.into(),
+            Ok(Ok(_)) => {
+                if let Some(finished) = pending.pop() {
+                    close_remote_handle(session, finished.handle).await;
+                }
+            }
+            Ok(Err(russh_sftp::client::error::Error::Status(status)))
+                if status.status_code == StatusCode::Eof =>
+            {
+                if let Some(finished) = pending.pop() {
+                    close_remote_handle(session, finished.handle).await;
+                }
+            }
+            Ok(Err(error)) => {
+                record_discovery_issue(
+                    &mut summary,
+                    anyhow::Error::new(error).context("cannot read remote download directory"),
+                );
+                if let Some(finished) = pending.pop() {
+                    close_remote_handle(session, finished.handle).await;
+                }
+            }
+            Err(_) => {
+                record_discovery_issue(&mut summary, "reading remote download directory timed out");
+                if let Some(finished) = pending.pop() {
+                    close_remote_handle(session, finished.handle).await;
                 }
             }
         }
     }
-    Ok(())
+    Ok(summary)
 }
 
-pub(super) fn reserve_recursive_entry(scanned_entries: &mut usize) -> Result<()> {
-    *scanned_entries = scanned_entries.saturating_add(1);
-    if *scanned_entries > MAX_RECURSIVE_DOWNLOAD_ENTRIES {
-        anyhow::bail!(
-            "remote download tree exceeds the {MAX_RECURSIVE_DOWNLOAD_ENTRIES}-entry scan limit"
-        );
+fn record_discovery_issue(summary: &mut SftpDiscoverySummary, error: impl std::fmt::Display) {
+    summary.skipped_entries = summary.skipped_entries.saturating_add(1);
+    if summary.first_issue.is_none() {
+        let text = error.to_string();
+        let mut chars = text.chars();
+        let mut issue = chars.by_ref().take(512).collect::<String>();
+        if chars.next().is_some() {
+            issue.push('…');
+        }
+        summary.first_issue = Some(issue);
     }
-    Ok(())
 }
 
-pub(super) fn reserve_recursive_directory(directories: &mut usize) -> Result<()> {
-    *directories = directories.saturating_add(1);
-    if *directories > MAX_RECURSIVE_DOWNLOAD_DIRECTORIES {
-        anyhow::bail!(
-            "remote download tree exceeds the {MAX_RECURSIVE_DOWNLOAD_DIRECTORIES}-directory limit"
-        );
-    }
-    Ok(())
+struct DownloadDirectoryFrame {
+    remote_directory: String,
+    local_components: Vec<String>,
+    handle: String,
+    entries: std::collections::VecDeque<File>,
 }
 
-pub(super) enum DiscoveryEntryKind {
-    Directory,
-    RegularFile,
-}
-
-pub(super) fn bounded_discovery_entry(
-    parent: &str,
-    file: File,
-) -> Option<(String, String, DiscoveryEntryKind, u64)> {
+pub(super) fn download_entry(parent: &str, file: File) -> Result<(String, String, bool, u64)> {
     let name = file.filename;
     if name == "."
         || name == ".."
         || name.is_empty()
-        || name.chars().count() > MAX_NAME_CHARS
         || name.chars().any(char::is_control)
         || name.contains(['/', '\\'])
     {
-        return None;
+        anyhow::bail!("remote directory contains an unsafe entry name: {name:?}");
     }
     let path = join_remote_path(parent, &name);
-    if validate_remote_path(&path).is_err() || file.attrs.is_symlink() {
-        return None;
+    validate_remote_path(&path).context("remote download path is invalid")?;
+    if file.attrs.is_symlink() {
+        anyhow::bail!(
+            "remote directory contains a symbolic link that cannot be downloaded: {path}"
+        );
     }
     if file.attrs.is_dir() {
-        return Some((name, path, DiscoveryEntryKind::Directory, 0));
+        return Ok((name, path, true, 0));
     }
     if !file.attrs.is_regular() {
-        return None;
+        anyhow::bail!("remote directory contains an unsupported file type: {path}");
     }
-    let size = file.attrs.size?;
-    Some((name, path, DiscoveryEntryKind::RegularFile, size))
+    let size = file.attrs.size.context("remote file size is unavailable")?;
+    Ok((name, path, false, size))
 }
 
 pub(super) fn join_remote_path(parent: &str, child: &str) -> String {

@@ -531,9 +531,20 @@ impl TerminalBackend {
 }
 
 impl TerminalWorker {
-    pub(in crate::app) fn sftp_max_file_bytes(&self) -> Result<u64> {
+    pub(in crate::app) fn sftp_download_submitter(
+        &self,
+    ) -> Result<ax_ssh::ssh::SftpDownloadSubmitter> {
         match self {
-            Self::Ssh(worker) => Ok(worker.sftp_max_file_bytes()),
+            Self::Ssh(worker) => Ok(worker.sftp_download_submitter()),
+            Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
+                anyhow::bail!("SFTP is available only for SSH sessions")
+            }
+        }
+    }
+
+    pub(in crate::app) fn sftp_upload_submitter(&self) -> Result<ax_ssh::ssh::SftpUploadSubmitter> {
+        match self {
+            Self::Ssh(worker) => Ok(worker.sftp_upload_submitter()),
             Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
                 anyhow::bail!("SFTP is available only for SSH sessions")
             }
@@ -718,19 +729,6 @@ impl TerminalWorker {
                 local_path,
                 total_bytes,
             ),
-            Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
-                anyhow::bail!("SFTP is available only for SSH sessions")
-            }
-        }
-    }
-
-    pub(in crate::app) fn request_open_sftp_upload_batch(
-        &self,
-        batch_id: Uuid,
-        files: Vec<(Uuid, String, std::path::PathBuf, u64, Vec<String>)>,
-    ) -> Result<()> {
-        match self {
-            Self::Ssh(worker) => worker.request_open_sftp_upload_batch(batch_id, files),
             Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
                 anyhow::bail!("SFTP is available only for SSH sessions")
             }

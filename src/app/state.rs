@@ -234,9 +234,6 @@ impl From<&TerminalSnapshot> for TerminalVisibleState {
 }
 
 const SFTP_HISTORY_LIMIT: usize = 128;
-// A recursively selected directory can contribute up to 512 individual files.
-// Keep every live row addressable until it reaches a terminal state.
-const SFTP_TRANSFER_HISTORY_LIMIT: usize = 512;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(super) enum SftpNavigation {
@@ -321,6 +318,8 @@ pub(super) struct SftpBrowserState {
     pending_auto_refresh: Option<String>,
     pub(super) local: LocalDirectoryState,
     pub(super) transfers: VecDeque<SftpTransferState>,
+    pub(super) pending_download_roots: HashSet<Uuid>,
+    pub(super) scanning_download_roots: HashSet<Uuid>,
     pub(super) upload_conflicts: VecDeque<PendingUploadConflict>,
     pub(super) selected_transfers: HashSet<Uuid>,
     pub(super) rename_name: String,
@@ -459,6 +458,8 @@ pub(super) struct SftpTransferSnapshot {
     pub(super) status: String,
     pub(super) selected: bool,
     pub(super) has_local_path: bool,
+    pub(super) local_path: Option<PathBuf>,
+    pub(super) remote_path: Option<String>,
 }
 
 pub(super) enum TerminalBackend {
@@ -633,7 +634,6 @@ pub(super) struct SessionEditorSnapshot {
     pub(super) sftp_local_path: String,
     pub(super) sftp_override_limits: bool,
     pub(super) sftp_per_tab_transfers: i32,
-    pub(super) sftp_max_file_gib: i32,
     pub(super) sftp_rate_limit_mib_per_second: i32,
     pub(super) credential_storage: String,
     pub(super) default_credential_storage: String,
@@ -666,7 +666,6 @@ impl Default for SessionEditorSnapshot {
             sftp_local_path: default_local_directory(),
             sftp_override_limits: false,
             sftp_per_tab_transfers: i32::from(ax_ssh::config::DEFAULT_SFTP_PER_TAB_TRANSFERS),
-            sftp_max_file_gib: ax_ssh::config::DEFAULT_SFTP_MAX_FILE_GIB as i32,
             sftp_rate_limit_mib_per_second: 0,
             credential_storage: String::new(),
             default_credential_storage: "encrypted-vault".to_owned(),

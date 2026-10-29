@@ -1,14 +1,10 @@
 //! Bounded local upload-tree discovery without UI or worker state.
 
 use super::*;
-use std::collections::{HashSet, VecDeque};
+use std::fs::ReadDir;
+use std::sync::Arc;
+use tokio::sync::mpsc;
 use uuid::Uuid;
-
-pub(in crate::app) const MAX_LOCAL_UPLOAD_FILES: usize = 512;
-const MAX_UPLOAD_SCAN_ENTRIES: usize = 4096;
-const MAX_UPLOAD_DIRECTORIES: usize = 256;
-const MAX_UPLOAD_DEPTH: usize = 16;
-const MAX_UPLOAD_TEXT_BYTES: usize = 512 * 1024;
 
 fn join_remote_upload_path(directory: &str, name: &str) -> String {
     if directory == "/" || directory.is_empty() {
@@ -18,6 +14,7 @@ fn join_remote_upload_path(directory: &str, name: &str) -> String {
     }
 }
 
+#[derive(Clone)]
 pub(in crate::app) struct PreparedLocalUpload {
     pub(in crate::app) id: Uuid,
     pub(in crate::app) local_path: PathBuf,
@@ -26,102 +23,172 @@ pub(in crate::app) struct PreparedLocalUpload {
     pub(in crate::app) size: u64,
 }
 
-pub(in crate::app) fn discover_local_uploads(
+pub(in crate::app) struct UploadDiscoverySummary {
+    pub(in crate::app) discovered_files: usize,
+    pub(in crate::app) skipped_entries: usize,
+    pub(in crate::app) first_issue: Option<String>,
+}
+
+fn record_upload_discovery_issue(
+    skipped_entries: &mut usize,
+    first_issue: &mut Option<String>,
+    error: impl std::fmt::Display,
+) {
+    *skipped_entries = (*skipped_entries).saturating_add(1);
+    if first_issue.is_none() {
+        *first_issue = Some(error.to_string());
+    }
+}
+
+struct UploadDirectoryNode {
+    remote_path: String,
+    parent: Option<Arc<UploadDirectoryNode>>,
+}
+
+enum UploadWalkFrame {
+    Visit(PathBuf, Option<Arc<UploadDirectoryNode>>),
+    ReadDirectory(ReadDir, Arc<UploadDirectoryNode>),
+}
+
+pub(in crate::app) fn discover_local_uploads_streaming(
     paths: Vec<PathBuf>,
     remote_directory: &str,
     filters: &[String],
-    max_file_bytes: u64,
-) -> Result<Vec<PreparedLocalUpload>> {
-    let mut pending = VecDeque::new();
-    let mut root_names = HashSet::new();
-    let mut files = Vec::new();
-    let mut scanned = 0_usize;
-    let mut directories = 0_usize;
-    let mut text_bytes = 0_usize;
-    for path in paths {
-        let name = upload_local_name(&path)?;
-        if !root_names.insert(name.clone()) {
-            anyhow::bail!("selected upload roots contain duplicate names");
-        }
-        pending.push_back((path, Vec::<String>::new(), 0_usize));
-    }
-    while let Some((path, parents, depth)) = pending.pop_front() {
-        scanned += 1;
-        if scanned > MAX_UPLOAD_SCAN_ENTRIES {
-            anyhow::bail!(
-                "local upload tree exceeds the {MAX_UPLOAD_SCAN_ENTRIES}-entry scan limit"
+    output: &mpsc::Sender<PreparedLocalUpload>,
+) -> Result<UploadDiscoverySummary> {
+    let mut stack = Vec::with_capacity(paths.len());
+    let mut discovered_files = 0_usize;
+    let mut skipped_entries = 0_usize;
+    let mut first_issue = None;
+    for path in paths.into_iter().rev() {
+        if let Err(error) = upload_local_name(&path) {
+            let error = error;
+            record_upload_discovery_issue(
+                &mut skipped_entries,
+                &mut first_issue,
+                error.context(format!("invalid local upload root {path:?}")),
             );
-        }
-        let metadata = std::fs::symlink_metadata(&path)
-            .with_context(|| format!("cannot inspect local upload path {path:?}"))?;
-        if metadata.file_type().is_symlink() {
             continue;
         }
-        let name = upload_local_name(&path)?;
-        if ax_ssh::sftp::transfer_name_matches_filter(&name, filters) {
-            continue;
-        }
-        text_bytes = text_bytes
-            .saturating_add(path.as_os_str().len())
-            .saturating_add(name.len());
-        if text_bytes > MAX_UPLOAD_TEXT_BYTES {
-            anyhow::bail!("local upload tree exceeds the {MAX_UPLOAD_TEXT_BYTES}-byte path budget");
-        }
-        let mut remote = remote_directory.to_owned();
-        for parent in &parents {
-            remote = join_remote_upload_path(&remote, parent);
-        }
-        if metadata.is_dir() {
-            if depth >= MAX_UPLOAD_DEPTH || directories >= MAX_UPLOAD_DIRECTORIES {
-                anyhow::bail!("local upload tree exceeds the directory depth or count limit");
-            }
-            directories += 1;
-            let mut children = Vec::new();
-            for item in std::fs::read_dir(&path)
-                .with_context(|| format!("cannot read local upload directory {path:?}"))?
-            {
-                let entry =
-                    item.with_context(|| format!("cannot read local upload directory {path:?}"))?;
-                if scanned
-                    .saturating_add(pending.len())
-                    .saturating_add(children.len())
-                    >= MAX_UPLOAD_SCAN_ENTRIES
+        stack.push(UploadWalkFrame::Visit(path, None));
+    }
+    while let Some(frame) = stack.pop() {
+        match frame {
+            UploadWalkFrame::ReadDirectory(mut entries, parent) => match entries.next() {
+                Some(Ok(entry)) => {
+                    stack.push(UploadWalkFrame::ReadDirectory(entries, parent.clone()));
+                    stack.push(UploadWalkFrame::Visit(entry.path(), Some(parent)));
+                }
+                Some(Err(error)) => {
+                    record_upload_discovery_issue(
+                        &mut skipped_entries,
+                        &mut first_issue,
+                        format!("cannot read local upload directory: {error}"),
+                    );
+                    stack.push(UploadWalkFrame::ReadDirectory(entries, parent));
+                }
+                None => {}
+            },
+            UploadWalkFrame::Visit(path, parent) => {
+                let metadata = match std::fs::symlink_metadata(&path)
+                    .with_context(|| format!("cannot inspect local upload path {path:?}"))
                 {
-                    anyhow::bail!(
-                        "local upload tree exceeds the {MAX_UPLOAD_SCAN_ENTRIES}-entry scan limit"
+                    Ok(metadata) => metadata,
+                    Err(error) => {
+                        record_upload_discovery_issue(
+                            &mut skipped_entries,
+                            &mut first_issue,
+                            error,
+                        );
+                        continue;
+                    }
+                };
+                if metadata.file_type().is_symlink() {
+                    record_upload_discovery_issue(
+                        &mut skipped_entries,
+                        &mut first_issue,
+                        format!("local upload tree contains a symbolic link: {path:?}"),
+                    );
+                    continue;
+                }
+                let name = match upload_local_name(&path) {
+                    Ok(name) => name,
+                    Err(error) => {
+                        record_upload_discovery_issue(
+                            &mut skipped_entries,
+                            &mut first_issue,
+                            error.context(format!("invalid local upload path {path:?}")),
+                        );
+                        continue;
+                    }
+                };
+                if ax_ssh::sftp::transfer_name_matches_filter(&name, filters) {
+                    record_upload_discovery_issue(
+                        &mut skipped_entries,
+                        &mut first_issue,
+                        format!("Excluded by transfer filter: {path:?}"),
+                    );
+                    continue;
+                }
+                if metadata.is_dir() {
+                    let remote_path = match &parent {
+                        Some(parent) => join_remote_upload_path(&parent.remote_path, &name),
+                        None => join_remote_upload_path(remote_directory, &name),
+                    };
+                    let directory = Arc::new(UploadDirectoryNode {
+                        remote_path,
+                        parent,
+                    });
+                    match std::fs::read_dir(&path)
+                        .with_context(|| format!("cannot read local upload directory {path:?}"))
+                    {
+                        Ok(entries) => {
+                            stack.push(UploadWalkFrame::ReadDirectory(entries, directory))
+                        }
+                        Err(error) => record_upload_discovery_issue(
+                            &mut skipped_entries,
+                            &mut first_issue,
+                            error,
+                        ),
+                    }
+                } else if metadata.is_file() {
+                    let directory = parent
+                        .as_ref()
+                        .map(|node| node.remote_path.as_str())
+                        .unwrap_or(remote_directory);
+                    let mut remote_directories = Vec::new();
+                    let mut current = parent.as_deref();
+                    while let Some(node) = current {
+                        remote_directories.push(node.remote_path.clone());
+                        current = node.parent.as_deref();
+                    }
+                    remote_directories.reverse();
+                    let file = PreparedLocalUpload {
+                        id: Uuid::new_v4(),
+                        local_path: path,
+                        remote_path: join_remote_upload_path(directory, &name),
+                        remote_directories,
+                        size: metadata.len(),
+                    };
+                    output
+                        .blocking_send(file)
+                        .context("SFTP upload queue stopped during local discovery")?;
+                    discovered_files = discovered_files.saturating_add(1);
+                } else {
+                    record_upload_discovery_issue(
+                        &mut skipped_entries,
+                        &mut first_issue,
+                        format!("local upload tree contains an unsupported file type: {path:?}"),
                     );
                 }
-                children.push(entry.path());
             }
-            children.sort();
-            let mut child_parents = parents;
-            child_parents.push(name);
-            for child in children {
-                pending.push_back((child, child_parents.clone(), depth + 1));
-            }
-        } else if metadata.is_file() {
-            if metadata.len() > max_file_bytes || files.len() >= MAX_LOCAL_UPLOAD_FILES {
-                anyhow::bail!("local upload tree exceeds the file size or count limit");
-            }
-            let mut remote_directories = Vec::new();
-            let mut directory = remote_directory.to_owned();
-            for parent in &parents {
-                directory = join_remote_upload_path(&directory, parent);
-                remote_directories.push(directory.clone());
-            }
-            files.push(PreparedLocalUpload {
-                id: Uuid::new_v4(),
-                local_path: path,
-                remote_path: join_remote_upload_path(&remote, &name),
-                remote_directories,
-                size: metadata.len(),
-            });
         }
     }
-    if files.is_empty() {
-        anyhow::bail!("selected upload contains no eligible regular files");
-    }
-    Ok(files)
+    Ok(UploadDiscoverySummary {
+        discovered_files,
+        skipped_entries,
+        first_issue,
+    })
 }
 
 fn upload_local_name(path: &Path) -> Result<String> {
@@ -130,11 +197,8 @@ fn upload_local_name(path: &Path) -> Result<String> {
         .and_then(|value| value.to_str())
         .filter(|value| !value.is_empty() && *value != "." && *value != "..")
         .context("local upload path has no valid UTF-8 name")?;
-    if name.chars().any(char::is_control)
-        || name.contains(['/', '\\'])
-        || name.chars().count() > 512
-    {
-        anyhow::bail!("local upload name is invalid or too long");
+    if name.chars().any(char::is_control) || name.contains(['/', '\\']) {
+        anyhow::bail!("local upload name is invalid");
     }
     Ok(name.to_owned())
 }

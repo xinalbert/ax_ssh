@@ -53,11 +53,6 @@ pub(super) const SETTINGS_SEARCH_CATALOG: &[SearchRow] = &[
     ),
     (
         "SFTP",
-        "Maximum file size (GiB)",
-        "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB",
-    ),
-    (
-        "SFTP",
         "Local file open snapshot (MiB)",
         "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space",
     ),
@@ -303,11 +298,6 @@ const SETTINGS_SEARCH_DE: &[SearchRow] = &[
         "SFTP",
         "Plattformstandardwerte",
         "Standardfilter dieser Plattform wiederherstellen",
-    ),
-    (
-        "SFTP",
-        "Maximale Dateigröße (GiB)",
-        "Maximale Größe einer hoch- oder heruntergeladenen Datei; 0 = unbegrenzt, Standard 20 GiB",
     ),
     (
         "SFTP",
@@ -595,11 +585,6 @@ const SETTINGS_SEARCH_EN_GB: &[SearchRow] = &[
     ),
     (
         "SFTP",
-        "Maximum file size (GiB)",
-        "Maximum size of one uploaded or downloaded file; 0 means unlimited, default 20 GiB",
-    ),
-    (
-        "SFTP",
         "Local file open snapshot (MiB)",
         "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space",
     ),
@@ -845,11 +830,6 @@ const SETTINGS_SEARCH_ES: &[SearchRow] = &[
         "SFTP",
         "Valores predeterminados de la plataforma",
         "Restaurar los filtros predeterminados de esta plataforma",
-    ),
-    (
-        "SFTP",
-        "Tamaño máximo de archivo (GiB)",
-        "Tamaño máximo de un archivo subido o descargado; 0 = sin límite, 20 GiB por defecto",
     ),
     (
         "SFTP",
@@ -1137,11 +1117,6 @@ const SETTINGS_SEARCH_FR: &[SearchRow] = &[
     ),
     (
         "SFTP",
-        "Taille maximale d’un fichier (GiB)",
-        "Taille maximale d’un fichier envoyé ou téléchargé ; 0 = illimitée, 20 GiB par défaut",
-    ),
-    (
-        "SFTP",
         "Copie locale avant ouverture (MiB)",
         "Copie locale avant ouverture ; 512 MiB par défaut, 0 supprime les limites de taille des fichiers et du cache et peut utiliser beaucoup d’espace disque",
     ),
@@ -1414,11 +1389,6 @@ const SETTINGS_SEARCH_JA: &[SearchRow] = &[
     ),
     (
         "SFTP",
-        "ファイルサイズの上限（GiB）",
-        "転送する1ファイルのサイズ上限；0は無制限、既定は20 GiB",
-    ),
-    (
-        "SFTP",
         "ローカルファイルを開く際のコピー上限（MiB）",
         "開く前にローカルファイルをコピー；既定は512 MiB。0ではファイルとキャッシュの容量制限を解除し、多くのディスク容量を使用する場合があります",
     ),
@@ -1655,11 +1625,6 @@ const SETTINGS_SEARCH_KO: &[SearchRow] = &[
     ("SFTP", "플랫폼 기본값", "이 플랫폼의 기본 필터 복원"),
     (
         "SFTP",
-        "최대 파일 크기 (GiB)",
-        "업로드 또는 다운로드할 파일 하나의 최대 크기, 0은 무제한, 기본 20GiB",
-    ),
-    (
-        "SFTP",
         "로컬 파일 열기 사본 (MiB)",
         "열기 전 로컬 사본 생성, 기본 512MiB. 0은 파일 및 캐시 크기 제한을 해제하며 디스크 공간을 많이 사용할 수 있습니다",
     ),
@@ -1861,11 +1826,6 @@ const SETTINGS_SEARCH_PT_BR: &[SearchRow] = &[
         "SFTP",
         "Padrões da plataforma",
         "Restaurar os filtros padrão desta plataforma",
-    ),
-    (
-        "SFTP",
-        "Tamanho máximo de arquivo (GiB)",
-        "Tamanho máximo de um arquivo enviado ou baixado; 0 = ilimitado, padrão de 20 GiB",
     ),
     (
         "SFTP",
@@ -2149,11 +2109,6 @@ const SETTINGS_SEARCH_RU: &[SearchRow] = &[
     ),
     (
         "SFTP",
-        "Максимальный размер файла (GiB)",
-        "Максимальный размер одного отправляемого или скачиваемого файла; 0 — без ограничений, по умолчанию 20 GiB",
-    ),
-    (
-        "SFTP",
         "Локальная копия для открытия (MiB)",
         "Локальная копия перед открытием; по умолчанию 512 MiB. 0 снимает ограничения размера файлов и кэша и может занять много места на диске",
     ),
@@ -2434,11 +2389,6 @@ const SETTINGS_SEARCH_UK: &[SearchRow] = &[
     ),
     (
         "SFTP",
-        "Максимальний розмір файлу (GiB)",
-        "Максимальний розмір одного надісланого або завантаженого файлу; 0 — без обмежень, типово 20 GiB",
-    ),
-    (
-        "SFTP",
         "Локальна копія для відкриття (MiB)",
         "Локальна копія перед відкриттям; типово 512 MiB. 0 знімає обмеження розміру файлів і кешу та може зайняти багато місця на диску",
     ),
@@ -2695,11 +2645,6 @@ const SETTINGS_SEARCH_ZH_CN: &[SearchRow] = &[
     ("SFTP", "平台默认值", "恢复此平台的默认过滤规则"),
     (
         "SFTP",
-        "单文件大小上限（GiB）",
-        "单个上传或下载文件的大小上限；0 表示不限大小，默认 20 GiB",
-    ),
-    (
-        "SFTP",
         "本地文件打开快照（MiB）",
         "打开前复制的本地文件；默认上限 512 MiB，0 取消文件和缓存字节限制，可能占用大量磁盘空间",
     ),
@@ -2806,11 +2751,6 @@ const SETTINGS_SEARCH_ZH_TW: &[SearchRow] = &[
     ),
     ("SFTP", "全域性同時上傳數", "所有 SFTP 分頁共享的同時上傳數"),
     ("SFTP", "平臺預設值", "恢復此平臺的預設過濾規則"),
-    (
-        "SFTP",
-        "單檔案大小上限（GiB）",
-        "單個上傳或下載檔案的大小上限；0 表示不限大小，預設 20 GiB",
-    ),
     (
         "SFTP",
         "本地檔案開啟快照（MiB）",

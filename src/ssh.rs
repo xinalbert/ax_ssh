@@ -17,7 +17,10 @@ use crate::config::{AuthMethod, SessionProfile};
 
 pub use self::known_hosts::TrustDecision;
 pub use self::private_keys::discover_private_keys;
-pub use self::worker::{SshSessionEvent, SshSessionHandle, SshTerminalSettings};
+pub use self::worker::{
+    SftpDownloadSubmitter, SftpUploadSubmitter, SshSessionEvent, SshSessionHandle,
+    SshTerminalSettings,
+};
 
 /// Startup and final results for a worker-owned remote audio channel.
 pub struct MicrophoneRequest {

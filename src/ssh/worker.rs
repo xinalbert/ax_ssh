@@ -41,7 +41,7 @@ use super::{SshConnection, SshError};
 const DISCONNECT_TIMEOUT: Duration = Duration::from_secs(5);
 const WORKER_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(20);
 const OUTPUT_FLUSH_INTERVAL: Duration = Duration::from_millis(16);
-const COMMAND_CAPACITY: usize = 32;
+const COMMAND_CAPACITY: usize = 16;
 const EVENT_CAPACITY: usize = 32;
 const SFTP_EVENT_CAPACITY: usize = 16;
 const MAX_X11_RELAYS: usize = 8;
@@ -204,10 +204,85 @@ pub struct SshSessionHandle {
     latency_foreground_tx: watch::Sender<bool>,
     next_input_sequence: AtomicU64,
     task: JoinHandle<()>,
-    sftp_max_file_bytes: u64,
+}
+
+#[derive(Clone)]
+pub struct SftpUploadSubmitter {
+    command_tx: mpsc::Sender<SshCommand>,
+}
+
+#[derive(Clone)]
+pub struct SftpDownloadSubmitter {
+    command_tx: mpsc::Sender<SshCommand>,
+}
+
+impl SftpDownloadSubmitter {
+    pub async fn submit(
+        &self,
+        transfer_id: Uuid,
+        remote_path: String,
+        local_directory: std::path::PathBuf,
+        filter_patterns: Vec<String>,
+    ) -> Result<()> {
+        let root =
+            SftpDownloadRoot::new(transfer_id, remote_path, local_directory, filter_patterns)?;
+        self.command_tx
+            .send(SshCommand::OpenSftpFile { root })
+            .await
+            .map_err(|error| anyhow::anyhow!("cannot queue SFTP download request: {error}"))
+    }
+}
+
+impl SftpUploadSubmitter {
+    pub async fn submit(
+        &self,
+        batch_id: Uuid,
+        files: Vec<(Uuid, String, std::path::PathBuf, u64, Vec<String>)>,
+    ) -> Result<()> {
+        let requests = files
+            .into_iter()
+            .map(|(id, path, local, size, directories)| {
+                SftpUploadRequest::from_local_file(id, batch_id, path, local, size, directories)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        self.command_tx
+            .send(SshCommand::OpenSftpUploads { requests })
+            .await
+            .map_err(|error| anyhow::anyhow!("cannot queue SFTP upload batch: {error}"))
+    }
 }
 
 impl SshSessionHandle {
+    pub fn sftp_download_submitter(&self) -> SftpDownloadSubmitter {
+        SftpDownloadSubmitter {
+            command_tx: self.command_tx.clone(),
+        }
+    }
+
+    pub fn sftp_upload_submitter(&self) -> SftpUploadSubmitter {
+        SftpUploadSubmitter {
+            command_tx: self.command_tx.clone(),
+        }
+    }
+
+    #[cfg(test)]
+    pub fn request_open_sftp_upload_batch(
+        &self,
+        batch_id: Uuid,
+        files: Vec<(Uuid, String, std::path::PathBuf, u64, Vec<String>)>,
+    ) -> Result<()> {
+        let submitter = self.sftp_upload_submitter();
+        let command_tx = submitter.command_tx.clone();
+        let requests = files
+            .into_iter()
+            .map(|(id, path, local, size, directories)| {
+                SftpUploadRequest::from_local_file(id, batch_id, path, local, size, directories)
+            })
+            .collect::<Result<Vec<_>>>()?;
+        command_tx
+            .try_send(SshCommand::OpenSftpUploads { requests })
+            .map_err(|error| anyhow::anyhow!("cannot queue SFTP upload batch: {error}"))
+    }
     /// Upload a private session attachment using the current trusted connection.
     pub fn request_clipboard_image(
         &self,
@@ -379,7 +454,6 @@ impl SshSessionHandle {
                 latency_foreground_tx,
                 next_input_sequence: AtomicU64::new(1),
                 task,
-                sftp_max_file_bytes: sftp_policy.max_file_bytes(),
             },
             event_rx,
         )
@@ -399,11 +473,6 @@ impl SshSessionHandle {
 
     pub fn is_finished(&self) -> bool {
         self.task.is_finished()
-    }
-
-    /// Limit captured when this SFTP connection started.
-    pub fn sftp_max_file_bytes(&self) -> u64 {
-        self.sftp_max_file_bytes
     }
 
     pub fn request_disconnect(&self) -> Result<()> {
@@ -552,13 +621,7 @@ impl SshSessionHandle {
         local_directory: std::path::PathBuf,
         filter_patterns: Vec<String>,
     ) -> Result<()> {
-        let root = SftpDownloadRoot::new(
-            transfer_id,
-            path,
-            local_directory,
-            filter_patterns,
-            self.sftp_max_file_bytes,
-        )?;
+        let root = SftpDownloadRoot::new(transfer_id, path, local_directory, filter_patterns)?;
         self.command_tx
             .try_send(SshCommand::OpenSftpFile { root })
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP download request: {error}"))
@@ -571,9 +634,6 @@ impl SshSessionHandle {
         local_path: std::path::PathBuf,
         total_bytes: u64,
     ) -> Result<()> {
-        if total_bytes > self.sftp_max_file_bytes {
-            anyhow::bail!("SFTP download exceeds the configured file size limit");
-        }
         let request = SftpDownloadRequest::for_explicit_local_path(
             transfer_id,
             path,
@@ -589,28 +649,6 @@ impl SshSessionHandle {
         self.command_tx
             .try_send(SshCommand::CancelSftpTransfer { transfer_id })
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP transfer cancellation: {error}"))
-    }
-
-    pub fn request_open_sftp_upload_batch(
-        &self,
-        batch_id: Uuid,
-        files: Vec<(Uuid, String, std::path::PathBuf, u64, Vec<String>)>,
-    ) -> Result<()> {
-        if files
-            .iter()
-            .any(|(_, _, _, size, _)| *size > self.sftp_max_file_bytes)
-        {
-            anyhow::bail!("SFTP upload exceeds the configured file size limit");
-        }
-        let requests = files
-            .into_iter()
-            .map(|(id, path, local, size, directories)| {
-                SftpUploadRequest::from_local_file(id, batch_id, path, local, size, directories)
-            })
-            .collect::<Result<Vec<_>>>()?;
-        self.command_tx
-            .try_send(SshCommand::OpenSftpUploads { requests })
-            .map_err(|error| anyhow::anyhow!("cannot queue SFTP upload batch: {error}"))
     }
 
     pub fn request_resolve_sftp_upload_conflict(
@@ -980,9 +1018,6 @@ mod tests {
             latency_foreground_tx: watch::channel(false).0,
             next_input_sequence: AtomicU64::new(0),
             task,
-            sftp_max_file_bytes: crate::config::SftpTransferSettings::default()
-                .policy(None)
-                .max_file_bytes(),
         };
         let shutdown = tokio::spawn(handle.shutdown());
         tokio::task::yield_now().await;

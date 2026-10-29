@@ -269,18 +269,22 @@ fn dropped_local_paths_rejects_remote_host_in_uri_list() {
 }
 
 #[test]
-fn dropped_local_paths_is_bounded() {
-    let text = (0..=MAX_DROPPED_LOCAL_PATHS)
+fn dropped_local_paths_keeps_more_than_the_old_batch_limit() {
+    let text = (0..600)
         .map(|index| format!("/tmp/file-{index}.txt"))
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(parse_dropped_local_paths(&text).is_err());
+    assert_eq!(parse_dropped_local_paths(&text).unwrap().len(), 600);
 }
 
 #[test]
-fn dropped_local_paths_rejects_oversized_payload() {
-    let text = " ".repeat(MAX_DROPPED_LOCAL_DATA_BYTES + 1);
-    assert!(parse_dropped_local_paths(&text).is_err());
+fn dropped_local_paths_accepts_large_payload() {
+    let text = (0..620)
+        .map(|index| format!("/tmp/file-{index}-{}.txt", "x".repeat(4000)))
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(text.len() > 2 * 1024 * 1024);
+    assert_eq!(parse_dropped_local_paths(&text).unwrap().len(), 620);
 }
 
 #[test]

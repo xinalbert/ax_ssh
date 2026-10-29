@@ -407,6 +407,33 @@ pub(super) fn sftp_transfer_rows(transfers: Vec<SftpTransferSnapshot>) -> Vec<Sf
             } else {
                 String::new()
             };
+            let remaining_bytes = transfer
+                .total_bytes
+                .saturating_sub(transfer.downloaded_bytes);
+            let eta = if matches!(
+                transfer.phase,
+                SftpTransferPhase::Downloading | SftpTransferPhase::Uploading
+            ) && transfer.bytes_per_second > 0
+            {
+                format_transfer_eta(remaining_bytes, transfer.bytes_per_second)
+            } else {
+                String::new()
+            };
+            let local_path = transfer
+                .local_path
+                .as_deref()
+                .map(|path| path.display().to_string());
+            let remote_path = transfer.remote_path;
+            let (source, destination) = match transfer.direction {
+                SftpTransferDirection::Upload => (
+                    local_path.unwrap_or_default(),
+                    remote_path.unwrap_or_default(),
+                ),
+                SftpTransferDirection::Download => (
+                    remote_path.unwrap_or_default(),
+                    local_path.unwrap_or_default(),
+                ),
+            };
             SftpTransferRow {
                 id: transfer.id.to_string().into(),
                 name: transfer.name.into(),
@@ -416,6 +443,9 @@ pub(super) fn sftp_transfer_rows(transfers: Vec<SftpTransferSnapshot>) -> Vec<Sf
                 progress,
                 size: size.into(),
                 speed: speed.into(),
+                eta: eta.into(),
+                source: source.into(),
+                destination: destination.into(),
                 selected: transfer.selected,
                 pausable: transfer.pausable && transfer.phase == SftpTransferPhase::Downloading,
                 resumable: transfer.pausable && transfer.phase == SftpTransferPhase::Paused,
@@ -424,6 +454,21 @@ pub(super) fn sftp_transfer_rows(transfers: Vec<SftpTransferSnapshot>) -> Vec<Sf
             }
         })
         .collect()
+}
+
+fn format_transfer_eta(remaining_bytes: u64, bytes_per_second: u64) -> String {
+    if bytes_per_second == 0 {
+        return String::new();
+    }
+    let seconds = remaining_bytes.div_ceil(bytes_per_second);
+    let hours = seconds / 3_600;
+    let minutes = (seconds % 3_600) / 60;
+    let seconds = seconds % 60;
+    if hours > 0 {
+        format!("{hours:02}:{minutes:02}:{seconds:02}")
+    } else {
+        format!("{minutes:02}:{seconds:02}")
+    }
 }
 
 pub(super) fn format_file_size(bytes: u64, is_dir: bool) -> String {

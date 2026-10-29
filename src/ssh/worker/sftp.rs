@@ -10,10 +10,10 @@ use tokio::task::JoinSet;
 use tokio::time::{MissedTickBehavior, interval, timeout};
 
 use crate::sftp::{
-    MAX_RECURSIVE_DOWNLOAD_FILES, SFTP_TRANSFER_EVENT_CAPACITY, SftpBrowserHandle,
-    SftpDownloadHandle, SftpDownloadRequest, SftpDownloadRoot, SftpUploadConflictChoice,
-    SftpUploadHandle, SftpUploadRequest, SftpWriteEvent, TransferRateLimiter,
-    discover_download_requests, execute_sftp_write,
+    SFTP_TRANSFER_EVENT_CAPACITY, SFTP_TRANSFER_QUEUE_WINDOW, SftpBrowserHandle,
+    SftpDiscoveredDownload, SftpDiscoverySummary, SftpDownloadHandle, SftpDownloadRequest,
+    SftpDownloadRoot, SftpUploadConflictChoice, SftpUploadHandle, SftpUploadRequest,
+    SftpWriteEvent, TransferRateLimiter, discover_download_requests, execute_sftp_write,
 };
 
 use super::*;
@@ -26,14 +26,14 @@ struct PendingSftpOpen {
 }
 
 struct PendingDiscovery {
-    task_id: tokio::task::Id,
     cancellation: Option<oneshot::Sender<()>>,
     cancelled: bool,
     root: SftpDownloadRoot,
 }
 
 type SftpChannelStream = ChannelStream<client::Msg>;
-const MAX_PENDING_UPLOADS: usize = 512;
+
+const MAX_ACTIVE_SFTP_DISCOVERIES: usize = 8;
 
 struct SftpUploadStartContext<'a> {
     connection: &'a SshConnection,
@@ -117,6 +117,8 @@ pub(super) async fn run_sftp_session(
     }
     let (browser_event_tx, mut browser_events) = mpsc::channel(SFTP_EVENT_CAPACITY);
     let (transfer_event_tx, mut transfer_events) = mpsc::channel(SFTP_TRANSFER_EVENT_CAPACITY);
+    let (discovered_download_tx, mut discovered_downloads) =
+        mpsc::channel::<SftpDiscoveredDownload>(16);
     let stream = match open_initial_sftp_stream(&connection, &mut command_rx, session_id).await {
         None => {
             disconnect_sftp_connection(&connection, session_id).await;
@@ -175,8 +177,11 @@ pub(super) async fn run_sftp_session(
         transfer_event_tx: &transfer_event_tx,
         rate_limiter: rate_limiter.clone(),
     };
-    let mut discoveries = JoinSet::<Result<Vec<SftpDownloadRequest>>>::new();
+    let mut discoveries = JoinSet::<Result<SftpDiscoverySummary>>::new();
     let mut discovery_by_transfer = HashMap::<Uuid, PendingDiscovery>::new();
+    let mut queued_discovery_roots = VecDeque::<SftpDownloadRoot>::new();
+    let mut deferred_discovery_root = None::<SftpDownloadRoot>;
+    let mut deferred_discovered = None::<SftpDiscoveredDownload>;
     let mut release_probes = JoinSet::<Option<String>>::new();
     let mut release_probe_started = false;
     let liveness_connection = connection.clone();
@@ -197,76 +202,15 @@ pub(super) async fn run_sftp_session(
                 break;
             }
             discovery = discoveries.join_next_with_id(), if !discoveries.is_empty() => {
-                let Some(discovery) = discovery else {
-                    continue;
-                };
-                let (task_id, result) = match discovery {
-                    Ok((task_id, result)) => (task_id, Ok(result)),
-                    Err(error) => (error.id(), Err(error)),
-                };
-                let Some((transfer_id, discovery)) = take_pending_discovery(&mut discovery_by_transfer, task_id) else {
-                    continue;
-                };
-                if discovery.cancelled {
-                    continue;
-                }
-                match result {
-                    Ok(Ok(requests)) => {
-                        if requests.len() > available_sftp_transfer_slots(
-                            &transfers,
-                            &pending_by_transfer,
-                            &queued_requests,
-                            &discovery_by_transfer,
-                        ) {
-                            let _ = send_sftp_transfer_event(
-                                &event_tx,
-                                SftpTransferEvent::DiscoveryFailed {
-                                    transfer_id,
-                                    name: discovery.root.name().to_owned(),
-                                    message: format!(
-                                        "SFTP transfer queue is full; it can contain at most {MAX_RECURSIVE_DOWNLOAD_FILES} files"
-                                    ),
-                                },
-                                session_id,
-                            )
-                            .await;
-                        } else {
-                            for request in requests {
-                                let event = SftpTransferEvent::Queued {
-                                    transfer_id: request.transfer_id(),
-                                    remote_path: request.remote_path().to_owned(),
-                                    name: request.name().to_owned(),
-                                    total_bytes: request.total_bytes(),
-                                };
-                                if !send_sftp_transfer_event(&event_tx, event, session_id).await {
-                                    break;
-                                }
-                                queued_requests.push_back(request);
-                            }
-                        }
-                    }
-                    Ok(Err(error)) => {
-                        let _ = send_sftp_transfer_event(
-                            &event_tx,
-                            SftpTransferEvent::DiscoveryFailed {
-                                transfer_id,
-                                name: discovery.root.name().to_owned(),
-                                message: bounded_error_message(&error),
-                            },
-                            session_id,
-                        ).await;
-                    }
-                    Err(error) => {
-                        let _ = send_sftp_transfer_event(
-                            &event_tx,
-                            SftpTransferEvent::DiscoveryFailed {
-                                transfer_id,
-                                name: discovery.root.name().to_owned(),
-                                message: bounded_error_message(&anyhow::Error::from(error)),
-                            },
-                            session_id,
-                        ).await;
-                    }
+                let _ = discovery;
+                if let Some(root) = queued_discovery_roots.pop_front() {
+                    spawn_pending_sftp_discovery(
+                        &mut discoveries,
+                        &mut discovery_by_transfer,
+                        &connection,
+                        root,
+                        discovered_download_tx.clone(),
+                    );
                 }
                 start_queued_sftp_transfers(
                     &mut queued_requests,
@@ -276,6 +220,105 @@ pub(super) async fn run_sftp_session(
                     transfers.len(),
                     per_tab_limit,
                 );
+            }
+            discovered = discovered_downloads.recv(), if deferred_discovered.is_none() =>
+            {
+                let Some(discovered) = discovered else { continue; };
+                deferred_discovered = Some(discovered);
+            }
+            _ = std::future::ready(()), if deferred_discovered.is_some() && available_sftp_transfer_slots(
+                &transfers,
+                &pending_by_transfer,
+                &queued_requests,
+            ) > 0 =>
+            {
+                let Some(discovered) = deferred_discovered.take() else { continue; };
+                match discovered {
+                    SftpDiscoveredDownload::Request { root_transfer_id, request } => {
+                        if discovery_by_transfer
+                            .get(&root_transfer_id)
+                            .is_some_and(|pending| pending.cancelled)
+                        {
+                            continue;
+                        }
+                        let event = SftpTransferEvent::Queued {
+                            transfer_id: request.transfer_id(),
+                            remote_path: request.remote_path().to_owned(),
+                            local_path: request.local_path(),
+                            upload: false,
+                            name: request.name().to_owned(),
+                            total_bytes: request.total_bytes(),
+                        };
+                        if send_sftp_transfer_event(&event_tx, event, session_id).await {
+                            queued_requests.push_back(request);
+                            start_queued_sftp_transfers(
+                                &mut queued_requests,
+                                &mut pending_openings,
+                                &mut pending_by_transfer,
+                                &connection,
+                                transfers.len(),
+                                per_tab_limit,
+                            );
+                        }
+                    }
+                    SftpDiscoveredDownload::Finished { root_transfer_id, name, outcome } => {
+                        let Some(discovery) = discovery_by_transfer.remove(&root_transfer_id) else {
+                            continue;
+                        };
+                        if discovery.cancelled {
+                            continue;
+                        }
+                        match outcome {
+                            Ok(summary) => {
+                                let _ = send_sftp_transfer_event(
+                                    &event_tx,
+                                    SftpTransferEvent::DiscoveryFinished {
+                                        transfer_id: root_transfer_id,
+                                        discovered_files: summary.discovered_files,
+                                        skipped_entries: summary.skipped_entries,
+                                        message: summary.first_issue,
+                                    },
+                                    session_id,
+                                )
+                                .await;
+                            }
+                            Err(message) => report_discovery_failure(
+                                &event_tx,
+                                session_id,
+                                &discovery.root,
+                                name,
+                                message,
+                            ).await,
+                        }
+                        if let Some(root) = queued_discovery_roots.pop_front() {
+                            spawn_pending_sftp_discovery(
+                                &mut discoveries,
+                                &mut discovery_by_transfer,
+                                &connection,
+                                root,
+                                discovered_download_tx.clone(),
+                            );
+                        }
+                    }
+                }
+            }
+            _ = std::future::ready(()), if deferred_discovery_root.is_some()
+                && (discoveries.len() < MAX_ACTIVE_SFTP_DISCOVERIES
+                    || queued_discovery_roots.len() < SFTP_TRANSFER_QUEUE_WINDOW) =>
+            {
+                if let Some(root) = deferred_discovery_root.take() {
+                    if discoveries.len() < MAX_ACTIVE_SFTP_DISCOVERIES {
+                        spawn_pending_sftp_discovery(
+                            &mut discoveries,
+                            &mut discovery_by_transfer,
+                            &connection,
+                            root,
+                            discovered_download_tx.clone(),
+                        );
+                    } else {
+                        queued_discovery_roots.push_back(root);
+                    }
+                }
             }
             probe = release_probes.join_next(), if !release_probes.is_empty() => {
                 if let Some(Ok(release)) = probe {
@@ -356,7 +399,7 @@ pub(super) async fn run_sftp_session(
                     &pending_by_transfer, &upload_start_context, per_tab_limit,
                 );
             }
-            command = command_rx.recv() => {
+            command = command_rx.recv(), if deferred_discovery_root.is_none() => {
                 reap_finished_sftp_transfers(&mut transfers, &event_tx, session_id).await;
                 let result = match command {
                     Some(SshCommand::ReadSystemRelease) => {
@@ -379,6 +422,8 @@ pub(super) async fn run_sftp_session(
                         let already_active = transfers.iter().any(|transfer| transfer.transfer_id() == transfer_id)
                             || pending_by_transfer.contains_key(&transfer_id)
                             || discovery_by_transfer.contains_key(&transfer_id)
+                            || deferred_discovery_root.as_ref().is_some_and(|queued| queued.transfer_id() == transfer_id)
+                            || queued_discovery_roots.iter().any(|queued| queued.transfer_id() == transfer_id)
                             || queued_requests.iter().any(|request| request.transfer_id() == transfer_id);
                         if already_active {
                             send_sftp_transfer_event(
@@ -391,13 +436,17 @@ pub(super) async fn run_sftp_session(
                             )
                             .await;
                             Ok(())
-                        } else {
+                        } else if discoveries.len() < MAX_ACTIVE_SFTP_DISCOVERIES {
                             spawn_pending_sftp_discovery(
                                 &mut discoveries,
                                 &mut discovery_by_transfer,
                                 &connection,
                                 root,
+                                discovered_download_tx.clone(),
                             );
+                            Ok(())
+                        } else {
+                            deferred_discovery_root = Some(root);
                             Ok(())
                         }
                     }
@@ -417,26 +466,12 @@ pub(super) async fn run_sftp_session(
                                 session_id,
                             )
                             .await;
-                        } else if available_sftp_transfer_slots(
-                            &transfers,
-                            &pending_by_transfer,
-                            &queued_requests,
-                            &discovery_by_transfer,
-                        ) == 0
-                        {
-                            send_sftp_transfer_event(
-                                &event_tx,
-                                SftpTransferEvent::Failed {
-                                    transfer_id,
-                                    message: "SFTP transfer queue is full".to_owned(),
-                                },
-                                session_id,
-                            )
-                            .await;
                         } else {
                             let event = SftpTransferEvent::Queued {
                                 transfer_id,
                                 remote_path: request.remote_path().to_owned(),
+                                local_path: request.local_path(),
+                                upload: false,
                                 name: request.name().to_owned(),
                                 total_bytes: request.total_bytes(),
                             };
@@ -463,15 +498,10 @@ pub(super) async fn run_sftp_session(
                                 || queued_requests.iter().any(|queued| queued.transfer_id() == transfer_id)
                                 || queued_uploads.iter().any(|queued| queued.transfer_id() == transfer_id)
                                 || pending_upload_conflicts.contains_key(&transfer_id);
-                            if already_active || queued_uploads.len() + pending_upload_conflicts.len() >= MAX_PENDING_UPLOADS {
-                                let message = if already_active {
-                                    "SFTP transfer is already active"
-                                } else {
-                                    "SFTP transfer queue is full"
-                                };
+                            if already_active {
                                 send_sftp_transfer_event(
                                     &event_tx,
-                                    SftpTransferEvent::Failed { transfer_id, message: message.to_owned() },
+                                    SftpTransferEvent::Failed { transfer_id, message: "SFTP transfer is already active".to_owned() },
                                     session_id,
                                 ).await;
                                 continue;
@@ -534,6 +564,28 @@ pub(super) async fn run_sftp_session(
                             .find(|transfer| transfer.transfer_id() == transfer_id)
                         {
                             transfer.cancel();
+                            Ok(())
+                        } else if deferred_discovery_root
+                            .as_ref()
+                            .is_some_and(|root| root.transfer_id() == transfer_id)
+                        {
+                            deferred_discovery_root = None;
+                            send_sftp_transfer_event(
+                                &event_tx,
+                                SftpTransferEvent::Cancelled { transfer_id },
+                                session_id,
+                            ).await;
+                            Ok(())
+                        } else if let Some(index) = queued_discovery_roots
+                            .iter()
+                            .position(|root| root.transfer_id() == transfer_id)
+                        {
+                            queued_discovery_roots.remove(index);
+                            send_sftp_transfer_event(
+                                &event_tx,
+                                SftpTransferEvent::Cancelled { transfer_id },
+                                session_id,
+                            ).await;
                             Ok(())
                         } else if cancel_pending_discovery(&mut discovery_by_transfer, transfer_id) {
                             send_sftp_transfer_event(
@@ -666,7 +718,8 @@ pub(super) async fn run_sftp_session(
                     | SftpTransferEvent::Progress { .. }
                     | SftpTransferEvent::Paused { .. }
                     | SftpTransferEvent::Resumed { .. }
-                    | SftpTransferEvent::DiscoveryFailed { .. } => None,
+                    | SftpTransferEvent::DiscoveryFailed { .. }
+                    | SftpTransferEvent::DiscoveryFinished { .. } => None,
                 };
                 if let Some(transfer_id) = terminal_transfer_id
                     && let Some(index) = transfers
@@ -851,31 +904,42 @@ fn spawn_pending_sftp_open(
 }
 
 fn spawn_pending_sftp_discovery(
-    discoveries: &mut JoinSet<Result<Vec<SftpDownloadRequest>>>,
+    discoveries: &mut JoinSet<Result<SftpDiscoverySummary>>,
     discovery_by_transfer: &mut HashMap<Uuid, PendingDiscovery>,
     connection: &SshConnection,
     root: SftpDownloadRoot,
+    discovered_download_tx: mpsc::Sender<SftpDiscoveredDownload>,
 ) {
     let transfer_id = root.transfer_id();
     let (cancellation, cancelled) = oneshot::channel();
     let connection = connection.clone();
     let discovery_root = root.clone();
-    let task = discoveries.spawn(async move {
-        tokio::select! {
+    let root_for_discovery = discovery_root.clone();
+    let final_tx = discovered_download_tx.clone();
+    discoveries.spawn(async move {
+        let result = tokio::select! {
             result = async {
                 let stream = connection
                     .open_sftp_stream()
                     .await
                     .context("cannot open SFTP subsystem for recursive discovery")?;
-                discover_download_requests(stream, discovery_root).await
+                discover_download_requests(stream, root_for_discovery, discovered_download_tx).await
             } => result,
             _ = cancelled => Err(anyhow::anyhow!("SFTP recursive discovery cancelled")),
-        }
+        };
+        let outcome = result.as_ref().cloned().map_err(bounded_error_message);
+        let _ = final_tx
+            .send(SftpDiscoveredDownload::Finished {
+                root_transfer_id: transfer_id,
+                name: discovery_root.name().to_owned(),
+                outcome,
+            })
+            .await;
+        result
     });
     discovery_by_transfer.insert(
         transfer_id,
         PendingDiscovery {
-            task_id: task.id(),
             cancellation: Some(cancellation),
             cancelled: false,
             root,
@@ -883,16 +947,39 @@ fn spawn_pending_sftp_discovery(
     );
 }
 
-fn take_pending_discovery(
-    discoveries: &mut HashMap<Uuid, PendingDiscovery>,
-    task_id: tokio::task::Id,
-) -> Option<(Uuid, PendingDiscovery)> {
-    let transfer_id = discoveries.iter().find_map(|(transfer_id, discovery)| {
-        (discovery.task_id == task_id).then_some(*transfer_id)
-    })?;
-    discoveries
-        .remove(&transfer_id)
-        .map(|discovery| (transfer_id, discovery))
+async fn report_discovery_failure(
+    event_tx: &mpsc::Sender<SshSessionEvent>,
+    session_id: Uuid,
+    root: &SftpDownloadRoot,
+    name: String,
+    message: String,
+) {
+    if !send_sftp_transfer_event(
+        event_tx,
+        SftpTransferEvent::Queued {
+            transfer_id: root.transfer_id(),
+            remote_path: root.remote_path().to_owned(),
+            local_path: Some(root.local_path()),
+            upload: false,
+            name: name.clone(),
+            total_bytes: 0,
+        },
+        session_id,
+    )
+    .await
+    {
+        return;
+    }
+    let _ = send_sftp_transfer_event(
+        event_tx,
+        SftpTransferEvent::DiscoveryFailed {
+            transfer_id: root.transfer_id(),
+            name,
+            message,
+        },
+        session_id,
+    )
+    .await;
 }
 
 fn cancel_pending_discovery(
@@ -931,7 +1018,9 @@ fn start_queued_sftp_transfers(
 fn upload_queued_event(request: &SftpUploadRequest) -> SftpTransferEvent {
     SftpTransferEvent::Queued {
         transfer_id: request.transfer_id(),
-        remote_path: String::new(),
+        remote_path: request.remote_path().to_owned(),
+        local_path: Some(request.local_path().to_owned()),
+        upload: true,
         name: request.name().to_owned(),
         total_bytes: request.total_bytes(),
     }
@@ -971,7 +1060,7 @@ fn start_queued_uploads(
 }
 
 async fn shutdown_pending_sftp_discoveries(
-    discoveries: &mut JoinSet<Result<Vec<SftpDownloadRequest>>>,
+    discoveries: &mut JoinSet<Result<SftpDiscoverySummary>>,
     discovery_by_transfer: &mut HashMap<Uuid, PendingDiscovery>,
     session_id: Uuid,
 ) {
@@ -1040,14 +1129,12 @@ fn available_sftp_transfer_slots(
     transfers: &[ActiveSftpTransfer],
     pending_by_transfer: &HashMap<Uuid, PendingSftpOpen>,
     queued_requests: &VecDeque<SftpDownloadRequest>,
-    discovery_by_transfer: &HashMap<Uuid, PendingDiscovery>,
 ) -> usize {
-    MAX_RECURSIVE_DOWNLOAD_FILES.saturating_sub(
+    SFTP_TRANSFER_QUEUE_WINDOW.saturating_sub(
         transfers
             .len()
             .saturating_add(pending_by_transfer.len())
-            .saturating_add(queued_requests.len())
-            .saturating_add(discovery_by_transfer.len()),
+            .saturating_add(queued_requests.len()),
     )
 }
 
@@ -1229,10 +1316,7 @@ mod tests {
                 .expect("test request should validate"),
         ]);
 
-        assert_eq!(
-            available_sftp_transfer_slots(&[], &pending, &queued, &HashMap::new()),
-            MAX_RECURSIVE_DOWNLOAD_FILES - 3
-        );
+        assert_eq!(available_sftp_transfer_slots(&[], &pending, &queued), 509);
         openings.abort_all();
     }
 

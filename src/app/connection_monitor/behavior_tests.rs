@@ -311,6 +311,8 @@ async fn sftp_monitor_routes_directory_transfer_and_write_events_to_the_current_
         SshSessionEvent::SftpTransfer(SftpTransferEvent::Queued {
             transfer_id: id,
             remote_path: "/remote/file".into(),
+            local_path: None,
+            upload: false,
             name: "file".into(),
             total_bytes: 100,
         }),

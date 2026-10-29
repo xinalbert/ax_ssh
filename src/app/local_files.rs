@@ -1,5 +1,5 @@
 mod upload;
-pub(super) use upload::{MAX_LOCAL_UPLOAD_FILES, PreparedLocalUpload, discover_local_uploads};
+pub(super) use upload::{PreparedLocalUpload, discover_local_uploads_streaming};
 
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -7,10 +7,6 @@ use std::time::SystemTime;
 
 use anyhow::{Context, Result, bail};
 use directories::UserDirs;
-
-const LOCAL_DIRECTORY_NAME_LIMIT: usize = 256;
-const LOCAL_DIRECTORY_TEXT_BUDGET: usize = 2 * 1024 * 1024;
-pub(super) const LOCAL_DIRECTORY_PATH_LIMIT: usize = 4 * 1024;
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub(super) struct LocalDirectoryEntry {
@@ -66,10 +62,6 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
     if path.is_empty() || !is_safe_display_text(path) {
         bail!("local path is empty or contains a control character");
     }
-    if path.len() > LOCAL_DIRECTORY_PATH_LIMIT {
-        bail!("local path is too long");
-    }
-
     let resolved =
         fs::canonicalize(path).with_context(|| format!("cannot resolve local directory {path}"))?;
     if !resolved.is_dir() {
@@ -79,8 +71,6 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
     let entries = fs::read_dir(&resolved)
         .with_context(|| format!("cannot read local directory {}", resolved.display()))?;
     let mut listed = Vec::new();
-    let mut name_budget = 0usize;
-    let mut truncated = false;
     let mut skipped_entries = 0usize;
 
     for item in entries {
@@ -89,20 +79,14 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
             continue;
         };
         let name = item.file_name().to_string_lossy().to_string();
-        let name_len = name.chars().count();
-        if name_len == 0 || !is_safe_display_text(&name) || name_len > LOCAL_DIRECTORY_NAME_LIMIT {
+        if name.is_empty() || !is_safe_display_text(&name) {
             skipped_entries = skipped_entries.saturating_add(1);
             continue;
         }
         let path = item.path().display().to_string();
-        if !is_safe_display_text(&path) || path.len() > LOCAL_DIRECTORY_PATH_LIMIT {
+        if !is_safe_display_text(&path) {
             skipped_entries = skipped_entries.saturating_add(1);
             continue;
-        }
-        let text_bytes = name.len().saturating_add(path.len());
-        if name_budget.saturating_add(text_bytes) > LOCAL_DIRECTORY_TEXT_BUDGET {
-            truncated = true;
-            break;
         }
         let file_type = match item.file_type() {
             Ok(file_type) => file_type,
@@ -137,7 +121,6 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
             None
         };
 
-        name_budget = name_budget.saturating_add(text_bytes);
         listed.push(LocalDirectoryEntry {
             name,
             path,
@@ -158,7 +141,7 @@ pub(super) fn read_local_directory(path: &str) -> Result<LocalDirectoryListing> 
     Ok(LocalDirectoryListing {
         path: resolved.display().to_string(),
         entries: listed,
-        truncated,
+        truncated: false,
         skipped_entries,
     })
 }

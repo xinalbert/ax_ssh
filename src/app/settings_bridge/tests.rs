@@ -368,11 +368,6 @@ fn settings_search_matches_chinese_without_changing_route_ids() {
     assert_eq!(edit_matches.len(), 1);
     assert_eq!(edit_matches[0].section, "SFTP");
     assert_eq!(edit_matches[0].title, "远程编辑文件大小上限（MiB）");
-    let sftp_matches = settings_search_results("单文件大小上限", "simplified-chinese");
-    assert!(sftp_matches.iter().any(|entry| {
-        entry.section == "SFTP" && entry.title == "单文件大小上限（GiB）"
-    }));
-
     for (query, title) in [
         ("全选", "全选"),
         ("上一个标签页", "上一个标签页"),

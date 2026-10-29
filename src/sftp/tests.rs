@@ -112,7 +112,6 @@ async fn directory_page_does_not_wait_for_another_batch_or_close_ack() {
         path: "/srv".into(),
         handle: "directory".into(),
         pending: VecDeque::new(),
-        total_text_bytes: 0,
         done: false,
         truncated: false,
     };
@@ -343,9 +342,9 @@ fn remote_paths_resolve_against_current_and_home() {
 }
 
 #[test]
-fn remote_paths_reject_control_characters_and_excessive_length() {
+fn remote_paths_reject_control_characters_but_accept_long_paths() {
     assert!(validate_remote_path("/tmp/line\nbreak").is_err());
-    assert!(validate_remote_path(&"a".repeat(MAX_PATH_CHARS + 1)).is_err());
+    assert!(validate_remote_path(&format!("/{}", "a".repeat(5000))).is_ok());
 }
 
 #[test]
@@ -353,5 +352,6 @@ fn entries_reject_ambiguous_or_unsafe_names() {
     let attrs = russh_sftp::protocol::FileAttributes::empty();
     assert!(bounded_entry("/tmp", File::new("..", attrs.clone())).is_none());
     assert!(bounded_entry("/tmp", File::new("bad/name", attrs.clone())).is_none());
-    assert!(bounded_entry("/tmp", File::new("line\nbreak", attrs)).is_none());
+    assert!(bounded_entry("/tmp", File::new("line\nbreak", attrs.clone())).is_none());
+    assert!(bounded_entry("/tmp", File::new("n".repeat(600), attrs)).is_some());
 }

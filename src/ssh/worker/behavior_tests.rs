@@ -414,7 +414,6 @@ impl Fixture {
                 latency_foreground_tx,
                 next_input_sequence: AtomicU64::new(1),
                 task,
-                sftp_max_file_bytes: policy.max_file_bytes(),
             },
             event_rx,
         )
@@ -790,6 +789,46 @@ async fn sftp_worker_conflict_decisions_and_guarded_edits_preserve_remote_conten
 }
 
 #[tokio::test]
+async fn sftp_download_submitter_waits_for_worker_queue_capacity() {
+    let (command_tx, mut command_rx) = mpsc::channel(1);
+    let submitter = SftpDownloadSubmitter { command_tx };
+    submitter
+        .submit(
+            Uuid::new_v4(),
+            "/remote/one.txt".to_owned(),
+            std::path::PathBuf::from("/tmp"),
+            Vec::new(),
+        )
+        .await
+        .expect("first download enters the command queue");
+    let submitter_for_next = submitter.clone();
+    let second = tokio::spawn(async move {
+        submitter_for_next
+            .submit(
+                Uuid::new_v4(),
+                "/remote/two.txt".to_owned(),
+                std::path::PathBuf::from("/tmp"),
+                Vec::new(),
+            )
+            .await
+    });
+    tokio::task::yield_now().await;
+    assert!(!second.is_finished(), "full queue applies backpressure");
+    assert!(matches!(
+        command_rx.recv().await,
+        Some(SshCommand::OpenSftpFile { .. })
+    ));
+    second
+        .await
+        .expect("second submit task")
+        .expect("second download waits and enters the queue");
+    assert!(matches!(
+        command_rx.recv().await,
+        Some(SshCommand::OpenSftpFile { .. })
+    ));
+}
+
+#[tokio::test]
 async fn failed_worker_rejects_commands_and_preserves_request_limits() {
     let profile = SessionProfile::new("Invalid", "", "fixture");
     let policy = crate::config::SftpTransferSettings::default().policy(None);
@@ -806,7 +845,6 @@ async fn failed_worker_rejects_commands_and_preserves_request_limits() {
     ));
     assert!(events.recv().await.is_none());
     assert!(worker.is_finished());
-    assert_eq!(worker.sftp_max_file_bytes(), policy.max_file_bytes());
     assert!(worker.request_resize(80, 24).is_err());
     assert!(worker.request_resize(0, 24).is_err());
     assert!(worker.request_send(Vec::new()).is_ok());

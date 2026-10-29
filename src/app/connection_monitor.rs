@@ -332,13 +332,22 @@ pub(super) fn spawn_session_monitor(
                         |terminal| match event {
                             SftpTransferEvent::Queued {
                                 transfer_id,
-                                remote_path: _,
+                                remote_path,
+                                local_path,
+                                upload,
                                 name,
                                 total_bytes,
                             } => {
                                 let _ = terminal
                                     .sftp
-                                    .queue_transfer(transfer_id, name, total_bytes);
+                                    .queue_transfer_event(
+                                        transfer_id,
+                                        name,
+                                        total_bytes,
+                                        upload,
+                                        local_path,
+                                        Some(remote_path),
+                                    );
                             }
                             SftpTransferEvent::Started {
                                 transfer_id,
@@ -389,9 +398,20 @@ pub(super) fn spawn_session_monitor(
                                 name,
                                 message,
                             } => {
-                                terminal
-                                    .sftp
-                                    .record_transfer_failure(transfer_id, name, message);
+                                terminal.sftp.fail_download_root(transfer_id, name, message);
+                            }
+                            SftpTransferEvent::DiscoveryFinished {
+                                transfer_id,
+                                discovered_files,
+                                skipped_entries,
+                                message,
+                            } => {
+                                terminal.sftp.finish_download_root(
+                                    transfer_id,
+                                    discovered_files,
+                                    skipped_entries,
+                                    message,
+                                );
                             }
                             SftpTransferEvent::UploadConflict {
                                 transfer_id, batch_id, name, remote_size, remote_modified,
