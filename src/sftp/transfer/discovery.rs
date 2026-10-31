@@ -91,6 +91,7 @@ pub(super) async fn discover_initialized_download_requests(
             discovered_files: 0,
             skipped_entries: 1,
             first_issue: Some("Excluded by transfer filter".to_owned()),
+            is_directory: false,
         });
     }
     let attrs = timeout(REQUEST_TIMEOUT, session.lstat(root.remote_path.clone()))
@@ -103,7 +104,11 @@ pub(super) async fn discover_initialized_download_requests(
     if attrs.attrs.is_regular() {
         let total_bytes = validate_regular_metadata(&attrs.attrs)?.size;
         let request = SftpDownloadRequest::for_local_download(
-            root.transfer_id,
+            if root.expected_directory() {
+                Uuid::new_v4()
+            } else {
+                root.transfer_id
+            },
             root.remote_path.clone(),
             root.local_directory.clone(),
             vec![root.name.clone()],
@@ -120,6 +125,7 @@ pub(super) async fn discover_initialized_download_requests(
             discovered_files: 1,
             skipped_entries: 0,
             first_issue: None,
+            is_directory: root.expected_directory(),
         });
     }
     if !attrs.attrs.is_dir() {
@@ -137,7 +143,10 @@ pub(super) async fn discover_initialized_download_requests(
         handle,
         entries: std::collections::VecDeque::new(),
     }];
-    let mut summary = SftpDiscoverySummary::default();
+    let mut summary = SftpDiscoverySummary {
+        is_directory: true,
+        ..SftpDiscoverySummary::default()
+    };
     while !pending.is_empty() {
         let frame = pending
             .last_mut()

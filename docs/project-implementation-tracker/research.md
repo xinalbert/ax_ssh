@@ -2,6 +2,16 @@
 
 历史时间字段说明：2026-10-20 整理时，缺失的精确时刻优先依据原始标题补齐；否则使用可追溯的 Git 入库时间并逐条标明依据。原始事件日期/时区保留，入库时间不等同事件发生时间，实施内容与结论未改写。允许缺少时间字段的旧月份条目保持原样。
 
+## 2026-10-30 RustSec 修复版本与撤回状态
+
+- 时间：2026-10-30 14:58 +0800
+- 检索问题：三个漏洞依赖应选择哪些兼容、未撤回且满足 Rust 1.92 MSRV 的修复版本？
+- 检索原因：CI 报 RUSTSEC-2026-0387、0385、0414；Cargo 对最低修复版本 crypto-bigint 0.7.6 发出 yanked 提示。
+- 来源列表：[crypto-bigint 公告](https://rustsec.org/advisories/RUSTSEC-2026-0387.html)、[ctutils 公告](https://rustsec.org/advisories/RUSTSEC-2026-0385.html)、[pulldown-cmark 公告](https://rustsec.org/advisories/RUSTSEC-2026-0414.html)、[crypto-bigint registry](https://crates.io/api/v1/crates/crypto-bigint)、[ctutils registry](https://crates.io/api/v1/crates/ctutils)、[pulldown-cmark registry](https://crates.io/api/v1/crates/pulldown-cmark)。
+- 关键结论：修复下限分别为 0.7.6、0.4.4、0.13.5，但 crypto-bigint 0.7.6–0.7.8 已撤回；registry 显示同系列 crypto-bigint 0.7.10 和 ctutils 0.4.7 均未撤回且 rust-version 为 1.87，pulldown-cmark 0.13.5 为 1.71.1。
+- 对实施计划的影响：F1 最终锁定 0.7.10/0.4.7/0.13.5，仅改三项版本及 checksum，保留其它解析和 CI RSA 例外；用更新后的 RustSec 数据库审计。
+- 未解决问题：停止维护的间接依赖和 clipboard-win 已撤回警告不在这三个漏洞修复中；全平台实际编译仍依赖后续验证。
+
 ## 2026-10-13 标准光标显隐与有界重绘
 
 - 时间：2026-10-13 17:55 +0800

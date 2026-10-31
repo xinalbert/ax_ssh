@@ -1,11 +1,11 @@
 mod operations;
 
 use operations::SftpWriteWorker;
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::Arc;
 
 use russh::{ChannelStream, client};
-use tokio::sync::oneshot;
+use tokio::sync::{OwnedSemaphorePermit, oneshot};
 use tokio::task::JoinSet;
 use tokio::time::{MissedTickBehavior, interval, timeout};
 
@@ -29,6 +29,210 @@ struct PendingDiscovery {
     cancellation: Option<oneshot::Sender<()>>,
     cancelled: bool,
     root: SftpDownloadRoot,
+}
+
+#[derive(Default)]
+struct DirectoryTransferAggregate {
+    is_directory: Option<bool>,
+    discovered_files: usize,
+    skipped_entries: usize,
+    failed_files: usize,
+    message: Option<String>,
+    children: HashSet<Uuid>,
+    discovery_finished: bool,
+    cancelled: bool,
+}
+
+fn finish_directory_transfer(
+    transfers: &mut HashMap<Uuid, DirectoryTransferAggregate>,
+    transfer_id: Uuid,
+) -> Option<SftpTransferEvent> {
+    let is_ready = transfers
+        .get(&transfer_id)
+        .is_some_and(|transfer| transfer.discovery_finished && transfer.children.is_empty());
+    if !is_ready {
+        return None;
+    }
+    let transfer = transfers.remove(&transfer_id)?;
+    if transfer.is_directory == Some(false) {
+        return None;
+    }
+    Some(SftpTransferEvent::DiscoveryFinished {
+        transfer_id,
+        discovered_files: transfer.discovered_files,
+        skipped_entries: transfer.skipped_entries,
+        failed_files: transfer.failed_files,
+        cancelled: transfer.cancelled,
+        message: transfer.message,
+    })
+}
+
+fn complete_directory_child(
+    transfers: &mut HashMap<Uuid, DirectoryTransferAggregate>,
+    child_roots: &mut HashMap<Uuid, Uuid>,
+    transfer_id: Uuid,
+    outcome: &SftpTransferEvent,
+) -> Option<SftpTransferEvent> {
+    let root_id = child_roots.remove(&transfer_id)?;
+    if let Some(transfer) = transfers.get_mut(&root_id)
+        && transfer.children.remove(&transfer_id)
+    {
+        match outcome {
+            SftpTransferEvent::Completed { .. } => {}
+            SftpTransferEvent::Skipped { .. } => {
+                transfer.skipped_entries = transfer.skipped_entries.saturating_add(1);
+                transfer
+                    .message
+                    .get_or_insert_with(|| "One or more files were skipped".to_owned());
+            }
+            SftpTransferEvent::Failed { message, .. } => {
+                transfer.failed_files = transfer.failed_files.saturating_add(1);
+                transfer.message.get_or_insert_with(|| message.clone());
+            }
+            SftpTransferEvent::Cancelled { .. } => {
+                transfer.failed_files = transfer.failed_files.saturating_add(1);
+                transfer
+                    .message
+                    .get_or_insert_with(|| "One or more files were cancelled".to_owned());
+            }
+            _ => {}
+        }
+    }
+    finish_directory_transfer(transfers, root_id)
+}
+
+async fn send_transfer_event_with_directory_state(
+    event_tx: &mpsc::Sender<SshSessionEvent>,
+    event: SftpTransferEvent,
+    session_id: Uuid,
+    directory_transfers: &mut HashMap<Uuid, DirectoryTransferAggregate>,
+    child_roots: &mut HashMap<Uuid, Uuid>,
+) -> bool {
+    let terminal_child = match &event {
+        SftpTransferEvent::Completed { transfer_id, .. }
+        | SftpTransferEvent::Cancelled { transfer_id }
+        | SftpTransferEvent::Failed { transfer_id, .. }
+        | SftpTransferEvent::Skipped { transfer_id }
+            if child_roots.contains_key(transfer_id) =>
+        {
+            Some((*transfer_id, event.clone()))
+        }
+        _ => None,
+    };
+    if !send_sftp_transfer_event(event_tx, event, session_id).await {
+        return false;
+    }
+    if let Some((transfer_id, outcome)) = terminal_child
+        && let Some(root_event) =
+            complete_directory_child(directory_transfers, child_roots, transfer_id, &outcome)
+        && !send_sftp_transfer_event(event_tx, root_event, session_id).await
+    {
+        return false;
+    }
+    true
+}
+
+struct DirectoryCancellationContext<'a> {
+    directory_transfers: &'a mut HashMap<Uuid, DirectoryTransferAggregate>,
+    child_roots: &'a mut HashMap<Uuid, Uuid>,
+    discovery_by_transfer: &'a mut HashMap<Uuid, PendingDiscovery>,
+    queued_discovery_roots: &'a mut VecDeque<SftpDownloadRoot>,
+    deferred_discovery_root: &'a mut Option<SftpDownloadRoot>,
+    deferred_discovered: &'a mut Option<SftpDiscoveredDownload>,
+    queued_requests: &'a mut VecDeque<SftpDownloadRequest>,
+    pending_by_transfer: &'a mut HashMap<Uuid, PendingSftpOpen>,
+    transfers: &'a [ActiveSftpTransfer],
+    event_tx: &'a mpsc::Sender<SshSessionEvent>,
+    session_id: Uuid,
+}
+
+async fn cancel_directory_download(transfer_id: Uuid, context: DirectoryCancellationContext<'_>) {
+    let started = context.discovery_by_transfer.contains_key(&transfer_id);
+    if let Some(aggregate) = context.directory_transfers.get_mut(&transfer_id) {
+        aggregate.cancelled = true;
+        if !started {
+            aggregate.discovery_finished = true;
+        }
+    }
+    cancel_pending_discovery(context.discovery_by_transfer, transfer_id);
+    if context
+        .deferred_discovery_root
+        .as_ref()
+        .is_some_and(|root| root.transfer_id() == transfer_id)
+    {
+        *context.deferred_discovery_root = None;
+    }
+    if let Some(index) = context
+        .queued_discovery_roots
+        .iter()
+        .position(|root| root.transfer_id() == transfer_id)
+    {
+        context.queued_discovery_roots.remove(index);
+    }
+    if matches!(
+        context.deferred_discovered,
+        Some(SftpDiscoveredDownload::Request {
+            root_transfer_id,
+            ..
+        }) if *root_transfer_id == transfer_id
+    ) {
+        *context.deferred_discovered = None;
+    }
+
+    let children = context
+        .directory_transfers
+        .get(&transfer_id)
+        .map(|aggregate| aggregate.children.iter().copied().collect::<Vec<_>>())
+        .unwrap_or_default();
+    for child_id in children {
+        if context
+            .queued_requests
+            .iter()
+            .any(|request| request.transfer_id() == child_id)
+        {
+            context
+                .queued_requests
+                .retain(|request| request.transfer_id() != child_id);
+            let _ = send_transfer_event_with_directory_state(
+                context.event_tx,
+                SftpTransferEvent::Cancelled {
+                    transfer_id: child_id,
+                },
+                context.session_id,
+                context.directory_transfers,
+                context.child_roots,
+            )
+            .await;
+            continue;
+        }
+        if context.pending_by_transfer.contains_key(&child_id) {
+            if cancel_pending_sftp_open(context.pending_by_transfer, child_id)
+                == PendingSftpCancellation::Requested
+            {
+                let _ = send_transfer_event_with_directory_state(
+                    context.event_tx,
+                    SftpTransferEvent::Cancelled {
+                        transfer_id: child_id,
+                    },
+                    context.session_id,
+                    context.directory_transfers,
+                    context.child_roots,
+                )
+                .await;
+            }
+            continue;
+        }
+        if let Some(transfer) = context
+            .transfers
+            .iter()
+            .find(|transfer| transfer.transfer_id() == child_id)
+        {
+            transfer.cancel();
+        }
+    }
+    if let Some(event) = finish_directory_transfer(context.directory_transfers, transfer_id) {
+        let _ = send_sftp_transfer_event(context.event_tx, event, context.session_id).await;
+    }
 }
 
 type SftpChannelStream = ChannelStream<client::Msg>;
@@ -169,6 +373,7 @@ pub(super) async fn run_sftp_session(
     let mut queued_requests = VecDeque::<SftpDownloadRequest>::new();
     let mut queued_uploads = VecDeque::<SftpUploadRequest>::new();
     let mut active_upload_requests = HashMap::<Uuid, SftpUploadRequest>::new();
+    let mut upload_queue_slots = HashMap::<Uuid, OwnedSemaphorePermit>::new();
     let mut pending_upload_conflicts = HashMap::<Uuid, SftpUploadRequest>::new();
     let mut batch_policies = HashMap::<Uuid, SftpUploadConflictChoice>::new();
     let mut recent_policy_batches = VecDeque::<Uuid>::new();
@@ -179,6 +384,8 @@ pub(super) async fn run_sftp_session(
     };
     let mut discoveries = JoinSet::<Result<SftpDiscoverySummary>>::new();
     let mut discovery_by_transfer = HashMap::<Uuid, PendingDiscovery>::new();
+    let mut directory_transfers = HashMap::<Uuid, DirectoryTransferAggregate>::new();
+    let mut child_roots = HashMap::<Uuid, Uuid>::new();
     let mut queued_discovery_roots = VecDeque::<SftpDownloadRoot>::new();
     let mut deferred_discovery_root = None::<SftpDownloadRoot>;
     let mut deferred_discovered = None::<SftpDiscoveredDownload>;
@@ -238,11 +445,23 @@ pub(super) async fn run_sftp_session(
                         if discovery_by_transfer
                             .get(&root_transfer_id)
                             .is_some_and(|pending| pending.cancelled)
+                            || directory_transfers
+                                .get(&root_transfer_id)
+                                .is_some_and(|aggregate| aggregate.cancelled)
                         {
                             continue;
                         }
+                        let transfer_id = request.transfer_id();
+                        if transfer_id != root_transfer_id {
+                            child_roots.insert(transfer_id, root_transfer_id);
+                            directory_transfers
+                                .entry(root_transfer_id)
+                                .or_default()
+                                .children
+                                .insert(transfer_id);
+                        }
                         let event = SftpTransferEvent::Queued {
-                            transfer_id: request.transfer_id(),
+                            transfer_id,
                             remote_path: request.remote_path().to_owned(),
                             local_path: request.local_path(),
                             upload: false,
@@ -265,30 +484,82 @@ pub(super) async fn run_sftp_session(
                         let Some(discovery) = discovery_by_transfer.remove(&root_transfer_id) else {
                             continue;
                         };
+                        let aggregate = directory_transfers
+                            .entry(root_transfer_id)
+                            .or_default();
                         if discovery.cancelled {
-                            continue;
-                        }
-                        match outcome {
-                            Ok(summary) => {
-                                let _ = send_sftp_transfer_event(
-                                    &event_tx,
-                                    SftpTransferEvent::DiscoveryFinished {
-                                        transfer_id: root_transfer_id,
-                                        discovered_files: summary.discovered_files,
-                                        skipped_entries: summary.skipped_entries,
-                                        message: summary.first_issue,
-                                    },
-                                    session_id,
-                                )
-                                .await;
+                            aggregate.cancelled = true;
+                            aggregate.discovery_finished = true;
+                            if let Some(event) =
+                                finish_directory_transfer(&mut directory_transfers, root_transfer_id)
+                            {
+                                let _ = send_sftp_transfer_event(&event_tx, event, session_id).await;
                             }
-                            Err(message) => report_discovery_failure(
-                                &event_tx,
-                                session_id,
-                                &discovery.root,
-                                name,
-                                message,
-                            ).await,
+                        } else {
+                            match outcome {
+                                Ok(summary) if !summary.is_directory => {
+                                    directory_transfers.remove(&root_transfer_id);
+                                    let _ = send_sftp_transfer_event(
+                                        &event_tx,
+                                        SftpTransferEvent::DiscoveryFinished {
+                                            transfer_id: root_transfer_id,
+                                            discovered_files: summary.discovered_files,
+                                            skipped_entries: summary.skipped_entries,
+                                            failed_files: 0,
+                                            cancelled: false,
+                                            message: summary.first_issue,
+                                        },
+                                        session_id,
+                                    )
+                                    .await;
+                                }
+                                Ok(summary) => {
+                                    aggregate.is_directory = Some(true);
+                                    aggregate.discovered_files = summary.discovered_files;
+                                    aggregate.skipped_entries = summary.skipped_entries;
+                                    aggregate.message = summary.first_issue;
+                                    aggregate.discovery_finished = true;
+                                    if let Some(event) = finish_directory_transfer(
+                                        &mut directory_transfers,
+                                        root_transfer_id,
+                                    ) {
+                                        let _ = send_sftp_transfer_event(&event_tx, event, session_id).await;
+                                    }
+                                }
+                                Err(_message) if aggregate.cancelled => {
+                                    aggregate.discovery_finished = true;
+                                    if let Some(event) = finish_directory_transfer(
+                                        &mut directory_transfers,
+                                        root_transfer_id,
+                                    ) {
+                                        let _ = send_sftp_transfer_event(&event_tx, event, session_id).await;
+                                    }
+                                }
+                                Err(message) if aggregate.children.is_empty() => {
+                                    directory_transfers.remove(&root_transfer_id);
+                                    report_discovery_failure(
+                                        &event_tx,
+                                        session_id,
+                                        &discovery.root,
+                                        name,
+                                        message,
+                                    )
+                                    .await;
+                                }
+                                Err(message) => {
+                                    aggregate.is_directory = Some(true);
+                                    aggregate.failed_files =
+                                        aggregate.failed_files.saturating_add(1);
+                                    aggregate.message.get_or_insert(message);
+                                    aggregate.discovery_finished = true;
+                                    if let Some(event) = finish_directory_transfer(
+                                        &mut directory_transfers,
+                                        root_transfer_id,
+                                    ) {
+                                        let _ = send_sftp_transfer_event(&event_tx, event, session_id).await;
+                                    }
+                                }
+                            }
                         }
                         if let Some(root) = queued_discovery_roots.pop_front() {
                             spawn_pending_sftp_discovery(
@@ -363,25 +634,29 @@ pub(super) async fn run_sftp_session(
                         )));
                     }
                     Ok((_, Err(error))) => {
-                        send_sftp_transfer_event(
+                        send_transfer_event_with_directory_state(
                             &event_tx,
                             SftpTransferEvent::Failed {
                                 transfer_id,
                                 message: bounded_error_message(&error),
                             },
                             session_id,
+                            &mut directory_transfers,
+                            &mut child_roots,
                         )
                         .await;
                     }
                     Err(error) => {
                         warn!(%session_id, %transfer_id, %error, "SFTP subsystem opening task failed");
-                        send_sftp_transfer_event(
+                        send_transfer_event_with_directory_state(
                             &event_tx,
                             SftpTransferEvent::Failed {
                                 transfer_id,
                                 message: bounded_text("SFTP subsystem opening task failed"),
                             },
                             session_id,
+                            &mut directory_transfers,
+                            &mut child_roots,
                         )
                         .await;
                     }
@@ -399,8 +674,8 @@ pub(super) async fn run_sftp_session(
                     &pending_by_transfer, &upload_start_context, per_tab_limit,
                 );
             }
-            command = command_rx.recv(), if deferred_discovery_root.is_none() => {
-                reap_finished_sftp_transfers(&mut transfers, &event_tx, session_id).await;
+            command = command_rx.recv() => {
+                reap_finished_sftp_transfers(&mut transfers, &transfer_event_tx, session_id).await;
                 let result = match command {
                     Some(SshCommand::ReadSystemRelease) => {
                         if release_probe_started {
@@ -419,9 +694,11 @@ pub(super) async fn run_sftp_session(
                     }
                     Some(SshCommand::OpenSftpFile { root }) => {
                         let transfer_id = root.transfer_id();
+                        let expected_directory = root.expected_directory();
                         let already_active = transfers.iter().any(|transfer| transfer.transfer_id() == transfer_id)
                             || pending_by_transfer.contains_key(&transfer_id)
                             || discovery_by_transfer.contains_key(&transfer_id)
+                            || directory_transfers.contains_key(&transfer_id)
                             || deferred_discovery_root.as_ref().is_some_and(|queued| queued.transfer_id() == transfer_id)
                             || queued_discovery_roots.iter().any(|queued| queued.transfer_id() == transfer_id)
                             || queued_requests.iter().any(|request| request.transfer_id() == transfer_id);
@@ -437,6 +714,15 @@ pub(super) async fn run_sftp_session(
                             .await;
                             Ok(())
                         } else if discoveries.len() < MAX_ACTIVE_SFTP_DISCOVERIES {
+                            if expected_directory {
+                                directory_transfers.insert(
+                                    transfer_id,
+                                    DirectoryTransferAggregate {
+                                        is_directory: Some(true),
+                                        ..DirectoryTransferAggregate::default()
+                                    },
+                                );
+                            }
                             spawn_pending_sftp_discovery(
                                 &mut discoveries,
                                 &mut discovery_by_transfer,
@@ -446,6 +732,15 @@ pub(super) async fn run_sftp_session(
                             );
                             Ok(())
                         } else {
+                            if expected_directory {
+                                directory_transfers.insert(
+                                    transfer_id,
+                                    DirectoryTransferAggregate {
+                                        is_directory: Some(true),
+                                        ..DirectoryTransferAggregate::default()
+                                    },
+                                );
+                            }
                             deferred_discovery_root = Some(root);
                             Ok(())
                         }
@@ -489,28 +784,33 @@ pub(super) async fn run_sftp_session(
                         }
                         Ok(())
                     }
-                    Some(SshCommand::OpenSftpUploads { requests }) => {
-                        for mut request in requests {
-                            let transfer_id = request.transfer_id();
-                            let already_active = transfers.iter().any(|transfer| transfer.transfer_id() == transfer_id)
-                                || pending_by_transfer.contains_key(&transfer_id)
-                                || discovery_by_transfer.contains_key(&transfer_id)
-                                || queued_requests.iter().any(|queued| queued.transfer_id() == transfer_id)
-                                || queued_uploads.iter().any(|queued| queued.transfer_id() == transfer_id)
-                                || pending_upload_conflicts.contains_key(&transfer_id);
-                            if already_active {
-                                send_sftp_transfer_event(
-                                    &event_tx,
-                                    SftpTransferEvent::Failed { transfer_id, message: "SFTP transfer is already active".to_owned() },
-                                    session_id,
-                                ).await;
-                                continue;
-                            }
+                    Some(SshCommand::OpenSftpUpload { mut request, queue_slot, accepted }) => {
+                        let transfer_id = request.transfer_id();
+                        let already_active = transfers.iter().any(|transfer| transfer.transfer_id() == transfer_id)
+                            || pending_by_transfer.contains_key(&transfer_id)
+                            || discovery_by_transfer.contains_key(&transfer_id)
+                            || queued_requests.iter().any(|queued| queued.transfer_id() == transfer_id)
+                            || queued_uploads.iter().any(|queued| queued.transfer_id() == transfer_id)
+                            || pending_upload_conflicts.contains_key(&transfer_id)
+                            || upload_queue_slots.contains_key(&transfer_id);
+                        if already_active {
+                            let message = "SFTP transfer is already active".to_owned();
+                            send_sftp_transfer_event(
+                                &event_tx,
+                                SftpTransferEvent::Failed { transfer_id, message: message.clone() },
+                                session_id,
+                            ).await;
+                            let _ = accepted.send(Err(message));
+                        } else {
                             if let Some(&choice) = batch_policies.get(&request.batch_id()) {
                                 request.set_conflict_choice(choice);
                             }
                             if send_sftp_transfer_event(&event_tx, upload_queued_event(&request), session_id).await {
+                                upload_queue_slots.insert(transfer_id, queue_slot);
                                 queued_uploads.push_back(request);
+                                let _ = accepted.send(Ok(()));
+                            } else {
+                                let _ = accepted.send(Err("SFTP event receiver stopped".to_owned()));
                             }
                         }
                         start_queued_uploads(
@@ -559,7 +859,26 @@ pub(super) async fn run_sftp_session(
                         Ok(())
                     }
                     Some(SshCommand::CancelSftpTransfer { transfer_id }) => {
-                        if let Some(transfer) = transfers
+                        if directory_transfers.contains_key(&transfer_id) {
+                            cancel_directory_download(
+                                transfer_id,
+                                DirectoryCancellationContext {
+                                    directory_transfers: &mut directory_transfers,
+                                    child_roots: &mut child_roots,
+                                    discovery_by_transfer: &mut discovery_by_transfer,
+                                    queued_discovery_roots: &mut queued_discovery_roots,
+                                    deferred_discovery_root: &mut deferred_discovery_root,
+                                    deferred_discovered: &mut deferred_discovered,
+                                    queued_requests: &mut queued_requests,
+                                    pending_by_transfer: &mut pending_by_transfer,
+                                    transfers: &transfers,
+                                    event_tx: &event_tx,
+                                    session_id,
+                                },
+                            )
+                            .await;
+                            Ok(())
+                        } else if let Some(transfer) = transfers
                             .iter()
                             .find(|transfer| transfer.transfer_id() == transfer_id)
                         {
@@ -599,17 +918,21 @@ pub(super) async fn run_sftp_session(
                             .position(|request| request.transfer_id() == transfer_id)
                         {
                             queued_requests.remove(index);
-                            send_sftp_transfer_event(
+                            send_transfer_event_with_directory_state(
                                 &event_tx,
                                 SftpTransferEvent::Cancelled { transfer_id },
                                 session_id,
+                                &mut directory_transfers,
+                                &mut child_roots,
                             ).await;
                             Ok(())
                         } else if let Some(index) = queued_uploads.iter().position(|request| request.transfer_id() == transfer_id) {
                             queued_uploads.remove(index);
+                            upload_queue_slots.remove(&transfer_id);
                             send_sftp_transfer_event(&event_tx, SftpTransferEvent::Cancelled { transfer_id }, session_id).await;
                             Ok(())
                         } else if pending_upload_conflicts.remove(&transfer_id).is_some() {
+                            upload_queue_slots.remove(&transfer_id);
                             send_sftp_transfer_event(&event_tx, SftpTransferEvent::Cancelled { transfer_id }, session_id).await;
                             Ok(())
                         } else {
@@ -618,10 +941,12 @@ pub(super) async fn run_sftp_session(
                                 transfer_id,
                             ) {
                                 PendingSftpCancellation::Requested => {
-                                    send_sftp_transfer_event(
+                                    send_transfer_event_with_directory_state(
                                         &event_tx,
                                         SftpTransferEvent::Cancelled { transfer_id },
                                         session_id,
+                                        &mut directory_transfers,
+                                        &mut child_roots,
                                     )
                                     .await;
                                 }
@@ -721,6 +1046,13 @@ pub(super) async fn run_sftp_session(
                     | SftpTransferEvent::DiscoveryFailed { .. }
                     | SftpTransferEvent::DiscoveryFinished { .. } => None,
                 };
+                let upload_terminal_id = match &transfer_event {
+                    SftpTransferEvent::Completed { transfer_id, .. }
+                    | SftpTransferEvent::Cancelled { transfer_id }
+                    | SftpTransferEvent::Failed { transfer_id, .. }
+                    | SftpTransferEvent::Skipped { transfer_id } => Some(*transfer_id),
+                    _ => None,
+                };
                 if let Some(transfer_id) = terminal_transfer_id
                     && let Some(index) = transfers
                         .iter()
@@ -750,8 +1082,20 @@ pub(super) async fn run_sftp_session(
                 } else if let Some(transfer_id) = terminal_transfer_id {
                     active_upload_requests.remove(&transfer_id);
                 }
-                if forward_event && !send_sftp_transfer_event(&event_tx, transfer_event, session_id).await {
+                if forward_event
+                    && !send_transfer_event_with_directory_state(
+                        &event_tx,
+                        transfer_event,
+                        session_id,
+                        &mut directory_transfers,
+                        &mut child_roots,
+                    )
+                    .await
+                {
                     break;
+                }
+                if let Some(transfer_id) = upload_terminal_id {
+                    upload_queue_slots.remove(&transfer_id);
                 }
                 start_queued_sftp_transfers(
                     &mut queued_requests, &mut pending_openings, &mut pending_by_transfer,
@@ -1172,7 +1516,7 @@ async fn shutdown_pending_sftp_opens(
 
 async fn reap_finished_sftp_transfers(
     transfers: &mut Vec<ActiveSftpTransfer>,
-    event_tx: &mpsc::Sender<SshSessionEvent>,
+    transfer_event_tx: &mpsc::Sender<SftpTransferEvent>,
     session_id: Uuid,
 ) {
     let mut index = 0;
@@ -1185,15 +1529,16 @@ async fn reap_finished_sftp_transfers(
         let transfer_id = transfer.transfer_id();
         if let Err(error) = transfer.shutdown().await {
             warn!(%session_id, %transfer_id, %error, "SFTP transfer task stopped unexpectedly");
-            send_sftp_transfer_event(
-                event_tx,
-                SftpTransferEvent::Failed {
+            if transfer_event_tx
+                .send(SftpTransferEvent::Failed {
                     transfer_id,
                     message: bounded_error_message(&error),
-                },
-                session_id,
-            )
-            .await;
+                })
+                .await
+                .is_err()
+            {
+                warn!(%session_id, %transfer_id, "SFTP transfer event channel closed while reporting task failure");
+            }
         }
     }
 }

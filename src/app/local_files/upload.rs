@@ -47,7 +47,7 @@ struct UploadDirectoryNode {
 
 enum UploadWalkFrame {
     Visit(PathBuf, Option<Arc<UploadDirectoryNode>>),
-    ReadDirectory(ReadDir, Arc<UploadDirectoryNode>),
+    ReadDirectory(Box<ReadDir>, Arc<UploadDirectoryNode>),
 }
 
 pub(in crate::app) fn discover_local_uploads_streaming(
@@ -143,7 +143,7 @@ pub(in crate::app) fn discover_local_uploads_streaming(
                         .with_context(|| format!("cannot read local upload directory {path:?}"))
                     {
                         Ok(entries) => {
-                            stack.push(UploadWalkFrame::ReadDirectory(entries, directory))
+                            stack.push(UploadWalkFrame::ReadDirectory(Box::new(entries), directory))
                         }
                         Err(error) => record_upload_discovery_issue(
                             &mut skipped_entries,

@@ -11,12 +11,13 @@ use self::latency::LatencyMonitor;
 use self::sftp::run_sftp_session;
 use self::shell::{TerminalSessionTask, run_terminal_session, x11_mode_for};
 
+use std::sync::Arc;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Instant;
 
 use anyhow::{Context, Result};
 use tokio::runtime::Handle;
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, timeout};
 use tracing::{debug, info, warn};
@@ -25,9 +26,9 @@ use zeroize::Zeroizing;
 
 use crate::config::{SessionProfile, X11Settings};
 use crate::sftp::{
-    SftpBrowserEvent, SftpDownloadRequest, SftpDownloadRoot, SftpTransferEvent,
-    SftpUploadConflictChoice, SftpUploadRequest, SftpWriteEvent, SftpWriteOperation,
-    validate_remote_path,
+    SFTP_TRANSFER_QUEUE_WINDOW, SftpBrowserEvent, SftpDownloadRequest, SftpDownloadRoot,
+    SftpTransferEvent, SftpUploadConflictChoice, SftpUploadRequest, SftpWriteEvent,
+    SftpWriteOperation, validate_remote_path,
 };
 use crate::terminal::TerminalOutputChunk;
 use crate::terminal_dimensions::{TerminalSize, validate_backend_size};
@@ -147,8 +148,10 @@ pub(crate) enum SshCommand {
     OpenSftpFileAtLocalPath {
         request: SftpDownloadRequest,
     },
-    OpenSftpUploads {
-        requests: Vec<SftpUploadRequest>,
+    OpenSftpUpload {
+        request: SftpUploadRequest,
+        queue_slot: OwnedSemaphorePermit,
+        accepted: oneshot::Sender<Result<(), String>>,
     },
     ResolveSftpUploadConflict {
         transfer_id: Uuid,
@@ -203,12 +206,14 @@ pub struct SshSessionHandle {
     resize_tx: watch::Sender<TerminalSize>,
     latency_foreground_tx: watch::Sender<bool>,
     next_input_sequence: AtomicU64,
+    upload_queue_slots: Arc<Semaphore>,
     task: JoinHandle<()>,
 }
 
 #[derive(Clone)]
 pub struct SftpUploadSubmitter {
     command_tx: mpsc::Sender<SshCommand>,
+    queue_slots: Arc<Semaphore>,
 }
 
 #[derive(Clone)]
@@ -223,9 +228,15 @@ impl SftpDownloadSubmitter {
         remote_path: String,
         local_directory: std::path::PathBuf,
         filter_patterns: Vec<String>,
+        expected_directory: bool,
     ) -> Result<()> {
-        let root =
-            SftpDownloadRoot::new(transfer_id, remote_path, local_directory, filter_patterns)?;
+        let root = SftpDownloadRoot::new(
+            transfer_id,
+            remote_path,
+            local_directory,
+            filter_patterns,
+            expected_directory,
+        )?;
         self.command_tx
             .send(SshCommand::OpenSftpFile { root })
             .await
@@ -239,16 +250,32 @@ impl SftpUploadSubmitter {
         batch_id: Uuid,
         files: Vec<(Uuid, String, std::path::PathBuf, u64, Vec<String>)>,
     ) -> Result<()> {
-        let requests = files
-            .into_iter()
-            .map(|(id, path, local, size, directories)| {
-                SftpUploadRequest::from_local_file(id, batch_id, path, local, size, directories)
-            })
-            .collect::<Result<Vec<_>>>()?;
-        self.command_tx
-            .send(SshCommand::OpenSftpUploads { requests })
-            .await
-            .map_err(|error| anyhow::anyhow!("cannot queue SFTP upload batch: {error}"))
+        for (id, path, local, size, directories) in files {
+            let queue_slot = self
+                .queue_slots
+                .clone()
+                .acquire_owned()
+                .await
+                .map_err(|error| anyhow::anyhow!("SFTP upload queue is closed: {error}"))?;
+            let request =
+                SftpUploadRequest::from_local_file(id, batch_id, path, local, size, directories)?;
+            let (accepted, accepted_rx) = oneshot::channel();
+            self.command_tx
+                .send(SshCommand::OpenSftpUpload {
+                    request,
+                    queue_slot,
+                    accepted,
+                })
+                .await
+                .map_err(|error| anyhow::anyhow!("cannot queue SFTP upload request: {error}"))?;
+            accepted_rx
+                .await
+                .map_err(|error| {
+                    anyhow::anyhow!("SFTP worker stopped before accepting upload: {error}")
+                })?
+                .map_err(anyhow::Error::msg)?;
+        }
+        Ok(())
     }
 }
 
@@ -262,26 +289,17 @@ impl SshSessionHandle {
     pub fn sftp_upload_submitter(&self) -> SftpUploadSubmitter {
         SftpUploadSubmitter {
             command_tx: self.command_tx.clone(),
+            queue_slots: self.upload_queue_slots.clone(),
         }
     }
 
     #[cfg(test)]
-    pub fn request_open_sftp_upload_batch(
+    pub async fn request_open_sftp_upload_batch(
         &self,
         batch_id: Uuid,
         files: Vec<(Uuid, String, std::path::PathBuf, u64, Vec<String>)>,
     ) -> Result<()> {
-        let submitter = self.sftp_upload_submitter();
-        let command_tx = submitter.command_tx.clone();
-        let requests = files
-            .into_iter()
-            .map(|(id, path, local, size, directories)| {
-                SftpUploadRequest::from_local_file(id, batch_id, path, local, size, directories)
-            })
-            .collect::<Result<Vec<_>>>()?;
-        command_tx
-            .try_send(SshCommand::OpenSftpUploads { requests })
-            .map_err(|error| anyhow::anyhow!("cannot queue SFTP upload batch: {error}"))
+        self.sftp_upload_submitter().submit(batch_id, files).await
     }
     /// Upload a private session attachment using the current trusted connection.
     pub fn request_clipboard_image(
@@ -433,6 +451,7 @@ impl SshSessionHandle {
         let (resize_tx, resize_rx) = watch::channel(initial_size);
         let (latency_foreground_tx, latency_foreground_rx) = watch::channel(false);
         let (event_tx, event_rx) = mpsc::channel(EVENT_CAPACITY);
+        let upload_queue_slots = Arc::new(Semaphore::new(SFTP_TRANSFER_QUEUE_WINDOW));
         let task = runtime.spawn(run_session(SshSessionTask {
             session_id,
             profile,
@@ -453,6 +472,7 @@ impl SshSessionHandle {
                 resize_tx,
                 latency_foreground_tx,
                 next_input_sequence: AtomicU64::new(1),
+                upload_queue_slots,
                 task,
             },
             event_rx,
@@ -620,8 +640,15 @@ impl SshSessionHandle {
         path: String,
         local_directory: std::path::PathBuf,
         filter_patterns: Vec<String>,
+        expected_directory: bool,
     ) -> Result<()> {
-        let root = SftpDownloadRoot::new(transfer_id, path, local_directory, filter_patterns)?;
+        let root = SftpDownloadRoot::new(
+            transfer_id,
+            path,
+            local_directory,
+            filter_patterns,
+            expected_directory,
+        )?;
         self.command_tx
             .try_send(SshCommand::OpenSftpFile { root })
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP download request: {error}"))
@@ -785,7 +812,7 @@ async fn run_session(task: SshSessionTask) {
                     | Some(SshCommand::LoadMoreSftp { .. })
                     | Some(SshCommand::OpenSftpFile { .. })
                     | Some(SshCommand::OpenSftpFileAtLocalPath { .. })
-                    | Some(SshCommand::OpenSftpUploads { .. })
+                    | Some(SshCommand::OpenSftpUpload { .. })
                     | Some(SshCommand::ResolveSftpUploadConflict { .. })
                     | Some(SshCommand::CancelSftpTransfer { .. })
                     | Some(SshCommand::PauseSftpTransfer { .. })
@@ -1017,6 +1044,7 @@ mod tests {
             resize_tx,
             latency_foreground_tx: watch::channel(false).0,
             next_input_sequence: AtomicU64::new(0),
+            upload_queue_slots: Arc::new(Semaphore::new(SFTP_TRANSFER_QUEUE_WINDOW)),
             task,
         };
         let shutdown = tokio::spawn(handle.shutdown());

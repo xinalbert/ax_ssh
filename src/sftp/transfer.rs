@@ -114,6 +114,8 @@ pub enum SftpTransferEvent {
         transfer_id: Uuid,
         discovered_files: usize,
         skipped_entries: usize,
+        failed_files: usize,
+        cancelled: bool,
         message: Option<String>,
     },
     UploadConflict {
@@ -283,6 +285,7 @@ pub(crate) struct SftpDiscoverySummary {
     pub(crate) discovered_files: usize,
     pub(crate) skipped_entries: usize,
     pub(crate) first_issue: Option<String>,
+    pub(crate) is_directory: bool,
 }
 
 impl SftpDownloadRequest {
@@ -382,6 +385,7 @@ pub(crate) struct SftpDownloadRoot {
     local_directory: PathBuf,
     name: String,
     filter_patterns: Vec<String>,
+    expected_directory: bool,
 }
 
 impl SftpDownloadRoot {
@@ -390,6 +394,7 @@ impl SftpDownloadRoot {
         remote_path: String,
         local_directory: PathBuf,
         filter_patterns: Vec<String>,
+        expected_directory: bool,
     ) -> Result<Self> {
         let name = validate_download_path(&remote_path)?.to_owned();
         if local_directory.as_os_str().is_empty() {
@@ -416,6 +421,7 @@ impl SftpDownloadRoot {
             local_directory,
             name,
             filter_patterns,
+            expected_directory,
         })
     }
 
@@ -437,6 +443,10 @@ impl SftpDownloadRoot {
 
     pub(crate) fn filter_patterns(&self) -> &[String] {
         &self.filter_patterns
+    }
+
+    pub(crate) fn expected_directory(&self) -> bool {
+        self.expected_directory
     }
 }
 

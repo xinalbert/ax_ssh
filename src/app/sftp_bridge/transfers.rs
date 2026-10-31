@@ -491,7 +491,9 @@ fn queue_selected_remote_downloads(
                         )
                     };
                     if let Err(error) = row {
-                        terminal.sftp.finish_download_root(transfer_id, 0, 0, None);
+                        terminal
+                            .sftp
+                            .finish_download_root(transfer_id, 0, 0, 0, false, None);
                         return Err(error);
                     }
                     Ok(true)
@@ -518,6 +520,7 @@ fn queue_selected_remote_downloads(
                     remote_path.clone(),
                     local_directory.clone(),
                     filters.clone(),
+                    entry.is_dir,
                 )
                 .await
             {
@@ -864,6 +867,7 @@ pub(super) fn queue_remote_downloads(
             entry.path,
             local_directory.clone(),
             filter_patterns.to_vec(),
+            entry.is_dir,
         ) {
             Ok(()) => accepted += 1,
             Err(error) => {

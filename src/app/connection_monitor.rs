@@ -404,12 +404,16 @@ pub(super) fn spawn_session_monitor(
                                 transfer_id,
                                 discovered_files,
                                 skipped_entries,
+                                failed_files,
+                                cancelled,
                                 message,
                             } => {
                                 terminal.sftp.finish_download_root(
                                     transfer_id,
                                     discovered_files,
                                     skipped_entries,
+                                    failed_files,
+                                    cancelled,
                                     message,
                                 );
                             }

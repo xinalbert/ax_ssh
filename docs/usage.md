@@ -279,6 +279,8 @@ other files continue. Normal SFTP transfers have no client-imposed per-file size
 cap. Server and operating-system limits still apply and are reported for the
 affected file.
 
+The directory row remains active until discovery has finished and every child file has reached a terminal state; its final summary includes failed, skipped, or cancelled children.
+
 SFTP transfers can omit generated system files. In **Settings > SFTP**, enable
 **Filter system files** to use the current platform preset (macOS includes
 `.DS_Store`, `._*`, `.Spotlight-V100`, `.Trashes`, and `.fseventsd`; Windows and

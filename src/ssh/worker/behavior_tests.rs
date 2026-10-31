@@ -413,6 +413,7 @@ impl Fixture {
                 resize_tx: watch::channel(TerminalSize::backend(1, 1)).0,
                 latency_foreground_tx,
                 next_input_sequence: AtomicU64::new(1),
+                upload_queue_slots: Arc::new(Semaphore::new(SFTP_TRANSFER_QUEUE_WINDOW)),
                 task,
             },
             event_rx,
@@ -501,6 +502,7 @@ async fn sftp_worker_lists_downloads_uploads_and_executes_writes() {
             Uuid::new_v4(),
             vec![(upload, "/remote/upload.txt".into(), local, 14, vec![])],
         )
+        .await
         .expect("upload");
     until(&mut events, |event| matches!(event, SshSessionEvent::SftpTransfer(SftpTransferEvent::Completed { transfer_id, .. }) if *transfer_id == upload)).await;
     assert_eq!(
@@ -565,6 +567,174 @@ async fn sftp_worker_lists_downloads_uploads_and_executes_writes() {
         .await,
         SshSessionEvent::Disconnected
     ));
+}
+
+#[tokio::test]
+async fn sftp_directory_root_finishes_after_every_child_transfer() {
+    let fixture = Fixture::new(false).await;
+    let (worker, mut events) = fixture.worker().await;
+    until(&mut events, |event| {
+        matches!(event, SshSessionEvent::Connected)
+    })
+    .await;
+
+    let root_id = Uuid::new_v4();
+    worker
+        .sftp_download_submitter()
+        .submit(
+            root_id,
+            "/remote".to_owned(),
+            fixture.directory.clone(),
+            Vec::new(),
+            true,
+        )
+        .await
+        .expect("directory download accepted");
+
+    timeout(
+        Duration::from_secs(10),
+        fixture.files.read_started.notified(),
+    )
+    .await
+    .expect("slow child transfer started");
+    let mut slow_id = None;
+    let mut regular_child_completed = false;
+    while slow_id.is_none() || !regular_child_completed {
+        let event = timeout(Duration::from_secs(10), events.recv())
+            .await
+            .expect("directory child event timeout")
+            .expect("SFTP worker event channel remains open");
+        match event {
+            SshSessionEvent::SftpTransfer(SftpTransferEvent::Queued {
+                transfer_id, name, ..
+            }) if name.ends_with("slow.bin") => slow_id = Some(transfer_id),
+            SshSessionEvent::SftpTransfer(SftpTransferEvent::Started {
+                transfer_id, name, ..
+            }) if name.ends_with("slow.bin") => slow_id = Some(transfer_id),
+            SshSessionEvent::SftpTransfer(SftpTransferEvent::Completed { transfer_id, .. })
+                if slow_id != Some(transfer_id) =>
+            {
+                regular_child_completed = true;
+            }
+            SshSessionEvent::SftpTransfer(SftpTransferEvent::DiscoveryFinished {
+                transfer_id,
+                ..
+            }) if transfer_id == root_id => {
+                panic!("directory root must remain active while a child is blocked");
+            }
+            _ => {}
+        }
+    }
+
+    let root_finished_while_blocked = timeout(Duration::from_millis(150), async {
+        loop {
+            if let Some(SshSessionEvent::SftpTransfer(SftpTransferEvent::DiscoveryFinished {
+                transfer_id,
+                ..
+            })) = events.recv().await
+                && transfer_id == root_id
+            {
+                return true;
+            }
+        }
+    })
+    .await
+    .unwrap_or(false);
+    assert!(!root_finished_while_blocked);
+
+    fixture.files.read_gate.add_permits(64);
+    let result = until(&mut events, |event| {
+        matches!(event, SshSessionEvent::SftpTransfer(SftpTransferEvent::DiscoveryFinished { transfer_id, .. }) if *transfer_id == root_id)
+    })
+    .await;
+    assert!(matches!(
+        result,
+        SshSessionEvent::SftpTransfer(SftpTransferEvent::DiscoveryFinished {
+            discovered_files: 2,
+            failed_files: 0,
+            cancelled: false,
+            ..
+        })
+    ));
+    worker.shutdown().await.expect("directory worker shutdown");
+}
+
+#[tokio::test]
+async fn cancelling_sftp_directory_cancels_active_children_before_root() {
+    let fixture = Fixture::new(false).await;
+    let (worker, mut events) = fixture.worker().await;
+    until(&mut events, |event| {
+        matches!(event, SshSessionEvent::Connected)
+    })
+    .await;
+
+    let root_id = Uuid::new_v4();
+    worker
+        .sftp_download_submitter()
+        .submit(
+            root_id,
+            "/remote".to_owned(),
+            fixture.directory.clone(),
+            Vec::new(),
+            true,
+        )
+        .await
+        .expect("directory download accepted");
+    let slow_id = until(&mut events, |event| {
+        matches!(event, SshSessionEvent::SftpTransfer(SftpTransferEvent::Started { name, .. }) if name.ends_with("slow.bin"))
+    })
+    .await;
+    let SshSessionEvent::SftpTransfer(SftpTransferEvent::Started {
+        transfer_id: child_id,
+        ..
+    }) = slow_id
+    else {
+        panic!("slow child should start");
+    };
+    timeout(
+        Duration::from_secs(10),
+        fixture.files.read_started.notified(),
+    )
+    .await
+    .expect("slow child read started");
+
+    worker
+        .request_cancel_sftp_transfer(root_id)
+        .expect("cancel directory root");
+    worker
+        .request_system_release()
+        .expect("cancellation barrier");
+    until(&mut events, |event| {
+        matches!(event, SshSessionEvent::SystemRelease(None))
+    })
+    .await;
+    fixture.files.read_gate.add_permits(64);
+
+    let mut child_cancelled = false;
+    loop {
+        let event = timeout(Duration::from_secs(10), events.recv())
+            .await
+            .expect("directory cancellation event timeout")
+            .expect("SFTP worker event channel remains open");
+        match event {
+            SshSessionEvent::SftpTransfer(SftpTransferEvent::Cancelled { transfer_id })
+                if transfer_id == child_id =>
+            {
+                child_cancelled = true
+            }
+            SshSessionEvent::SftpTransfer(SftpTransferEvent::DiscoveryFinished {
+                transfer_id,
+                cancelled,
+                ..
+            }) if transfer_id == root_id => {
+                assert!(child_cancelled, "child cancellation must be reported first");
+                assert!(cancelled, "directory root should end as cancelled");
+                break;
+            }
+            _ => {}
+        }
+    }
+    worker.shutdown().await.expect("directory worker shutdown");
 }
 
 #[tokio::test]
@@ -659,6 +829,7 @@ async fn sftp_worker_conflict_decisions_and_guarded_edits_preserve_remote_conten
                 Uuid::new_v4(),
                 vec![(id, "/remote/file.txt".into(), local.clone(), 11, vec![])],
             )
+            .await
             .expect("conflicting upload");
         until(&mut events, |event| matches!(event, SshSessionEvent::SftpTransfer(SftpTransferEvent::UploadConflict { transfer_id, .. }) if *transfer_id == id)).await;
         worker
@@ -798,6 +969,7 @@ async fn sftp_download_submitter_waits_for_worker_queue_capacity() {
             "/remote/one.txt".to_owned(),
             std::path::PathBuf::from("/tmp"),
             Vec::new(),
+            false,
         )
         .await
         .expect("first download enters the command queue");
@@ -809,6 +981,7 @@ async fn sftp_download_submitter_waits_for_worker_queue_capacity() {
                 "/remote/two.txt".to_owned(),
                 std::path::PathBuf::from("/tmp"),
                 Vec::new(),
+                false,
             )
             .await
     });
@@ -826,6 +999,89 @@ async fn sftp_download_submitter_waits_for_worker_queue_capacity() {
         command_rx.recv().await,
         Some(SshCommand::OpenSftpFile { .. })
     ));
+}
+
+#[tokio::test]
+async fn sftp_upload_submitter_waits_for_a_queue_slot_without_losing_requests() {
+    let directory = std::env::temp_dir().join(format!("axssh-upload-queue-{}", Uuid::new_v4()));
+    std::fs::create_dir(&directory).expect("isolated upload directory");
+    let first_path = directory.join("first.txt");
+    let second_path = directory.join("second.txt");
+    std::fs::write(&first_path, b"first").expect("first upload source");
+    std::fs::write(&second_path, b"second").expect("second upload source");
+
+    let (command_tx, mut command_rx) = mpsc::channel(1);
+    let submitter = SftpUploadSubmitter {
+        command_tx,
+        queue_slots: Arc::new(Semaphore::new(1)),
+    };
+    let first_id = Uuid::new_v4();
+    let first_submitter = submitter.clone();
+    let first = tokio::spawn(async move {
+        first_submitter
+            .submit(
+                Uuid::new_v4(),
+                vec![(
+                    first_id,
+                    "/remote/first.txt".into(),
+                    first_path,
+                    5,
+                    Vec::new(),
+                )],
+            )
+            .await
+    });
+    let Some(SshCommand::OpenSftpUpload {
+        request,
+        queue_slot,
+        accepted,
+    }) = command_rx.recv().await
+    else {
+        panic!("first upload command should be queued");
+    };
+    assert_eq!(request.transfer_id(), first_id);
+    accepted.send(Ok(())).expect("first request accepted");
+    first
+        .await
+        .expect("first submit task")
+        .expect("first submit");
+
+    let second_id = Uuid::new_v4();
+    let second_submitter = submitter.clone();
+    let second = tokio::spawn(async move {
+        second_submitter
+            .submit(
+                Uuid::new_v4(),
+                vec![(
+                    second_id,
+                    "/remote/second.txt".into(),
+                    second_path,
+                    6,
+                    Vec::new(),
+                )],
+            )
+            .await
+    });
+    tokio::task::yield_now().await;
+    assert!(
+        !second.is_finished(),
+        "full transfer window applies backpressure"
+    );
+    drop(queue_slot);
+
+    let Some(SshCommand::OpenSftpUpload {
+        request, accepted, ..
+    }) = command_rx.recv().await
+    else {
+        panic!("second upload command should be queued after a slot opens");
+    };
+    assert_eq!(request.transfer_id(), second_id);
+    accepted.send(Ok(())).expect("second request accepted");
+    second
+        .await
+        .expect("second submit task")
+        .expect("second submit");
+    std::fs::remove_dir_all(directory).expect("remove isolated upload directory");
 }
 
 #[tokio::test]

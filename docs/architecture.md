@@ -1866,7 +1866,7 @@ offset range. Dropping the window cancels its borrowed request futures, with
 no detached request tasks. EOF/path/handle revalidation must succeed before
 the local writer can publish, including when all bytes have arrived. Progress
 is emitted at most once per 100 ms plus the final count; lifecycle events
-remain immediate. The application state owns per-file rows split into active,
+remain immediate. The directory root remains active until discovery and every child transfer have reached terminal states; cancellation propagates to discovery, queued opens, and active children before the root is finalized. The application state owns per-file rows split into active,
 failed (including cancelled), and successful snapshots; Slint only
 renders those DTOs and sends checkbox/batch pause, resume, or cancel intent.
 The active-page batch actions share the right side of the transfer page bar;

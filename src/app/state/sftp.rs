@@ -178,32 +178,33 @@ impl SftpBrowserState {
         id: Uuid,
         discovered_files: usize,
         skipped_entries: usize,
+        failed_files: usize,
+        cancelled: bool,
         message: Option<String>,
     ) {
         self.pending_download_roots.remove(&id);
         if !self.scanning_download_roots.remove(&id) {
             return;
         }
-        let status = if discovered_files > 0 && skipped_entries == 0 {
-            format!("Scanned {discovered_files} files")
-        } else if discovered_files > 0 {
-            format!(
-                "Scanned {discovered_files} files; skipped {skipped_entries}. {}",
-                message.unwrap_or_else(|| "Some entries could not be read".to_owned())
-            )
-        } else {
-            format!(
-                "Scanned {discovered_files} files; skipped {skipped_entries}. {}",
-                message.unwrap_or_else(|| {
-                    if discovered_files == 0 {
-                        "No regular files were eligible for download".to_owned()
-                    } else {
-                        "Some entries could not be read".to_owned()
-                    }
-                })
-            )
-        };
-        let phase = if discovered_files > 0 {
+        let mut details = vec![format!("Scanned {discovered_files} files")];
+        if failed_files > 0 {
+            details.push(format!("{failed_files} failed"));
+        }
+        if skipped_entries > 0 {
+            details.push(format!("{skipped_entries} skipped"));
+        }
+        if let Some(message) = message {
+            details.push(message);
+        } else if discovered_files == 0 && !cancelled && failed_files == 0 {
+            details.push("No regular files were eligible for download".to_owned());
+        }
+        if cancelled {
+            details.insert(0, "Cancelled".to_owned());
+        }
+        let status = details.join("; ");
+        let phase = if cancelled {
+            SftpTransferPhase::Cancelled
+        } else if skipped_entries == 0 && failed_files == 0 {
             SftpTransferPhase::Completed
         } else {
             SftpTransferPhase::Failed

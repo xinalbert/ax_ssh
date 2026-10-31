@@ -57,9 +57,15 @@ impl LocalDownloadTarget {
         {
             parent.push(component);
             if !parent.exists() {
-                fs::create_dir(&parent).with_context(|| {
-                    format!("cannot create local download directory {parent:?}")
-                })?;
+                match fs::create_dir(&parent) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {}
+                    Err(error) => {
+                        return Err(error).with_context(|| {
+                            format!("cannot create local download directory {parent:?}")
+                        });
+                    }
+                }
             }
             let metadata = fs::symlink_metadata(&parent)
                 .with_context(|| format!("cannot inspect local download directory {parent:?}"))?;

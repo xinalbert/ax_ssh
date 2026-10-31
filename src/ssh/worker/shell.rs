@@ -338,18 +338,20 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                         .await;
                         continue;
                     }
-                    Some(SshCommand::OpenSftpUploads { requests }) => {
-                        for request in requests {
-                            send_sftp_transfer_event(
-                                &event_tx,
-                                SftpTransferEvent::Failed {
-                                    transfer_id: request.transfer_id(),
-                                    message: "Remote upload is available only in an SFTP tab".to_owned(),
-                                },
-                                session_id,
-                            )
-                            .await;
-                        }
+                    Some(SshCommand::OpenSftpUpload {
+                        request, accepted, ..
+                    }) => {
+                        let message = "Remote upload is available only in an SFTP tab".to_owned();
+                        send_sftp_transfer_event(
+                            &event_tx,
+                            SftpTransferEvent::Failed {
+                                transfer_id: request.transfer_id(),
+                                message: message.clone(),
+                            },
+                            session_id,
+                        )
+                        .await;
+                        let _ = accepted.send(Err(message));
                         continue;
                     }
                     Some(SshCommand::CancelSftpTransfer { .. })
