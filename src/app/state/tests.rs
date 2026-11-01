@@ -1781,8 +1781,6 @@ fn sftp_transfer_state_ignores_late_events_after_cancellation() {
         100,
     );
     sftp.update_transfer_progress(transfer_id, 50, 100);
-    assert!(!sftp.finish_downloaded_transfer(transfer_id, 100, "/tmp/report.txt".into()));
-
     assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Cancelling);
     assert_eq!(sftp.transfers[0].downloaded_bytes, 0);
     sftp.finish_transfer(
@@ -1790,7 +1788,78 @@ fn sftp_transfer_state_ignores_late_events_after_cancellation() {
         SftpTransferPhase::Cancelled,
         "Cancelled".to_owned(),
     );
+    assert!(!sftp.finish_downloaded_transfer(transfer_id, 100, "/tmp/report.txt".into()));
     assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Cancelled);
+}
+
+#[test]
+fn sftp_cancellation_does_not_override_confirmed_completion_or_skip() {
+    let mut sftp = SftpBrowserState {
+        open: true,
+        path: "/home/alice".to_owned(),
+        ..SftpBrowserState::default()
+    };
+    let download_id = Uuid::new_v4();
+    sftp.queue_transfer(download_id, "download.txt".to_owned(), 10)
+        .expect("download should queue");
+    sftp.start_transfer(
+        download_id,
+        "/home/alice/download.txt".to_owned(),
+        "download.txt".to_owned(),
+        10,
+    );
+    assert!(sftp.request_transfer_cancel(download_id));
+    assert!(sftp.finish_downloaded_transfer(download_id, 10, "/tmp/download.txt".into()));
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Completed);
+    assert_eq!(
+        sftp.completed_transfer_local_path(download_id),
+        Some("/tmp/download.txt".into())
+    );
+
+    let completed_upload_id = Uuid::new_v4();
+    sftp.queue_upload_transfer(
+        completed_upload_id,
+        "upload.txt".to_owned(),
+        10,
+        "/tmp/upload.txt".into(),
+        "/home/alice/upload.txt".to_owned(),
+    )
+    .expect("upload should queue");
+    sftp.start_transfer(
+        completed_upload_id,
+        "/home/alice/upload.txt".to_owned(),
+        "upload.txt".to_owned(),
+        10,
+    );
+    assert!(sftp.request_transfer_cancel(completed_upload_id));
+    assert_eq!(
+        sftp.finish_uploaded_transfer(completed_upload_id),
+        Some("/home/alice".to_owned())
+    );
+    assert_eq!(sftp.transfers[1].phase, SftpTransferPhase::Completed);
+
+    let skipped_upload_id = Uuid::new_v4();
+    sftp.queue_upload_transfer(
+        skipped_upload_id,
+        "existing.txt".to_owned(),
+        10,
+        "/tmp/existing.txt".into(),
+        "/home/alice/existing.txt".to_owned(),
+    )
+    .expect("second upload should queue");
+    sftp.start_transfer(
+        skipped_upload_id,
+        "/home/alice/existing.txt".to_owned(),
+        "existing.txt".to_owned(),
+        10,
+    );
+    assert!(sftp.request_transfer_cancel(skipped_upload_id));
+    sftp.finish_transfer(
+        skipped_upload_id,
+        SftpTransferPhase::Skipped,
+        "Skipped existing remote file".to_owned(),
+    );
+    assert_eq!(sftp.transfers[2].phase, SftpTransferPhase::Skipped);
 }
 
 #[test]

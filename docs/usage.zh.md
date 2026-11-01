@@ -367,8 +367,7 @@ Transfers 区分 **Transferring**、**Failed** 和 **Success** 三个页面。�
 保留已下载前缀并从该 offset 续传；仅在当前应用和 SFTP worker
 仍运行期间可用。每个 SFTP Tab 默认最多同时运行两个传输，可在 **Settings > SFTP** 的
 **Transfers per SFTP tab** 中设置为 1-16；**Global simultaneous uploads** 设置所有 SFTP Tab
-共享的上传上限，可设置为 1-32，默认值为 8。其余文件在队列中等待或按现有传输状态处理。取消会删除该任务的部分内容，包括刚发布但
-取消已生效的文件；失败会删除 `.part` 文件，成功文件保留在所选本地目录。关闭 SFTP Tab 会先取消并 join
+共享的上传上限，可设置为 1-32，默认值为 8。其余文件在队列中等待或按现有传输状态处理。**Cancel** 是尽力取消请求：上传在远端发布前取消会清理临时文件；下载取消会删除本地部分内容。若服务器已确认发布、下载已完成或上传已跳过，终态结果优先，取消不会回滚已发布文件。失败的下载会删除 `.part` 文件，已完成下载保留在所选本地目录。关闭 SFTP Tab 会先取消并 join
 待发现、待打开 subsystem 和活动下载，再关闭浏览器和 SSH transport。
 
 每条 transfer 的文件名之前都会显示 **Upload** 或 **Download**，排队中、进行中、失败、取消和成功记录都保持该方向标识。

@@ -580,8 +580,11 @@ active transfers at once by default; **Transfers per SFTP tab** in
 **Settings > SFTP** changes this limit from 1 to 16. **Global simultaneous
 uploads** changes the process-wide upload limit from 1 to 32 (the default is
 8); additional files wait in the queue or are subject to the existing transfer
-state. Cancel removes the task's partial content,
-including a file published just before cancellation wins; failures remove the
+state. **Cancel** requests best-effort cancellation. Before upload publication,
+a cancelled upload removes its remote temporary file; a cancelled download
+removes its local partial content. If the server has confirmed publication, a
+download has completed, or the upload was skipped, that terminal result stands;
+cancellation does not roll back a published file. Failed downloads remove the
 `.part` file, while completed local downloads remain in the chosen directory.
 Closing the SFTP Tab cancels and joins pending discovery, subsystem-opening, and
 active download work before closing the browser and SSH transport.

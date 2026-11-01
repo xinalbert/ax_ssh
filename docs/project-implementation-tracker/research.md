@@ -1019,3 +1019,16 @@
 - 既有实现对照：`src/egui_app/sftp_drop.rs` 已将单路径 payload 绑定 pane/generation/revision，并在 owner 侧调用 `upload_local_drop`/`download_drop`；controller 已有 `upload_selected`/`download_selected` 的 1–64 路径限制、目录 request/revision 复验、逐根 skip/failure 摘要和后台准备任务。
 - 对实施计划的影响：把 payload 扩展为有界拥有的路径列表；当拖动的行属于当前选择时携带该选择的稳定路径快照，否则保留单项路径行为。目标侧按列表长度选择既有 selected API 或单项 API；不在 UI 读文件、不新增 task/channel/schema/wire 协议，所有本地元数据和远端目录复验继续由 controller/worker 执行。保留原生文件管理器拖入和 egui 原生拖出未实现。payload 只在当前 egui Context 内短暂存在；pane/generation 不匹配拒绝，controller 再检查 request/revision 和已列出的条目；失败不清除选择，也不绕过 SSH/SFTP trust。路径列表最多 64 项且通过现有 controller 边界验证。
 - 未解决问题：系统文件管理器 file promise、真实平台拖放视觉/辅助技术与真实 SFTP 服务器验收仍不由本切片证明。
+
+
+## 2026-11-01 11:50 +0800 SFTP 取消与已确认终态竞态
+
+- 检索问题：当取消请求与上传原子发布、下载完成或冲突跳过回执同时到达时，哪个结果应成为传输终态？SFTP/SSH 是否定义可中断单项文件操作的标准取消语义？
+- 检索原因：上传 worker 在收到 rename 成功后再次读取取消标志并错误改报 Cancelled；Slint `Cancelling` 阶段拒绝下载 Completed，以及上传 Completed/Skipped 回执，可能令界面停留在取消中或与远端文件结果不符。
+- 来源列表：
+  - SFTP v3 Internet-Draft 02，已读第 6.4、6.5、7 节：<https://www.ietf.org/archive/id/draft-ietf-secsh-filexfer-02.txt>。该文档是过期草案，不是正式 RFC。
+  - RFC 4254 第 5.3 节，SSH Channel EOF/Close：<https://www.rfc-editor.org/rfc/rfc4254.html#section-5.3>。
+  - `Cargo.lock` 锁定 `russh-sftp 3.0.1`；已读该版本 `client/session.rs` 和 `client/rawsession.rs` 的 rename 路径及 status 回执映射：<https://docs.rs/crate/russh-sftp/3.0.1/source/src/client/session.rs>、<https://docs.rs/crate/russh-sftp/3.0.1/source/src/client/rawsession.rs>。
+- 关键结论：v3 草案定义 `SSH_FXP_RENAME` 并要求服务端用 `SSH_FXP_STATUS` 回应；成功状态代表该请求成功。草案没有单项传输取消请求。RFC 4254 的 channel close 终止 SSH 通道，不定义撤销/回滚已经处理的 SFTP 文件操作；不应将关闭通道当成原子取消机制。锁定的 russh-sftp rename API 等待 SFTP 操作响应，没有公开的单请求取消接口。协议本身没有“取消和完成谁优先”的强制 UI 规则。
+- 对实施计划的影响：取消按项目内尽力请求处理。rename 已收到成功回执后，上传保持 Published/Completed，即使取消标志同时变真；rename 前观察到取消仍拒绝发布并清理临时文件。Slint 允许 `Cancelling -> Completed/Skipped`，下载完成及上传目录刷新路径均接纳已确认完成结果。回归用 loopback peer 在完成远端 rename 后、返回成功响应前触发取消，验证状态与远端内容一致；不加 wire 消息、依赖、队列或 worker 类型。
+- 未解决问题：rename 已在服务器执行但成功响应丢失/超时会产生远端结果不确定，客户端无法从取消标志推断是否发布；本轮不加额外探测或回滚协议。真实服务器与原生 GUI 生命周期仍需平台验收。

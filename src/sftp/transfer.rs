@@ -773,11 +773,6 @@ async fn run_upload<F, S>(
         Ok(UploadOutcome::Skipped) => SftpTransferEvent::Skipped {
             transfer_id: request.transfer_id,
         },
-        Ok(UploadOutcome::Published) if cancellation.is_cancelled() => {
-            SftpTransferEvent::Cancelled {
-                transfer_id: request.transfer_id,
-            }
-        }
         Ok(UploadOutcome::Published) => SftpTransferEvent::Completed {
             transfer_id: request.transfer_id,
             local_path: PathBuf::new(),

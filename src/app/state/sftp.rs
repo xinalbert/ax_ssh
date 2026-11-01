@@ -340,6 +340,7 @@ impl SftpBrowserState {
                 SftpTransferPhase::Downloading
                     | SftpTransferPhase::Pausing
                     | SftpTransferPhase::Resuming
+                    | SftpTransferPhase::Cancelling
             )
         {
             return false;
@@ -366,6 +367,7 @@ impl SftpBrowserState {
                         SftpTransferPhase::Uploading
                             | SftpTransferPhase::Pausing
                             | SftpTransferPhase::Resuming
+                            | SftpTransferPhase::Cancelling
                     )
             })
             .and_then(|transfer| transfer.remote_path.as_deref())
@@ -621,10 +623,12 @@ impl SftpBrowserState {
                 | (SftpTransferPhase::Resuming, SftpTransferPhase::Failed)
                 | (SftpTransferPhase::Cancelling, SftpTransferPhase::Cancelled)
                 | (SftpTransferPhase::Cancelling, SftpTransferPhase::Failed)
+                | (SftpTransferPhase::Cancelling, SftpTransferPhase::Skipped)
                 | (SftpTransferPhase::Downloading, SftpTransferPhase::Completed)
                 | (SftpTransferPhase::Uploading, SftpTransferPhase::Completed)
                 | (SftpTransferPhase::Pausing, SftpTransferPhase::Completed)
                 | (SftpTransferPhase::Resuming, SftpTransferPhase::Completed)
+                | (SftpTransferPhase::Cancelling, SftpTransferPhase::Completed)
         );
         if !allowed {
             return;

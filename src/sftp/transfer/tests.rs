@@ -205,6 +205,7 @@ enum UploadClosePolicy {
     Reject,
     Cancel,
     CancelBeforePublish,
+    CancelAfterPublish,
 }
 
 struct UploadTestServer {
@@ -329,7 +330,9 @@ impl russh_sftp::server::Handler for UploadTestServer {
         match self.close_policy {
             UploadClosePolicy::Reject => return Err(StatusCode::Failure),
             UploadClosePolicy::Cancel => self.cancellation.cancel(),
-            UploadClosePolicy::Accept | UploadClosePolicy::CancelBeforePublish => {}
+            UploadClosePolicy::Accept
+            | UploadClosePolicy::CancelBeforePublish
+            | UploadClosePolicy::CancelAfterPublish => {}
         }
         Ok(upload_test_status(id))
     }
@@ -346,6 +349,9 @@ impl russh_sftp::server::Handler for UploadTestServer {
         }
         let content = files.remove(&oldpath).ok_or(StatusCode::NoSuchFile)?;
         files.insert(newpath, content);
+        if matches!(self.close_policy, UploadClosePolicy::CancelAfterPublish) {
+            self.cancellation.cancel();
+        }
         Ok(upload_test_status(id))
     }
 
@@ -457,12 +463,83 @@ async fn upload_close_failure_or_prepublication_cancellation_cleans_up_without_p
             UploadClosePolicy::Cancel | UploadClosePolicy::CancelBeforePublish => {
                 assert!(is_cancelled(&error))
             }
-            UploadClosePolicy::Accept => {
+            UploadClosePolicy::Accept | UploadClosePolicy::CancelAfterPublish => {
                 unreachable!("success is covered by the existing upload tests")
             }
         }
         assert!(files.lock().expect("remote files").is_empty());
     }
+    fs::remove_file(local).expect("fixture cleanup");
+}
+
+#[tokio::test]
+async fn upload_cancellation_after_confirmed_publish_reports_completed() {
+    let local = std::env::temp_dir().join(format!("axssh-publish-cancel-{}", Uuid::new_v4()));
+    let contents = b"published upload fixture";
+    fs::write(&local, contents).expect("local upload fixture");
+    let transfer_id = Uuid::new_v4();
+    let request = SftpUploadRequest::from_local_file(
+        transfer_id,
+        Uuid::new_v4(),
+        "/srv/report.txt".into(),
+        local.clone(),
+        contents.len() as u64,
+        Vec::new(),
+    )
+    .expect("request");
+    let files = Arc::new(Mutex::new(HashMap::new()));
+    let cancellation = TransferCancellation::new();
+    let (client, server) = tokio::io::duplex(64 * 1024);
+    russh_sftp::server::run(
+        server,
+        UploadTestServer {
+            close_policy: UploadClosePolicy::CancelAfterPublish,
+            cancellation: cancellation.clone(),
+            files: files.clone(),
+            directories: Arc::new(Mutex::new(HashSet::from(["/srv".to_owned()]))),
+        },
+    )
+    .await;
+    let (events, mut event_rx) = mpsc::channel(8);
+
+    run_upload(
+        async move { Ok(client) },
+        request,
+        cancellation.clone(),
+        events,
+        SftpUploadHandle::reserve_global_slot().expect("upload slot"),
+    )
+    .await;
+
+    assert!(cancellation.is_cancelled());
+    let mut saw_started = false;
+    let mut terminal = None;
+    while let Some(event) = event_rx.recv().await {
+        match event {
+            SftpTransferEvent::Started {
+                transfer_id: id, ..
+            } => saw_started |= id == transfer_id,
+            SftpTransferEvent::Completed {
+                transfer_id: id, ..
+            } if id == transfer_id => terminal = Some("completed"),
+            SftpTransferEvent::Cancelled { transfer_id: id } if id == transfer_id => {
+                terminal = Some("cancelled")
+            }
+            SftpTransferEvent::Failed {
+                transfer_id: id, ..
+            } if id == transfer_id => terminal = Some("failed"),
+            _ => {}
+        }
+    }
+    assert!(saw_started);
+    assert_eq!(terminal, Some("completed"));
+    let remote_files = files.lock().expect("remote files");
+    assert_eq!(
+        remote_files.get("/srv/report.txt").map(Vec::as_slice),
+        Some(contents.as_slice())
+    );
+    assert_eq!(remote_files.len(), 1);
+    drop(remote_files);
     fs::remove_file(local).expect("fixture cleanup");
 }
 

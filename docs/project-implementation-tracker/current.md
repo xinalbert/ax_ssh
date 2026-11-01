@@ -9,7 +9,7 @@
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：E6R-SelectedDrag 选中多项 egui 内部拖放；E6R-UploadConflict 已收口，E7R 剩余界面翻译、设置与媒体入口仍由总项跟踪。
+- 当前范围：E6R-Cancel SFTP 取消与已确认终态竞态修正已完成；E6R-SelectedDrag 已完成，E7R 剩余界面翻译、设置与媒体入口仍由总项跟踪。
 - 不在本轮范围内：E2V/E4V/E5V 原生验收、E6 完整拖放/交互对照、E7 完整功能及 E8 多窗口、E9、正式切换、安装/推送/发布、真实凭据存储迁移、参考工程写入、自主应用截图验收。
 - 后续实施范围：E3R 后续共享应用状态及工作区/传输/设置/平台迁移；E2 完整排字、原生输入、GUI 和性能验收作为 E2V 保留。
 - 所有权与安全：前端只消费快照并发出意图；控制层保留解析、业务、持久化、取消和清理，SSH 继续默认拒绝，凭据短期化、队列/缓存有界。`third_package/axshell` 保持只读参考边界。
@@ -42,6 +42,7 @@
 | E6R-Select | completed | 远端 path 多选/全选/清空、批量下载与根项入队摘要、发现入口预算 | 默认 940/egui 696、双前端完整/组合/双 macOS target | 五项 controller/两项 UI 新回归；递归字节/空目录失败/冲突/取消，原生验收保留 |
 | E6R-UploadConflict | completed | egui Keep both 与上传批次应用的冲突 Modal | 默认 940/egui 599+106、双前端完整/组合与双 macOS target | 复用既有 KeepBoth 与 batch policy；原生 GUI/真实服务器验收保留 |
 | E6R-SelectedDrag | completed | Local/Remote files 已选多项的 egui 内部拖放 | 版本/代次/目录快照复验、单次入队与边界回归；双前端及可用 macOS target 门禁 | 复用现有选择与 upload/download preparation；系统文件管理器原生拖出和完整平台验收仍独立保留 |
+| E6R-Cancel | completed | 上传发布与取消竞态、Slint Cancelling 终态回执修正 | loopback 上传成功回执/取消竞态、Completed/Skipped 状态回归及默认 Rust 门禁通过 | 确认 SFTP v3/RFC 4254 与锁定 russh-sftp 3.0.1；取消沿用尽力请求，不加协议或依赖 |
 | E6R | pending | 原生拖出、批量修改、完整 SFTP 功能对照 | 真实平台拖放及旧功能对照 | 本地多选上传与选中拖放已完成；不把核心完成视为全部验收 |
 | E7 | completed | 首批设置：主题/字号/行高/部分快捷键、preview/save/close | 事务/草稿和现有门禁 | 原 completed 限定为首切片；完整设置另列 E7T/E7R |
 | E7T | completed | 终端行为与 SFTP 设置界面及 controller/worker 应用链 | 79 项 controller 回归、两前端完整门禁、组合检查及文档校验通过 | 持久值经 owner，预览不改变连接安全权限；GUI 验收保留 |
@@ -196,6 +197,8 @@
 
 - E7I 已接通图片事件、单后台反预乘/PNG、每终端准备/ready/确认/取消及 Local/SSH 文件生命周期。Local PTY、同连接固定信任 SSH/SFTP 成功/写失败、无自动回车、权限/清理、旧连接/视口/限额及 egui 多 pass/失焦回归已通过；全部必需本机门禁通过；9 项新增回归，默认 934、egui 544+62=606 项完整测试通过，两前端 check/严格 Clippy/test/build、all-features/all-targets 和双 macOS target CI 原命令 check/严格 Clippy 通过。17 项 Python、56 Markdown/入口、756×11 PO/生成、215 egui 源键、116 图标、skill/tracker/fmt/diff 通过。
 
+- E6R-Cancel 已完成：上传 rename 成功后的取消竞态与 Slint Cancelling 终态回执已修正；491 个 library tests、451 个 binary tests 及两个聚焦测试通过。默认 locked/offline `check`、严格 all-targets Clippy、build、fmt、57 个 Markdown/入口检查、tracker validator 与 diff 检查全部通过；真实服务器/GUI 生命周期仍需平台验收。
+
 ## 风险与阻塞
 
 - egui WGPU 暂无等价 CPU/damage fallback，保持默认 Slint 作为当前受支持替代；迁移最终切换前需完整 renderer 支持决策。
@@ -203,6 +206,7 @@
 - 翻译已支持 Slint/egui 源键合并，但尚有 Slint-only 文案；E9 前须继续迁移源键和入口/边界检查，不得直接删除门禁。
 - 终端字体/IME、多窗口平台集成、软件渲染和性能为主要不确定性，E2 优先验证；用户负责视觉验收。
 - E7F 上限和 join 覆盖显式字体选择加载；eframe 既有按需系统字形 provider 对额外文字/emoji 的首次缺字可能阻塞，完整 provider 生命周期与覆盖仍属 E2V，未在本轮更换或关闭。
+- SFTP rename 可能已在服务器执行但成功响应丢失/超时；此时客户端无法判定文件是否已发布，传输结果仍可能与远端状态不一致。本轮不加二次探测或回滚协议。
 
 ## 剩余迁移核对（2026-10-26 22:22 +0800）
 
@@ -217,6 +221,7 @@
 
 ## 下一步
 
+- E6R-Cancel 已收口：取消和成功/跳过终态竞态回归及默认 Rust 门禁通过；真实服务器与原生 GUI 生命周期验收仍保留。后续恢复 E7R/E6R 总计划。
 - 已完成：E6R-UploadSelect 的有界路径/目录快照/后台准备和 Local files 选择链已完成；E6R-SelectedDrag 让已选行拖放复用 `upload_selected`/`download_selected`，未选行保留单项路径。后续优先批量远端修改和原生拖出，再做完整 SFTP 对照与平台验收。
 - 已完成：E6R-SelectedDrag 聚焦回归覆盖有界 payload 的已选/未选路径分流、pane/generation 拒绝和既有 native drop 多 pass 行为；egui 599 library + 107 binary 全量测试、默认 490 library + 450 binary、两前端严格 Clippy/check/build、组合 all-features check，以及翻译/仓库/Markdown/tracker/diff/fmt 门禁通过。该切片无平台 cfg，未新增依赖、协议、schema、队列或任务；原生拖出、真实平台/服务器与 Windows/Linux/Rust 1.95 仍由独立验收/CI 负责。
 - 所有权：UI 仅持有界选择与意图，controller 保存私有快照和单个扫描任务；不交出锁/receiver/句柄/指纹，不在 UI 扫描或 await。不新增后台任务类型、队列、协议、依赖或持久 schema，仍经既有 SSH trust 和 native upload identity 复验。
@@ -225,4 +230,4 @@
 
 ## 最后更新时间
 
-- 2026-10-27 12:00 +0800
+- 2026-11-01 12:08 +0800

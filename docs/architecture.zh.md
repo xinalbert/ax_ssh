@@ -475,7 +475,7 @@ SFTP facade 组合私有 `sftp_bridge/{navigation,files,drag,transfers}.rs`；�
 rendering 的 `tests.rs`。父模块在 `cfg(test)` 下只声明一次；测试辅助代码保持私有，不扩大
 运行时 API，也不改变 UI、领域或 transport 的职责归属。
 
-`CredentialStore::with_entry_factory` 和 `PasswordEntry` 是受保护 provider 与应用隔离测试所需的显式 library 边界，该 adapter 返回自有值与通用错误，平台错误留在 credentials 内部，避免测试访问真实 keyring 或替换进程全局后端。私有持久化在替换前确认临时文件权限，父目录同步失败带上下文返回；替换后的同步失败意味着新文件可能已发布，不能报告持久化成功。上传发布必须等待写入、源验证和远端 CLOSE 成功；发布前观察到取消不得返回 `Published`。
+`CredentialStore::with_entry_factory` 和 `PasswordEntry` 是受保护 provider 与应用隔离测试所需的显式 library 边界，该 adapter 返回自有值与通用错误，平台错误留在 credentials 内部，避免测试访问真实 keyring 或替换进程全局后端。私有持久化在替换前确认临时文件权限，父目录同步失败带上下文返回；替换后的同步失败意味着新文件可能已发布，不能报告持久化成功。上传发布必须等待写入、源验证和远端 CLOSE 成功；发布前观察到取消不得返回 `Published`。服务器确认 rename 发布后，即使取消请求同时到达，也以成功结果为准；SFTP v3 没有单项操作的取消或回滚请求。
 
 SFTP 文件系统状态保留原始规范路径，用于目录历史、刷新、文件身份和传输。只有本地地址栏
 使用无状态的 `PathPresentation.local-path` 格式化：普通 Windows 扩展盘符路径显示为
