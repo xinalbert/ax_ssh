@@ -1141,10 +1141,6 @@ fn terminal_pane_snapshot_keeps_parent_row_when_only_nested_models_change() {
         font_role: 0,
         color: Default::default(),
     }]));
-    updated.terminal.cursor_row = 3;
-    updated.terminal.cursor_column = 7;
-    updated.terminal.cursor_text = "a".into();
-
     assert!(update_terminal_pane_snapshot_models(
         &panes,
         &dividers,
@@ -1152,17 +1148,13 @@ fn terminal_pane_snapshot_keeps_parent_row_when_only_nested_models_change() {
         &[],
     ));
     let current = panes.row_data(0).expect("pane row");
-    assert_eq!(current.terminal.cursor_row, 0);
-    assert_eq!(current.terminal.cursor_column, 0);
-    assert_eq!(
-        current
-            .terminal
-            .cursor_state
-            .row_data(0)
-            .expect("cursor row")
-            .row,
-        3
-    );
+    let cursor = current
+        .terminal
+        .cursor_state
+        .row_data(0)
+        .expect("cursor row");
+    assert_eq!((cursor.row, cursor.column), (3, 7));
+    assert_eq!(cursor.text.as_str(), "a");
     assert_eq!(
         current
             .terminal

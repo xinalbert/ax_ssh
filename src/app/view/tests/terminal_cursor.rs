@@ -75,7 +75,7 @@ fn cursor_item(harness: &LayoutTestHarness, color: slint::Color) -> ItemRc {
 
 #[test]
 fn cursor_only_protocol_updates_reach_the_grid_without_replacing_models_or_focus() {
-    for detached in [false, true] {
+    for (detached, incremental) in [(false, false), (false, true), (true, false), (true, true)] {
         std::thread::spawn(move || {
             let harness = LayoutTestHarness::new();
             let ui = &harness.ui;
@@ -83,6 +83,15 @@ fn cursor_only_protocol_updates_reach_the_grid_without_replacing_models_or_focus
             let mut terminal = TerminalModel::new(80, 24, 10);
             terminal.process(b"\x1b]12;#123456\x07\x1b[2 q");
             mount(&harness, detached, id, &mut terminal);
+            let publish = |terminal: &mut TerminalModel| {
+                let pane = window_pane(id, terminal);
+                if incremental {
+                    assert_eq!(apply_terminal_pane_updates(ui, vec![pane]), 1);
+                } else {
+                    apply_terminal_panes(ui, vec![pane], vec![]);
+                }
+                harness.settle();
+            };
             let before = ui.get_terminal_panes().row_data(0).expect("pane");
             let focused = WindowInner::from_pub(ui.window())
                 .focus_item
@@ -90,22 +99,18 @@ fn cursor_only_protocol_updates_reach_the_grid_without_replacing_models_or_focus
                 .upgrade();
             let cursor = cursor_item(&harness, slint::Color::from_rgb_u8(0x12, 0x34, 0x56));
             let block = cursor.geometry().size;
+            let origin = cursor.geometry().origin;
             assert!(cursor.is_visible());
 
             terminal.process(b"\x1b[4 q");
-            assert_eq!(
-                apply_terminal_pane_updates(ui, vec![window_pane(id, &mut terminal)]),
-                1
-            );
-            harness.settle();
+            publish(&mut terminal);
             assert!(
                 cursor.geometry().size.height < block.height / 2.0,
                 "underline height"
             );
 
             terminal.process(b"\x1b[6 q");
-            apply_terminal_pane_updates(ui, vec![window_pane(id, &mut terminal)]);
-            harness.settle();
+            publish(&mut terminal);
             assert!(
                 cursor.geometry().size.width < block.width / 2.0,
                 "beam width"
@@ -113,14 +118,12 @@ fn cursor_only_protocol_updates_reach_the_grid_without_replacing_models_or_focus
             assert_eq!(cursor.geometry().size.height, block.height);
 
             terminal.process(b"\x1b]12;#654321\x07");
-            apply_terminal_pane_updates(ui, vec![window_pane(id, &mut terminal)]);
-            harness.settle();
+            publish(&mut terminal);
             let recolored = cursor_item(&harness, slint::Color::from_rgb_u8(0x65, 0x43, 0x21));
             assert_eq!(cursor, recolored, "cursor item identity stays stable");
 
             terminal.process(b"\x1b[?12h");
-            apply_terminal_pane_updates(ui, vec![window_pane(id, &mut terminal)]);
-            harness.settle();
+            publish(&mut terminal);
             let visibility = cursor.is_visible();
             harness
                 .time
@@ -132,12 +135,27 @@ fn cursor_only_protocol_updates_reach_the_grid_without_replacing_models_or_focus
                 "protocol blink request reaches timer"
             );
             terminal.process(b"\x1b[?12l");
-            apply_terminal_pane_updates(ui, vec![window_pane(id, &mut terminal)]);
-            harness.settle();
+            publish(&mut terminal);
             assert!(
                 cursor.is_visible(),
                 "steady cursor is visible at either old blink phase"
             );
+
+            terminal.process(b"\x1b[?25l");
+            publish(&mut terminal);
+            assert!(!cursor.is_visible(), "protocol hides the same cursor item");
+
+            terminal.process("\x1b[?25h\x1b[3;5H中\x1b[3;5H\x1b[2 q".as_bytes());
+            publish(&mut terminal);
+            assert!(cursor.is_visible());
+            assert!(cursor.geometry().origin.x > origin.x);
+            assert!(cursor.geometry().origin.y > origin.y);
+            assert_eq!(cursor.geometry().size.width, block.width * 2.0);
+            let current = ui.get_terminal_panes().row_data(0).expect("pane");
+            assert_eq!(current.terminal.cursor_state.row_count(), 1);
+            let state = current.terminal.cursor_state.row_data(0).expect("cursor");
+            assert_eq!((state.row, state.column, state.cells), (2, 4, 2));
+            assert_eq!(state.text.as_str(), "中");
 
             let after = ui.get_terminal_panes().row_data(0).expect("pane");
             assert_eq!(before.terminal.cursor_state, after.terminal.cursor_state);

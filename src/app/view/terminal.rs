@@ -668,22 +668,7 @@ pub(super) fn terminal_view_from_snapshot(
     );
     let current_lines = current.map(|current| &current.render_lines);
     let lines = render_snapshot_lines(&snapshot, &renderer, current_lines);
-    let cursor_text: SharedString = snapshot.cursor_text.into();
-    let cursor_row = snapshot.cursor_row.min(i32::MAX as usize) as i32;
-    let cursor_column = snapshot.cursor_column.min(i32::MAX as usize) as i32;
-    let cursor_cells = snapshot.cursor_cells.clamp(1, 2) as i32;
-    let cursor_color = to_slint_color(renderer.cursor_color(snapshot.cursor_color));
-    let cursor_state = TerminalCursorState {
-        row: cursor_row,
-        column: cursor_column,
-        cells: cursor_cells,
-        visible: snapshot.cursor_visible,
-        shape: terminal_cursor_shape(snapshot.cursor_shape),
-        blinking: snapshot.cursor_blinking,
-        color: cursor_color,
-        text: cursor_text.clone(),
-        font_role: terminal_font_role(super::super::terminal_render::text_font_role(&cursor_text)),
-    };
+    let cursor_state = terminal_cursor_state(&snapshot, &renderer);
     TerminalViewState {
         terminal_id: tab_id.to_string().into(),
         media_status: media.status.into(),
@@ -695,14 +680,6 @@ pub(super) fn terminal_view_from_snapshot(
         render_lines: ModelRc::new(VecModel::from(lines)),
         cursor_state: ModelRc::new(VecModel::from(vec![cursor_state])),
         content_columns: snapshot.max_columns.min(i32::MAX as usize) as i32,
-        cursor_row,
-        cursor_column,
-        cursor_cells,
-        cursor_visible: snapshot.cursor_visible,
-        cursor_shape: terminal_cursor_shape(snapshot.cursor_shape),
-        cursor_blinking: snapshot.cursor_blinking,
-        cursor_color,
-        cursor_text,
         font_family: ui.get_terminal_font_family(),
         emoji_font_family: font_bridge::terminal_emoji_font_family().into(),
         font_registry_generation: ui.get_font_registry_generation(),
@@ -804,19 +781,7 @@ fn terminal_view_from_snapshot_incremental(
         terminal.render_lines = ModelRc::new(VecModel::from(lines));
     }
 
-    let cursor_text: SharedString = snapshot.cursor_text.into();
-    let cursor_color = to_slint_color(renderer.cursor_color(snapshot.cursor_color));
-    let cursor_state = TerminalCursorState {
-        row: snapshot.cursor_row.min(i32::MAX as usize) as i32,
-        column: snapshot.cursor_column.min(i32::MAX as usize) as i32,
-        cells: snapshot.cursor_cells.clamp(1, 2) as i32,
-        visible: snapshot.cursor_visible,
-        shape: terminal_cursor_shape(snapshot.cursor_shape),
-        blinking: snapshot.cursor_blinking,
-        color: cursor_color,
-        text: cursor_text.clone(),
-        font_role: terminal_font_role(super::super::terminal_render::text_font_role(&cursor_text)),
-    };
+    let cursor_state = terminal_cursor_state(&snapshot, &renderer);
     if !replace_vec_model_rows(&terminal.cursor_state, vec![cursor_state.clone()]) {
         terminal.cursor_state = ModelRc::new(VecModel::from(vec![cursor_state]));
     }
@@ -829,14 +794,6 @@ fn terminal_view_from_snapshot_incremental(
     terminal.selection_revision = selection_revision;
     terminal.notice = terminal_notice_view(notice);
     terminal.content_columns = snapshot.max_columns.min(i32::MAX as usize) as i32;
-    terminal.cursor_row = snapshot.cursor_row.min(i32::MAX as usize) as i32;
-    terminal.cursor_column = snapshot.cursor_column.min(i32::MAX as usize) as i32;
-    terminal.cursor_cells = snapshot.cursor_cells.clamp(1, 2) as i32;
-    terminal.cursor_visible = snapshot.cursor_visible;
-    terminal.cursor_shape = terminal_cursor_shape(snapshot.cursor_shape);
-    terminal.cursor_blinking = snapshot.cursor_blinking;
-    terminal.cursor_color = cursor_color;
-    terminal.cursor_text = cursor_text;
     terminal.font_family = ui.get_terminal_font_family();
     terminal.emoji_font_family = font_bridge::terminal_emoji_font_family().into();
     terminal.font_registry_generation = ui.get_font_registry_generation();
@@ -867,6 +824,25 @@ fn terminal_view_from_snapshot_incremental(
     terminal.select_all_shortcut = ui.get_select_all_shortcut();
     terminal.mouse_local_selection_priority = ui.get_terminal_mouse_local_selection_priority();
     terminal
+}
+
+fn terminal_cursor_state(
+    snapshot: &TerminalSnapshot,
+    renderer: &TerminalRenderer,
+) -> TerminalCursorState {
+    TerminalCursorState {
+        row: snapshot.cursor_row.min(i32::MAX as usize) as i32,
+        column: snapshot.cursor_column.min(i32::MAX as usize) as i32,
+        cells: snapshot.cursor_cells.clamp(1, 2) as i32,
+        visible: snapshot.cursor_visible,
+        shape: terminal_cursor_shape(snapshot.cursor_shape),
+        blinking: snapshot.cursor_blinking,
+        color: to_slint_color(renderer.cursor_color(snapshot.cursor_color)),
+        text: snapshot.cursor_text.as_str().into(),
+        font_role: terminal_font_role(super::super::terminal_render::text_font_role(
+            &snapshot.cursor_text,
+        )),
+    }
 }
 
 fn terminal_cursor_shape(shape: ax_ssh::terminal::TerminalCursorShape) -> i32 {

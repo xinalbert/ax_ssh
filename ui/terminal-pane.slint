@@ -81,16 +81,9 @@ export struct TerminalViewState {
     bell_revision: int,
     notice: TerminalNoticeViewState,
     render_lines: [TerminalRenderLine],
+    // Rust supplies one row; all cursor consumers observe this model.
     cursor_state: [TerminalCursorState],
     content_columns: int,
-    cursor_row: int,
-    cursor_column: int,
-    cursor_cells: int,
-    cursor_visible: bool,
-    cursor_shape: int,
-    cursor_blinking: bool,
-    cursor_color: color,
-    cursor_text: string,
     font_family: string,
     emoji_font_family: string,
     font_registry_generation: int,
@@ -314,22 +307,14 @@ export component TerminalPane inherits Rectangle {
     private property <int> selection-revision: root.view.selection_revision;
     private property <int> bell-revision: root.view.bell_revision;
     private property <int> content-columns: root.view.content_columns;
-    private property <int> cursor-row: root.view.cursor_state.length > 0
-        ? root.view.cursor_state[0].row : root.view.cursor_row;
-    private property <int> cursor-column: root.view.cursor_state.length > 0
-        ? root.view.cursor_state[0].column : root.view.cursor_column;
-    private property <int> cursor-cells: root.view.cursor_state.length > 0
-        ? root.view.cursor_state[0].cells : root.view.cursor_cells;
-    private property <bool> cursor-visible: root.view.cursor_state.length > 0
-        ? root.view.cursor_state[0].visible : root.view.cursor_visible;
-    private property <int> cursor-shape: root.view.cursor_state.length > 0
-        ? root.view.cursor_state[0].shape : root.view.cursor_shape;
-    private property <bool> cursor-blinking: root.view.cursor_state.length > 0
-        ? root.view.cursor_state[0].blinking : root.view.cursor_blinking;
-    private property <color> cursor-color: root.view.cursor_state.length > 0
-        ? root.view.cursor_state[0].color : root.view.cursor_color;
-    private property <string> cursor-text: root.view.cursor_state.length > 0
-        ? root.view.cursor_state[0].text : root.view.cursor_text;
+    private property <int> cursor-row: root.view.cursor_state[0].row;
+    private property <int> cursor-column: root.view.cursor_state[0].column;
+    private property <int> cursor-cells: root.view.cursor_state[0].cells;
+    private property <bool> cursor-visible: root.view.cursor_state[0].visible;
+    private property <int> cursor-shape: root.view.cursor_state[0].shape;
+    private property <bool> cursor-blinking: root.view.cursor_state[0].blinking;
+    private property <color> cursor-color: root.view.cursor_state[0].color;
+    private property <string> cursor-text: root.view.cursor_state[0].text;
     private property <string> requested-terminal-font-family: root.view.font_family;
     private property <bool> terminal-font-is-monospace:
         abs(mono-i.preferred-width - mono-m.preferred-width) <= 1px
@@ -502,8 +487,7 @@ export component TerminalPane inherits Rectangle {
         cursor_blinking: root.cursor-blinking,
         cursor_color: root.cursor-color,
         cursor_text: root.cursor-text,
-        cursor_font_role: root.view.cursor_state.length > 0
-            ? root.view.cursor_state[0].font_role : 0,
+        cursor_font_role: root.view.cursor_state[0].font_role,
         font_family: root.terminal-font-family,
         emoji_font_family: root.view.emoji_font_family,
         font_registry_generation: root.view.font_registry_generation,
