@@ -4,21 +4,29 @@ import { Theme } from "../theme.slint";
 export component ElidedTooltipContent inherits Rectangle {
     in property <string> text;
     private property <length> natural-width: tooltip-probe.preferred-width;
-
-    width: min(
-        max(Theme.text-tooltip-min-width, root.natural-width),
+    private property <length> content-width: min(
+        max(Theme.text-tooltip-min-width, root.natural-width + 2 * Theme.space-md),
         Theme.text-tooltip-max-width,
     );
-    height: tooltip-label.preferred-height;
-    background: Theme.tooltip-background;
-    border-width: Theme.hairline;
-    border-color: Theme.tooltip-border;
-    border-radius: Theme.radius-small;
+    private property <length> content-height:
+        tooltip-label.preferred-height + 2 * Theme.space-sm;
+
+    // Slint 1.18.1 wraps custom content in its standard tooltip frame.
+    // Its popup uses preferred size, so constrain that and actual size together.
+    min-width: root.content-width;
+    preferred-width: root.content-width;
+    max-width: root.content-width;
+    min-height: root.content-height;
+    preferred-height: root.content-height;
+    max-height: root.content-height;
+    background: transparent;
 
     tooltip-label := Text {
-        width: parent.width;
+        x: Theme.space-md;
+        y: Theme.space-sm;
+        width: parent.width - 2 * Theme.space-md;
         text: root.text;
-        color: Theme.text;
+        color: Palette.foreground;
         font-family: Theme.application-font-family;
         font-size: Theme.font-caption;
         wrap: char-wrap;

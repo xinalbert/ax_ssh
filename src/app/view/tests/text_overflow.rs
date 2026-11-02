@@ -1,6 +1,8 @@
 use super::*;
 use i_slint_core::item_tree::ItemRc;
-use i_slint_core::items::{ComplexText, InputType, TextInput, TextWrap};
+use i_slint_core::items::{
+    BasicBorderRectangle, BorderRectangle, ComplexText, InputType, TextInput, TextWrap,
+};
 use i_slint_core::lengths::LogicalPoint;
 use i_slint_core::window::{WindowInner, WindowKind};
 use slint::platform::{WindowAdapter, WindowEvent};
@@ -73,6 +75,43 @@ fn tooltip_text(harness: &LayoutTestHarness) -> Option<SharedString> {
     })
 }
 
+fn assert_tooltip_surface_bounds(harness: &LayoutTestHarness) {
+    let window = WindowInner::from_pub(harness.ui.window());
+    let popups = window.active_popups();
+    let popup = popups
+        .iter()
+        .find(|popup| matches!(popup.window_kind, WindowKind::ToolTip))
+        .expect("visible tooltip");
+    let root = ItemRc::new_root(popup.component.clone());
+    let max_width = harness.ui.global::<Theme>().get_text_tooltip_max_width();
+    assert!(
+        root.geometry().size.width <= max_width + 0.5,
+        "tooltip outer width {:?} exceeds content limit {max_width}",
+        root.geometry().size,
+    );
+    let mut surfaces = 0;
+    root.visit_descendants(|item| {
+        let background = if let Some(rect) = item.downcast::<BasicBorderRectangle>() {
+            BasicBorderRectangle::FIELD_OFFSETS
+                .background()
+                .apply_pin(rect.as_pin_ref())
+                .get()
+        } else if let Some(rect) = item.downcast::<BorderRectangle>() {
+            BorderRectangle::FIELD_OFFSETS
+                .background()
+                .apply_pin(rect.as_pin_ref())
+                .get()
+        } else {
+            return ControlFlow::<()>::Continue(());
+        };
+        if item.is_visible() && background.color().alpha() > 0 {
+            surfaces += 1;
+        }
+        ControlFlow::<()>::Continue(())
+    });
+    assert_eq!(surfaces, 1, "one tooltip frame owns the visible background");
+}
+
 fn show_editor(harness: &LayoutTestHarness, width: u32) {
     harness.ui.set_active_tab_kind("session-editor".into());
     harness.ui.set_editor_draft_id("overflow-test".into());
@@ -123,6 +162,17 @@ fn tab_summary_hover_tracks_latency_without_taking_focus_or_pointer_actions() {
             tooltip_text(&harness).as_deref(),
             Some("SSH\nDebian GNU/Linux 12\nConnected · SSH RTT: 42 ms\nUpdated: 15:30:00")
         );
+        for value in [
+            "albertxin@Mac-mini:/Volumes/albert_xin/2026/soft/axsoft/ax_ssh",
+            "持续输出终端的连接详情和很长的本地工作目录：/Volumes/albert_xin/2026/soft/axsoft/ax_ssh",
+            "SSH",
+        ] {
+            tab.title = value.into();
+            model.set_row_data(0, tab.clone());
+            harness.settle();
+            hover(&harness, &displayed_text(&harness, value));
+            assert_tooltip_surface_bounds(&harness);
+        }
         assert_eq!(
             WindowInner::from_pub(ui.window())
                 .focus_item

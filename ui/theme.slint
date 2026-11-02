@@ -92,9 +92,8 @@ export global Theme {
     out property <color> focus: accent;
     out property <color> hover: panel-alt;
     out property <color> selected: accent.with-alpha(0.16);
-    // Tooltip surfaces belong to the application theme rather than the
-    // standard-widget palette. This keeps popup hints aligned with panels and
-    // controls in both light and dark modes.
+    // Custom sidebar tooltip cards use the application theme. Shared text
+    // tooltips leave their outer surface to the standard-widget palette.
     out property <color> tooltip-background: panel-alt;
     out property <color> tooltip-border: control-border;
 
