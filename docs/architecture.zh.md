@@ -266,17 +266,21 @@ UUID；一次 UI 事件只为当前可见 pane tree 中匹配的 pane 生成 sna
 输出因此留在 Rust 状态，直到后续完整路由刷新，而不会进入 Slint event queue。
 `src/app/terminal_presentation.rs` 为每个 Local、Serial、SSH 或 Telnet monitor 拥有独立、只由 dirty
 输出驱动的呈现判定。当前 `WindowRouter` 路由把活动 `PaneTree` 中的终端动态分类为 focused 或
-可见未聚焦；不属于任何活动 tree 的终端为 hidden。聚焦终端每个输出 burst 的首帧使用固定合并窗口：
-最多约一帧 60 Hz 的时间（16.7 ms，配置更高帧率时更短），后续片段不推迟期限；安静 250 ms 后启动新 burst。
-GPU 和其它 non-software renderer 的后续连续输出在 500 ms 和 2 秒后按 16/33/50 ms 自适应；软件 renderer
-按配置的聚焦帧率呈现，不采用该降档。`AppearanceSettings` 以 FPS 持久化独立的聚焦和可见未聚焦刷新上限，范围为 1-120 FPS，默认分别为
+可见未聚焦；不属于任何活动 tree 的终端为 hidden。聚焦终端每轮 pending 输出都合并跨批次重绘：
+等待最多一帧 60 Hz 的静默时间（约 16.7 ms，配置更高帧率时更短），从本轮首段到达起最多等待
+两倍该时间（默认约 33.3 ms）。后续片段可推迟静默期限，但不能延长该硬期限；连续输出无需
+停止也会发布。最终准入仍不能早于现有帧率期限，因此这些是合并预算，不是 GUI 显示延迟保证。
+安静 250 ms 后重置 burst。GPU 和其它 non-software renderer 的后续连续输出在 500 ms 和 2 秒后
+按 16/33/50 ms 自适应；软件 renderer 使用配置的聚焦周期，不采用该降档。持续无静默输出在
+默认合并预算下可能接近 30 FPS，配置 FPS 是上限而非最低帧率。`AppearanceSettings` 以 FPS 持久化独立的聚焦和可见未聚焦刷新上限，范围为 1-120 FPS，默认分别为
 60 FPS 和 4 FPS；设置值限制所有 renderer 的后续呈现节奏。可见未聚焦的 split pane 按设置后的周期
 最多呈现一次，隐藏 Tab 不设置呈现 deadline。
 
 `AppState` 只允许一个已排入或执行中的 UI refresh batch；UI 取走 batch 前的输出合并到该 batch，
 snapshot 构造后的输出最多只补排一个 follow-up。终端保留一个有界 pending snapshot；解析输出后标记下一帧待提交，
-其它 UI 刷新在呈现期限前继续使用已准入的快照，避免中间光标泄漏。已有准入快照仍可消费，但在其之后到达的片段
-需要等待自己的期限；合并 damage 时不丢失先前脏行。初始 snapshot 若 `dirty_rows` 为空，且 cursor、
+其它 UI 刷新在呈现期限前继续使用已准入的快照，避免中间光标泄漏。每次新准入都会以最新快照
+替换单槽 pending 的状态并合并旧 damage；慢 UI 不会因更晚的未准入输出而退回更早的已准入光标。
+尚未准入的片段仍等待自己的期限；合并 damage 时不丢失先前脏行。初始 snapshot 若 `dirty_rows` 为空，且 cursor、
 viewport 与 mouse-reporting 状态均与最近一次已发布 snapshot 一致，就不进入 Slint queue，因此只有控制序列的输出
 不会触发重绘。Settings 预览和保存会通过 `WindowRouter` 发布新策略，并立即唤醒仍有 pending 输出的
 monitor。路由 revision 只唤醒仍有 pending 输出的 monitor，使 pane 焦点或 Tab 变化立即采用新策略且无需轮询。
@@ -307,8 +311,10 @@ deadline。没有脏输出时没有 timer 唤醒。parser、协议应答、worke
 未变化的 pane/divider 行不会发送父 model 通知，terminal-only 批次也不会重建 SFTP 或无关 workspace
 属性。因此可见 `TerminalGrid` 会直接收到输出 model 通知，不需要等待下一次焦点变化。
 光标基于相同原因使用一个保留 identity、有界单行的 model。每份 snapshot 通过该 model 更新
-行、列、可见性、形状、闪烁请求、颜色和显示字符。Slint 从保留的 model 消费全部光标字段，
-因此仅有光标协议状态的变化不依赖焦点变化触发外层 DTO 刷新，也不替换已聚焦的输入代理。
+行、列、可见性、形状、闪烁请求、颜色和显示字符。它是 `TerminalViewState` 唯一的光标状态，
+没有并行标量字段或回退读取；全量和增量刷新共用同一份 snapshot 到光标的转换。
+Slint 从保留的 model 派生网格光标、预编辑位置和透明 IME 代理位置，因此仅有光标协议状态的
+变化不依赖焦点变化触发外层 DTO 刷新，也不替换已聚焦的输入代理。
 终端专用批次应用 pane model 更新后，application bridge 还会调用 native winit 窗口的
 `request_redraw()`。这只负责呈现唤醒，不改变 `TerminalSnapshot`、脏行选择、parser 行为、传输时序或有界刷新闸门。
 它覆盖 Windows 和 Linux software surface 可能出现的情况：Slint model 已收到通知，但下一次 native frame 没有被排入，
@@ -1452,7 +1458,10 @@ TextInput 选区、IME、键盘编辑和光标可见滚动，编辑动作使用�
 字体和内边距通过共享参数与 Theme 默认值管理。显式限宽按钮仍可缩小并使用同一溢出 tooltip。
 会话标题/字段标签、Settings 标签、下拉值/选项、菜单标签、SFTP 列、弹窗标签和空输入占位说明
 统一复用 `ElidedLabel`；占位提示只传说明，绝不传入编辑正文或秘密值。标签放在重叠的指针
-处理层之上，让 Tooltip 观察 hover 而不接管点击或焦点。这些 UI
+处理层之上，让 Tooltip 观察 hover 而不接管点击或焦点。`ElidedTooltipContent` 从同一份有界文字
+测量和内边距派生最小、首选与最大尺寸，实际尺寸遵循这些约束。Slint 1.18.1 会给自定义内容包装标准 tooltip
+外框，因此内容保持透明并使用 widget 前景色，只由标准外框提供可见背景和边框；长路径、
+多行摘要和短标签的外框都遵循同一内容尺寸上限。这些 UI
 局部值不会进入 Rust、持久化、diagnostics、worker 或 transport。
 `ui/components/flat-text-input.slint` 统一提供与主题一致的非秘密单行扁平文本输入，供
 Settings、会话编辑器和管理弹窗复用。底层原生 `TextInput` 仍独占光标定位、文本选择、

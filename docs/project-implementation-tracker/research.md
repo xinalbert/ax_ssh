@@ -760,3 +760,13 @@
 - 关键结论：X11 转发不是广播；进程连接当前会话的服务器 DISPLAY 代理端口后，sshd 转为所属 SSH 的 X11 channel，再由客户端校验 cookie。来源 IP/port 不能证明 UID/PID，loopback 不等于按用户隔离。OpenSSH 也先连接本机 display 再校验 cookie，RFC 未强制这一先后；launchd socket 连接可启动 XQuartz，因此只关闭显式 launch 不足以阻止副作用。Untrusted 需要在请求前生成本机受限授权，不能照搬 trusted 的全部惰性准备。
 - 对实施计划的影响：XI2 在 SSH channel 确认后先限时/限长读取并核验当前连接 cookie，通过前不做任何本机准备；拒绝只关闭该 relay。XI3 用假本机 peer 和注入准备步骤验证顺序、流完整性及取消；保留 untrusted 预授权与到期检查。
 - 未解决问题：无法从现有日志识别触发者，也不能保证阻止持有正确 cookie 的合法后台程序；真实 XQuartz 启动行为与 Windows/Linux 原生链路需用户/CI 验收，服务器 UID 级隔离需要管理员边界。
+
+## 2026-11-02 持续 TUI 跨帧光标合并
+
+- 时间：2026-11-02 11:04 +0800
+- 检索问题：无显式同步边界的持续重绘如何减少临时光标呈现，同时保留延迟上限？
+- 检索原因：用户要求先调研，再修复已有持续重绘时序缺口。
+- 来源列表：[st 参数](https://git.suckless.org/st/file/config.def.h.html)、[st 事件循环](https://git.suckless.org/st/file/x.c.html)、[kitty input_delay](https://sw.kovidgoyal.net/kitty/conf/#opt-kitty.input_delay)、[Contour 同步输出](https://contour-terminal.org/vt-extensions/synchronized-output/)；完整处理记录见 [方法调研](../benchmark-grounded-method-research/terminal-redraw-cursor/research.md)。
+- 关键结论：静默等待需要硬期限；过早绘制可暴露部分更新。显式 2026 是独立语义，不能把光标显隐当作事务。未找到直接统一 benchmark，采用官方机制证据与本仓库确定性回归。
+- 对实施计划的影响：R2 在每轮聚焦 pending 输出加入 nominal 一帧静默/两帧硬期限，继续遵守配置 FPS；每次新准入刷新单槽 pending 并合并旧 damage。参数为工程选择，parser/输入/协议应答不等待。
+- 未解决问题：实际 TUI 和 transport 待用户补充；超过有限预算的非同步输出仍存在中间态边界，GUI 视觉由用户验收。

@@ -398,12 +398,19 @@ entering the Slint event queue.
 `src/app/terminal_presentation.rs` owns a separate dirty-driven presentation
 decision for each Local, Serial, SSH, or Telnet monitor. The current
 `WindowRouter` route classifies a terminal in an active `PaneTree` as focused or
-visible-unfocused; a terminal outside every active tree is hidden. Focused output
-starts each burst with a fixed coalescing window of at most one nominal 60 Hz
-frame (about 16.7 ms, shorter with a higher configured rate). Later fragments do
-not extend this deadline. A 250 ms quiet period starts a new burst. GPU and other
-non-software renderers then use 16/33/50 ms as a burst passes 500 ms and two
-seconds; software uses the configured focused interval without that reduction.
+visible-unfocused; a terminal outside every active tree is hidden. Every focused
+pending batch coalesces redraw fragments until a quiet period of at most one
+nominal 60 Hz frame (about 16.7 ms, shorter with a higher configured rate), with
+a fixed cap of twice that interval from the batch's first fragment (about
+33.3 ms by default). Later fragments may move the quiet deadline, but cannot
+extend that cap; continuous output still publishes without becoming idle.
+Admission also respects the existing frame-rate deadline, so these are
+coalescing budgets rather than guarantees of on-screen latency. A 250 ms quiet
+period resets a burst. GPU and other non-software renderers use 16/33/50 ms as
+a burst passes 500 ms and two seconds; software uses the configured focused
+interval without that reduction. Continuous output without a quiet gap can
+approach 30 FPS with the default coalescing budget; configured FPS is a ceiling,
+not a guaranteed minimum rate.
 `AppearanceSettings` persists independent focused and
 visible-unfocused refresh caps as FPS, clamped to 1-120 FPS and defaulting to 60
 FPS and 4 FPS; the configured value caps subsequent output on every renderer.
@@ -414,10 +421,11 @@ interval, while a hidden Tab has no presentation deadline.
 before the UI takes that batch is coalesced into it, and output after snapshot
 construction schedules at most one follow-up. The terminal keeps one bounded
 pending snapshot. Output parsing marks the next frame pending, so unrelated UI
-refreshes keep the last admitted snapshot until the presentation deadline. A
-snapshot already admitted before later output remains consumable; those later
-fragments wait for their own deadline. Damage is merged without losing earlier
-rows. If an initial snapshot
+refreshes keep the last admitted snapshot until the presentation deadline. Each
+new admission replaces the pending state with the latest snapshot and merges
+earlier damage. A slow UI therefore keeps the newest admitted cursor even if
+more unadmitted fragments arrive; those fragments still wait for their own
+deadline. No earlier dirty rows are lost. If an initial snapshot
 has no dirty rows and its cursor, viewport, and mouse-reporting state match the
 last published snapshot, it never enters the Slint queue; control-only terminal
 sequences therefore do not cause a redraw. Settings preview and save publish the
@@ -469,8 +477,11 @@ The visible `TerminalGrid` therefore receives a direct model notification for
 output without waiting for a later focus change.
 The cursor uses a retained, bounded one-row model for the same reason. Each
 snapshot updates its row, column, visibility, shape, blink request, color, and
-displayed cell through that model. Slint consumes all of those fields from the
-retained model, so cursor-only protocol changes do not depend on a
+displayed cell through that model. This is the only cursor state in
+`TerminalViewState`: there are no parallel scalar fields or fallback reads.
+Full and incremental refreshes share one snapshot-to-cursor conversion. Slint
+derives the grid cursor, preedit position, and transparent IME proxy position
+from the retained model, so cursor-only protocol changes do not depend on a
 focus-triggered outer DTO refresh or replace the focused input proxy.
 After a terminal-only batch applies its pane model updates, the application
 bridge also calls the native winit window's `request_redraw()`. This is a
@@ -2557,6 +2568,13 @@ Settings labels, dropdown values/options, menu labels, SFTP columns, dialog
 labels, and empty-input placeholders share `ElidedLabel`; placeholders pass
 only their instructions, never editable or secret values. Labels above overlapping
 pointer handlers let Tooltip observe hover without claiming clicks or focus.
+`ElidedTooltipContent` derives minimum, preferred, and maximum dimensions from
+the same bounded text measurement and internal padding; actual size follows
+those constraints.
+Slint 1.18.1 wraps custom tooltip content in its standard frame, so this content
+stays transparent and uses the widget foreground. The standard frame alone
+owns the visible background and border; its outer size follows the same content
+limits for long paths, multiline summaries, and short labels.
 These UI-local values do not
 cross into Rust, persistence, diagnostics, workers, or transports.
 `ui/components/flat-text-input.slint` owns the matching theme-native single-line

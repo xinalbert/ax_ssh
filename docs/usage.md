@@ -956,10 +956,13 @@ accept 1-120 FPS and default to 60 FPS for the focused pane and 4 FPS for a
 visible pane that is not focused. The non-software focused strategy still adapts
 sustained output through its 16/33/50 ms stages; a lower configured cap limits
 those stages. Software follows the configured focused rate without the adaptive
-reduction. The first focused output after an idle period uses a short frame
-window, at most about 16.7 ms, to merge nearby redraw fragments and cursor
-restoration. Unrelated UI refreshes retain the admitted terminal frame until the
-next output frame is ready. Longer gaps can still expose intermediate positions
+reduction. Every focused output batch waits briefly for nearby redraw fragments
+and cursor restoration: up to about 16.7 ms of quiet, with a fixed coalescing
+limit of about 33.3 ms from its first fragment. Higher configured rates shorten
+these windows. Frame-rate caps still apply; continuous output without quiet gaps
+can approach 30 FPS with the default coalescing budget. Unrelated UI refreshes
+retain the admitted terminal frame until the next output frame is ready, and
+slow UI updates keep the latest admitted frame. Longer gaps can still expose intermediate positions
 unless the application uses synchronized output. When an AxSSH window loses
 native activation, all visible panes use the Unfocused refresh cap, including the
 pane that was last focused. Hidden tabs do not publish terminal frames, and
