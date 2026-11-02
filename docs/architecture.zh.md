@@ -1460,8 +1460,8 @@ TextInput 选区、IME、键盘编辑和光标可见滚动，编辑动作使用�
 统一复用 `ElidedLabel`；占位提示只传说明，绝不传入编辑正文或秘密值。标签放在重叠的指针
 处理层之上，让 Tooltip 观察 hover 而不接管点击或焦点。`ElidedTooltipContent` 从同一份有界文字
 测量和内边距派生最小、首选与最大尺寸，实际尺寸遵循这些约束。Slint 1.18.1 会给自定义内容包装标准 tooltip
-外框，因此内容保持透明并使用 widget 前景色，只由标准外框提供可见背景和边框；长路径、
-多行摘要和短标签的外框都遵循同一内容尺寸上限。这些 UI
+外框。内容在与外框完全相同的尺寸上使用应用主题的 tooltip 背景、边框和文字 token，完整覆盖标准
+widget 表面，避免出现平台默认颜色的边缘；长路径、多行摘要和短标签的外框都遵循同一内容尺寸上限。这些 UI
 局部值不会进入 Rust、持久化、diagnostics、worker 或 transport。
 `ui/components/flat-text-input.slint` 统一提供与主题一致的非秘密单行扁平文本输入，供
 Settings、会话编辑器和管理弹窗复用。底层原生 `TextInput` 仍独占光标定位、文本选择、

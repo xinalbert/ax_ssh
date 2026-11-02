@@ -92,8 +92,8 @@ export global Theme {
     out property <color> focus: accent;
     out property <color> hover: panel-alt;
     out property <color> selected: accent.with-alpha(0.16);
-    // Custom sidebar tooltip cards use the application theme. Shared text
-    // tooltips leave their outer surface to the standard-widget palette.
+    // All tooltip surfaces use the application theme. Shared text tooltips
+    // cover the standard widget frame with these same tokens.
     out property <color> tooltip-background: panel-alt;
     out property <color> tooltip-border: control-border;
 

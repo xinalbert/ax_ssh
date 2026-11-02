@@ -2571,9 +2571,10 @@ pointer handlers let Tooltip observe hover without claiming clicks or focus.
 `ElidedTooltipContent` derives minimum, preferred, and maximum dimensions from
 the same bounded text measurement and internal padding; actual size follows
 those constraints.
-Slint 1.18.1 wraps custom tooltip content in its standard frame, so this content
-stays transparent and uses the widget foreground. The standard frame alone
-owns the visible background and border; its outer size follows the same content
+Slint 1.18.1 wraps custom tooltip content in its standard frame. The content
+uses the application tooltip background, border, and text tokens at the exact
+outer frame size, so the standard widget surface is fully covered and cannot
+introduce a platform-colored strip. Its outer size follows the same content
 limits for long paths, multiline summaries, and short labels.
 These UI-local values do not
 cross into Rust, persistence, diagnostics, workers, or transports.

@@ -89,7 +89,7 @@ fn assert_tooltip_surface_bounds(harness: &LayoutTestHarness) {
         "tooltip outer width {:?} exceeds content limit {max_width}",
         root.geometry().size,
     );
-    let mut surfaces = 0;
+    let mut surfaces = Vec::new();
     root.visit_descendants(|item| {
         let background = if let Some(rect) = item.downcast::<BasicBorderRectangle>() {
             BasicBorderRectangle::FIELD_OFFSETS
@@ -105,11 +105,36 @@ fn assert_tooltip_surface_bounds(harness: &LayoutTestHarness) {
             return ControlFlow::<()>::Continue(());
         };
         if item.is_visible() && background.color().alpha() > 0 {
-            surfaces += 1;
+            let bounds = item.geometry();
+            surfaces.push((
+                bounds.origin.x,
+                bounds.origin.y,
+                bounds.size.width,
+                bounds.size.height,
+                background.color(),
+            ));
         }
         ControlFlow::<()>::Continue(())
     });
-    assert_eq!(surfaces, 1, "one tooltip frame owns the visible background");
+    assert_eq!(
+        surfaces.len(),
+        2,
+        "the theme surface covers the standard frame"
+    );
+    assert_eq!(
+        (surfaces[0].0, surfaces[0].1, surfaces[0].2, surfaces[0].3),
+        (surfaces[1].0, surfaces[1].1, surfaces[1].2, surfaces[1].3),
+        "the theme-colored surface must cover the standard frame exactly"
+    );
+    let theme_background = harness.ui.global::<Theme>().get_tooltip_background();
+    assert_ne!(
+        surfaces[0].4, theme_background,
+        "fixture distinguishes the palette"
+    );
+    assert_eq!(
+        surfaces[1].4, theme_background,
+        "the visible tooltip surface must follow the application theme"
+    );
 }
 
 fn show_editor(harness: &LayoutTestHarness, width: u32) {
@@ -149,6 +174,9 @@ fn tab_summary_hover_tracks_latency_without_taking_focus_or_pointer_actions() {
         ui.on_close_tab(move |id| *received.borrow_mut() = Some(id));
         ui.show().expect("tab hover window");
         harness.window.set_size(slint::PhysicalSize::new(1180, 740));
+        let theme = ui.global::<Theme>();
+        theme.set_mode("dark".into());
+        theme.set_dark_panel_alt(slint::Color::from_rgb_u8(0x12, 0x34, 0x56));
         harness.settle();
 
         let title = displayed_text(&harness, "SSH");
