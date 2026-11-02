@@ -24,7 +24,8 @@ pub(super) enum TerminalPresentationMode {
 
 /// Timer ceilings for dirty terminal UI publication.
 /// The route decides whether a pane is focused, visible-unfocused, or hidden.
-/// Output enters the bounded latest-frame UI gate at its frame deadline.
+/// Each focused pending batch coalesces fragments until a short quiet period
+/// or a fixed maximum delay, while respecting the frame-rate ceiling.
 /// Software uses the configured focused rate without the sustained-output
 /// reduction; parsing, protocol replies and input never wait for presentation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -287,23 +288,28 @@ impl TerminalPresentationState {
         }
         match mode {
             TerminalPresentationMode::Hidden => None,
-            TerminalPresentationMode::Focused if self.first_frame => {
-                // A chunk can end between a status update and cursor restoration.
-                // Later arrivals share this fixed first-frame window, including
-                // after idle; they never extend its deadline.
-                self.pending_since
-                    .map(|since| since + FOCUSED_FAST_INTERVAL.min(policy.focused_interval()))
-            }
             TerminalPresentationMode::Focused => {
-                let interval = if policy.software_renderer {
-                    policy.focused_interval()
+                let pending_since = self.pending_since?;
+                let last_output_at = self.last_output_at?;
+                let settle_interval = FOCUSED_FAST_INTERVAL.min(policy.focused_interval());
+                // A transport chunk can stop before the cursor is restored.
+                // Give every pending batch a quiet window, including when the
+                // previous frame deadline has already passed. The fixed cap
+                // still releases continuous output without waiting for idle.
+                let coalesce_until =
+                    (last_output_at + settle_interval).min(pending_since + settle_interval * 2);
+                let frame_deadline = if self.first_frame {
+                    pending_since + settle_interval
                 } else {
-                    self.focused_interval(policy)
-                };
-                Some(
+                    let interval = if policy.software_renderer {
+                        policy.focused_interval()
+                    } else {
+                        self.focused_interval(policy)
+                    };
                     self.last_presented_at
-                        .map_or(now, |presented_at| presented_at + interval),
-                )
+                        .map_or(pending_since, |presented_at| presented_at + interval)
+                };
+                Some(frame_deadline.max(coalesce_until))
             }
             TerminalPresentationMode::Unfocused => {
                 Some(self.last_presented_at.map_or(now, |presented_at| {

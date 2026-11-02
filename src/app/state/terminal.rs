@@ -126,14 +126,12 @@ impl TerminalTabState {
             return false;
         }
         self.output_frame_pending = false;
-        if self.pending_terminal_snapshot.is_some() {
-            return true;
-        }
         let Some(snapshot) = self.terminal.as_mut().map(TerminalModel::snapshot) else {
             return false;
         };
         let visible_state = TerminalVisibleState::from(&snapshot);
-        if snapshot.dirty_rows.is_empty()
+        if self.pending_terminal_snapshot.is_none()
+            && snapshot.dirty_rows.is_empty()
             && self
                 .published_terminal_state
                 .as_ref()
@@ -141,7 +139,13 @@ impl TerminalTabState {
         {
             return false;
         }
-        self.pending_terminal_snapshot = Some(snapshot);
+        // A slow UI may still hold an earlier admitted frame. Replace its
+        // state with the newest admitted snapshot and retain all pending
+        // damage, so later unadmitted output cannot expose that older cursor.
+        self.pending_terminal_snapshot = Some(match self.pending_terminal_snapshot.take() {
+            Some(pending) => merge_terminal_snapshots(pending, snapshot),
+            None => snapshot,
+        });
         true
     }
 

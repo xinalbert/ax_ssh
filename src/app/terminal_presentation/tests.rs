@@ -92,7 +92,7 @@ fn clean_state_has_no_deadline() {
 }
 
 #[test]
-fn focused_first_output_waits_one_frame_then_uses_frame_cadence() {
+fn focused_output_coalesces_each_pending_batch_within_the_frame_cadence() {
     let mut state = TerminalPresentationState::default();
     let started_at = Instant::now();
     state.record_output(started_at);
@@ -114,7 +114,7 @@ fn focused_first_output_waits_one_frame_then_uses_frame_cadence() {
             DEFAULT_POLICY,
             started_at + Duration::from_millis(1)
         ),
-        Some(started_at + FOCUSED_FAST_INTERVAL)
+        Some(started_at + Duration::from_millis(1) + FOCUSED_FAST_INTERVAL)
     );
 }
 
@@ -220,7 +220,7 @@ fn pending_output_uses_new_mode_after_focus_change() {
             DEFAULT_POLICY,
             next_output_at
         ),
-        Some(started_at + FOCUSED_FAST_INTERVAL)
+        Some(next_output_at + FOCUSED_FAST_INTERVAL)
     );
 }
 
@@ -259,7 +259,7 @@ fn software_uses_configured_frame_cadence_and_keeps_the_unfocused_cap() {
             software_policy,
             next_output_at
         ),
-        Some(started_at + software_policy.focused_interval())
+        Some(next_output_at + software_policy.focused_interval())
     );
     assert_eq!(
         state.deadline(
@@ -272,20 +272,26 @@ fn software_uses_configured_frame_cadence_and_keeps_the_unfocused_cap() {
 }
 
 #[test]
-fn first_frame_deadline_is_fixed_while_more_fragments_arrive() {
+fn redraw_coalescing_extends_the_soft_deadline_but_keeps_a_fixed_cap() {
     for software in [false, true] {
         let policy = DEFAULT_POLICY.with_software_renderer(software);
         let mut state = TerminalPresentationState::default();
         let started_at = Instant::now();
         state.record_output(started_at);
-        for elapsed_ms in [1, 4, 8, 12, 16, 20] {
+        for elapsed_ms in [1, 4, 8, 12, 16, 20, 30, 40] {
             let now = started_at + Duration::from_millis(elapsed_ms);
             state.record_output(now);
-            assert_eq!(
-                state.deadline(TerminalPresentationMode::Focused, policy, now),
-                Some(started_at + FOCUSED_FAST_INTERVAL),
-                "continuous output cannot postpone the frame"
-            );
+            let deadline = state
+                .deadline(TerminalPresentationMode::Focused, policy, now)
+                .expect("pending redraw");
+            assert!(deadline <= started_at + Duration::from_millis(34));
+            assert!(deadline > started_at + Duration::from_millis(16));
+            if elapsed_ms >= 20 {
+                assert!(deadline >= started_at + Duration::from_millis(33));
+            }
+            if elapsed_ms == 40 {
+                assert!(deadline < now, "continuous output must be ready by the cap");
+            }
         }
     }
 }
@@ -308,12 +314,59 @@ fn software_does_not_apply_the_sustained_output_reduction() {
             DEFAULT_POLICY.with_software_renderer(true),
             now + Duration::from_millis(1)
         ),
-        Some(now + DEFAULT_POLICY.focused_interval())
+        Some(now + Duration::from_millis(1) + DEFAULT_POLICY.focused_interval())
     );
     assert_eq!(
         state.focused_interval(DEFAULT_POLICY),
         FOCUSED_SUSTAINED_INTERVAL
     );
+}
+
+#[tokio::test(start_paused = true)]
+async fn redraw_continuous_fragments_publish_without_a_quiet_gap() {
+    let mut presentation = TerminalPresentation::new();
+    let tab_id = Uuid::from_u128(1);
+    for _ in 0..3 {
+        let started_at = Instant::now();
+        presentation.record_output(None, None);
+        loop {
+            if tokio::time::timeout(
+                Duration::from_millis(1),
+                presentation.wait_until_ready(tab_id),
+            )
+            .await
+            .is_ok()
+            {
+                break;
+            }
+            assert!(Instant::now() - started_at < Duration::from_millis(34));
+            presentation.record_output(None, None);
+        }
+        assert!(Instant::now() - started_at >= Duration::from_millis(33));
+        assert!(Instant::now() - started_at <= Duration::from_millis(34));
+        assert!(!presentation.has_pending_output());
+    }
+}
+
+#[test]
+fn redraw_high_fps_keeps_the_coalescing_budget_short() {
+    for software in [false, true] {
+        let policy = TerminalPresentationPolicy::new(120, 4).with_software_renderer(software);
+        let mut state = TerminalPresentationState::default();
+        let started_at = Instant::now();
+        state.record_output(started_at);
+        for elapsed_ms in [1, 4, 8, 12, 16, 20] {
+            let now = started_at + Duration::from_millis(elapsed_ms);
+            state.record_output(now);
+            let deadline = state
+                .deadline(TerminalPresentationMode::Focused, policy, now)
+                .expect("pending redraw");
+            assert!(deadline <= started_at + Duration::from_millis(17));
+            if elapsed_ms == 20 {
+                assert!(deadline < now);
+            }
+        }
+    }
 }
 
 #[tokio::test]

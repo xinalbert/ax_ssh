@@ -2693,6 +2693,137 @@ fn cursor_visibility_publishes_hidden_redraw_without_a_grace_period() {
 }
 
 #[tokio::test(start_paused = true)]
+async fn redraw_sustained_output_waits_for_late_cursor_restoration() {
+    for first in [
+        b"\x1b[22;13H2".as_slice(),
+        b"\x1b[?25l\x1b[22;13H2\x1b[?25h".as_slice(),
+        b"\x1b[?25l\x1b[22;13H2".as_slice(),
+    ] {
+        let mut state = test_state();
+        let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+        let tab_id = state.open_terminal_tab(&profile);
+        let terminal = state.terminal_mut(tab_id).expect("terminal");
+        process_terminal_output(terminal, b"\x1b[24;3H").expect("input cursor");
+        assert!(terminal.prepare_terminal_output_snapshot());
+        let before = terminal.terminal_snapshot_for_ui().expect("input frame");
+
+        let mut presentation = TerminalPresentation::new();
+        presentation.record_output(None, None);
+        presentation.wait_until_ready(tab_id).await;
+        tokio::time::advance(Duration::from_millis(30)).await;
+        let started_at = tokio::time::Instant::now();
+        let effects = process_terminal_output(terminal, first).expect("status fragment");
+        presentation.record_output(None, effects.presentation_hold);
+        assert!(
+            tokio::time::timeout(
+                Duration::from_millis(8),
+                presentation.wait_until_ready(tab_id),
+            )
+            .await
+            .is_err(),
+            "a past frame deadline must not publish the first fragment immediately"
+        );
+        let held = terminal
+            .terminal_snapshot_for_ui()
+            .expect("unrelated refresh");
+        assert_eq!((held.cursor_row, held.cursor_column), (23, 2));
+        assert_eq!(held.lines, before.lines);
+
+        let effects =
+            process_terminal_output(terminal, b"\x1b[24;3H\x1b[?25h").expect("cursor restoration");
+        presentation.record_output(None, effects.presentation_hold);
+        tokio::time::timeout(
+            Duration::from_millis(26),
+            presentation.wait_until_ready(tab_id),
+        )
+        .await
+        .expect("bounded redraw deadline");
+        assert!(tokio::time::Instant::now() - started_at <= Duration::from_millis(34));
+        assert!(terminal.prepare_terminal_output_snapshot());
+        let after = terminal.terminal_snapshot_for_ui().expect("restored frame");
+        assert_eq!(
+            (after.cursor_row, after.cursor_column, after.cursor_visible),
+            (23, 2, true)
+        );
+        assert_ne!(after.lines, before.lines);
+    }
+}
+
+#[tokio::test(start_paused = true)]
+async fn redraw_fragments_crossing_the_first_frame_deadline_are_coalesced() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal");
+    process_terminal_output(terminal, b"\x1b[24;3H").expect("input cursor");
+    assert!(terminal.prepare_terminal_output_snapshot());
+    terminal.terminal_snapshot_for_ui().expect("input frame");
+
+    let mut presentation = TerminalPresentation::new();
+    let started_at = tokio::time::Instant::now();
+    let effects = process_terminal_output(terminal, b"\x1b[22;13H2").expect("first fragment");
+    presentation.record_output(None, effects.presentation_hold);
+    assert!(
+        tokio::time::timeout(
+            Duration::from_millis(12),
+            presentation.wait_until_ready(tab_id)
+        )
+        .await
+        .is_err()
+    );
+    let effects = process_terminal_output(terminal, b"3").expect("second fragment");
+    presentation.record_output(None, effects.presentation_hold);
+    assert!(
+        tokio::time::timeout(
+            Duration::from_millis(8),
+            presentation.wait_until_ready(tab_id)
+        )
+        .await
+        .is_err(),
+        "a later fragment must be allowed to move the soft deadline beyond the first frame"
+    );
+    let effects = process_terminal_output(terminal, b"\x1b[24;3H").expect("cursor restoration");
+    presentation.record_output(None, effects.presentation_hold);
+    tokio::time::timeout(
+        Duration::from_millis(14),
+        presentation.wait_until_ready(tab_id),
+    )
+    .await
+    .expect("continuous fragments still have a hard deadline");
+    assert!(tokio::time::Instant::now() - started_at <= Duration::from_millis(34));
+    assert!(terminal.prepare_terminal_output_snapshot());
+    let after = terminal.terminal_snapshot_for_ui().expect("restored frame");
+    assert_eq!((after.cursor_row, after.cursor_column), (23, 2));
+}
+
+#[test]
+fn redraw_latest_admitted_snapshot_replaces_an_older_pending_frame() {
+    let mut state = test_state();
+    let profile = SessionProfile::new_telnet("console", "127.0.0.1");
+    let tab_id = state.open_terminal_tab(&profile);
+    let terminal = state.terminal_mut(tab_id).expect("terminal");
+    terminal.terminal_snapshot_for_ui().expect("initial frame");
+    process_terminal_output(terminal, b"\x1b[1;1Hfirst").expect("first admitted update");
+    assert!(terminal.prepare_terminal_output_snapshot());
+    process_terminal_output(terminal, b"\x1b[2;1Hsecond\x1b[24;3H").expect("restored update");
+    assert!(terminal.prepare_terminal_output_snapshot());
+    process_terminal_output(terminal, b"\x1b[3;1Hlater").expect("unadmitted fragment");
+
+    let ready = terminal
+        .terminal_snapshot_for_ui()
+        .expect("latest admitted frame");
+    assert_eq!((ready.cursor_row, ready.cursor_column), (23, 2));
+    assert!(ready.dirty_rows.contains(&0));
+    assert!(ready.dirty_rows.contains(&1));
+    assert!(terminal.prepare_terminal_output_snapshot());
+    let next = terminal.terminal_snapshot_for_ui().expect("next frame");
+    assert_eq!(next.lines[0], ready.lines[0]);
+    assert_eq!(next.lines[1], ready.lines[1]);
+    assert_ne!(next.lines[2], ready.lines[2]);
+    assert!(next.dirty_rows.contains(&2));
+}
+
+#[tokio::test(start_paused = true)]
 async fn output_frame_merges_later_cursor_restore_and_blocks_unrelated_refreshes() {
     for first in [
         b"\x1b[22;13H2".as_slice(),
@@ -2733,12 +2864,12 @@ async fn output_frame_merges_later_cursor_restore_and_blocks_unrelated_refreshes
             .expect("later cursor restoration");
         presentation.record_output(None, effects.presentation_hold);
         tokio::time::timeout(
-            Duration::from_millis(12),
+            Duration::from_millis(26),
             presentation.wait_until_ready(tab_id),
         )
         .await
-        .expect("fixed frame deadline");
-        assert!(tokio::time::Instant::now() - started_at <= Duration::from_millis(18));
+        .expect("bounded frame deadline");
+        assert!(tokio::time::Instant::now() - started_at <= Duration::from_millis(34));
         assert!(terminal.prepare_terminal_output_snapshot());
         let after = terminal.terminal_snapshot_for_ui().expect("complete frame");
         assert_eq!(
