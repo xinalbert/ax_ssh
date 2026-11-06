@@ -20,7 +20,7 @@ use tokio::runtime::Handle;
 use tokio::sync::{OwnedSemaphorePermit, Semaphore, mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tokio::time::{Duration, timeout};
-use tracing::{debug, info, warn};
+use tracing::{Instrument, debug, info, warn};
 use uuid::Uuid;
 use zeroize::Zeroizing;
 
@@ -221,6 +221,21 @@ pub struct SftpDownloadSubmitter {
     command_tx: mpsc::Sender<SshCommand>,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SftpSubmissionError {
+    Disconnected,
+}
+
+impl std::fmt::Display for SftpSubmissionError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Disconnected => formatter.write_str("SFTP worker is disconnected"),
+        }
+    }
+}
+
+impl std::error::Error for SftpSubmissionError {}
+
 impl SftpDownloadSubmitter {
     pub async fn submit(
         &self,
@@ -240,7 +255,49 @@ impl SftpDownloadSubmitter {
         self.command_tx
             .send(SshCommand::OpenSftpFile { root })
             .await
-            .map_err(|error| anyhow::anyhow!("cannot queue SFTP download request: {error}"))
+            .map_err(|_| SftpSubmissionError::Disconnected.into())
+    }
+
+    pub async fn submit_with_excluded(
+        &self,
+        transfer_id: Uuid,
+        remote_path: String,
+        local_directory: std::path::PathBuf,
+        filter_patterns: Vec<String>,
+        expected_directory: bool,
+        excluded_remote_paths: std::collections::HashSet<String>,
+    ) -> Result<()> {
+        let root = SftpDownloadRoot::new_with_existing_directories(
+            transfer_id,
+            remote_path,
+            local_directory,
+            filter_patterns,
+            expected_directory,
+            excluded_remote_paths,
+        )?;
+        self.command_tx
+            .send(SshCommand::OpenSftpFile { root })
+            .await
+            .map_err(|_| SftpSubmissionError::Disconnected.into())
+    }
+
+    pub async fn submit_file(
+        &self,
+        transfer_id: Uuid,
+        remote_path: String,
+        local_path: std::path::PathBuf,
+        total_bytes: u64,
+    ) -> Result<()> {
+        let request = SftpDownloadRequest::for_explicit_local_path(
+            transfer_id,
+            remote_path,
+            local_path,
+            total_bytes,
+        )?;
+        self.command_tx
+            .send(SshCommand::OpenSftpFileAtLocalPath { request })
+            .await
+            .map_err(|_| SftpSubmissionError::Disconnected.into())
     }
 }
 
@@ -267,12 +324,10 @@ impl SftpUploadSubmitter {
                     accepted,
                 })
                 .await
-                .map_err(|error| anyhow::anyhow!("cannot queue SFTP upload request: {error}"))?;
+                .map_err(|_| SftpSubmissionError::Disconnected)?;
             accepted_rx
                 .await
-                .map_err(|error| {
-                    anyhow::anyhow!("SFTP worker stopped before accepting upload: {error}")
-                })?
+                .map_err(|_| SftpSubmissionError::Disconnected)?
                 .map_err(anyhow::Error::msg)?;
         }
         Ok(())
@@ -452,19 +507,30 @@ impl SshSessionHandle {
         let (latency_foreground_tx, latency_foreground_rx) = watch::channel(false);
         let (event_tx, event_rx) = mpsc::channel(EVENT_CAPACITY);
         let upload_queue_slots = Arc::new(Semaphore::new(SFTP_TRANSFER_QUEUE_WINDOW));
-        let task = runtime.spawn(run_session(SshSessionTask {
-            session_id,
-            profile,
-            secret,
-            mode,
-            x11_settings,
-            audio_format,
-            sftp_policy,
-            command_rx,
-            resize_rx,
-            latency_foreground_rx,
-            event_tx,
-        }));
+        let worker_span = tracing::info_span!(
+            "ssh_worker",
+            worker_session_id = %session_id,
+            profile_id = %profile.id,
+            mode = ?mode,
+            process_id = std::process::id(),
+            worker_task_id = tracing::field::Empty,
+        );
+        let task = runtime.spawn(
+            run_session(SshSessionTask {
+                session_id,
+                profile,
+                secret,
+                mode,
+                x11_settings,
+                audio_format,
+                sftp_policy,
+                command_rx,
+                resize_rx,
+                latency_foreground_rx,
+                event_tx,
+            })
+            .instrument(worker_span),
+        );
         (
             Self {
                 session_id,
@@ -496,6 +562,7 @@ impl SshSessionHandle {
     }
 
     pub fn request_disconnect(&self) -> Result<()> {
+        info!(session_id = %self.session_id, "SSH controller requested disconnect");
         self.command_tx
             .try_send(SshCommand::Disconnect)
             .map_err(|error| anyhow::anyhow!("cannot request SSH disconnect: {error}"))
@@ -767,6 +834,7 @@ fn validate_terminal_size(columns: u32, rows: u32) -> Result<()> {
 }
 
 async fn run_session(task: SshSessionTask) {
+    tracing::Span::current().record("worker_task_id", tracing::field::display(tokio::task::id()));
     let SshSessionTask {
         session_id,
         profile,
@@ -935,6 +1003,9 @@ async fn send_event(
     event: SshSessionEvent,
     session_id: Uuid,
 ) -> bool {
+    if let SshSessionEvent::Failed(message) = &event {
+        warn!(%session_id, %message, "SSH worker reported failure");
+    }
     if event_tx.send(event).await.is_err() {
         debug!(session_id = %session_id, "SSH event receiver dropped");
         false
@@ -947,7 +1018,7 @@ pub(super) fn bounded_error_message(error: &anyhow::Error) -> String {
     bounded_text(&format!("{error:#}"))
 }
 
-fn bounded_text(message: &str) -> String {
+pub(super) fn bounded_text(message: &str) -> String {
     let mut chars = message.chars();
     let mut bounded = chars.by_ref().take(MAX_ERROR_CHARS).collect::<String>();
     if chars.next().is_some() {

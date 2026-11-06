@@ -7,6 +7,7 @@ pub(crate) use transfer::{
     SFTP_TRANSFER_EVENT_CAPACITY, SFTP_TRANSFER_QUEUE_WINDOW, SftpDiscoveredDownload,
     SftpDiscoverySummary, SftpDownloadHandle, SftpDownloadRequest, SftpDownloadRoot,
     SftpUploadHandle, SftpUploadRequest, TransferRateLimiter, discover_download_requests,
+    transfer_error_is_recoverable,
 };
 pub use transfer::{
     SftpTransferEvent, SftpUploadConflictChoice, cleanup_stale_sftp_open_cache,

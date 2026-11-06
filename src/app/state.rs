@@ -324,6 +324,38 @@ pub(super) struct SftpBrowserState {
     pub(super) selected_transfers: HashSet<Uuid>,
     pub(super) rename_name: String,
     pub(super) external_edits: super::remote_edit::RemoteEdits,
+    pub(super) transfer_intents: HashMap<Uuid, SftpTransferIntent>,
+    pub(super) transfer_intent_order: VecDeque<Uuid>,
+    pub(super) transfer_intent_revision: u64,
+    pub(super) directory_children: HashMap<Uuid, Uuid>,
+    pub(super) reconnect_replay_pending: bool,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub(super) enum SftpTransferIntent {
+    DownloadRoot {
+        transfer_id: Uuid,
+        remote_path: String,
+        local_directory: PathBuf,
+        filter_patterns: Vec<String>,
+        expected_directory: bool,
+        completed_children: HashSet<String>,
+    },
+    DownloadFile {
+        transfer_id: Uuid,
+        remote_path: String,
+        local_path: PathBuf,
+        total_bytes: u64,
+        replay_on_reconnect: bool,
+    },
+    Upload {
+        transfer_id: Uuid,
+        batch_id: Uuid,
+        remote_path: String,
+        local_path: PathBuf,
+        total_bytes: u64,
+        remote_directories: Vec<String>,
+    },
 }
 
 #[derive(Default)]

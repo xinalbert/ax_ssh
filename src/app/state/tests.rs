@@ -1433,6 +1433,258 @@ fn queued_upload_is_not_reclassified_by_worker_queue_event() {
 }
 
 #[test]
+fn sftp_reconnect_preserves_download_upload_and_conflict_intents() {
+    let mut sftp = SftpBrowserState::default();
+    let download = Uuid::new_v4();
+    let upload = Uuid::new_v4();
+    let conflict = Uuid::new_v4();
+    let batch = Uuid::new_v4();
+
+    sftp.queue_transfer_event(
+        download,
+        "report.txt".to_owned(),
+        100,
+        false,
+        Some("/tmp/report.txt".into()),
+        Some("/remote/report.txt".to_owned()),
+    )
+    .expect("download should queue");
+    sftp.start_transfer(
+        download,
+        "/remote/report.txt".to_owned(),
+        "report.txt".to_owned(),
+        100,
+    );
+    sftp.update_transfer_progress(download, 40, 100);
+    sftp.register_download_root_intent(
+        download,
+        "/remote/report.txt".to_owned(),
+        "/tmp".into(),
+        vec![],
+        false,
+    );
+
+    for (id, name) in [(upload, "upload.txt"), (conflict, "conflict.txt")] {
+        sftp.queue_upload_transfer(
+            id,
+            name.to_owned(),
+            10,
+            format!("/tmp/{name}").into(),
+            format!("/remote/{name}"),
+        )
+        .expect("upload should queue");
+        sftp.register_upload_intent(
+            id,
+            batch,
+            format!("/remote/{name}"),
+            format!("/tmp/{name}").into(),
+            10,
+            vec![],
+        );
+    }
+    sftp.start_transfer(
+        upload,
+        "/remote/upload.txt".to_owned(),
+        "upload.txt".to_owned(),
+        10,
+    );
+    sftp.start_transfer(
+        conflict,
+        "/remote/conflict.txt".to_owned(),
+        "conflict.txt".to_owned(),
+        10,
+    );
+    sftp.record_upload_conflict(PendingUploadConflict {
+        transfer_id: conflict,
+        batch_id: batch,
+        name: "conflict.txt".to_owned(),
+        remote_size: Some(4),
+        remote_modified: Some(2),
+    });
+
+    sftp.prepare_for_reconnect();
+
+    assert_eq!(sftp.transfer_intents().len(), 3);
+    assert!(sftp.upload_conflicts.is_empty());
+    assert!(sftp.transfers.iter().all(|transfer| {
+        transfer.phase == SftpTransferPhase::Queued
+            && transfer.status == "Waiting for reconnection"
+            && transfer.downloaded_bytes == 0
+    }));
+}
+
+#[test]
+fn terminal_transfer_outcome_removes_its_reconnect_intent() {
+    let mut sftp = SftpBrowserState::default();
+    let id = Uuid::new_v4();
+    sftp.queue_upload_transfer(
+        id,
+        "upload.txt".to_owned(),
+        10,
+        "/tmp/upload.txt".into(),
+        "/remote/upload.txt".to_owned(),
+    )
+    .expect("upload should queue");
+    sftp.register_upload_intent(
+        id,
+        Uuid::new_v4(),
+        "/remote/upload.txt".to_owned(),
+        "/tmp/upload.txt".into(),
+        10,
+        vec![],
+    );
+    sftp.start_transfer(
+        id,
+        "/remote/upload.txt".to_owned(),
+        "upload.txt".to_owned(),
+        10,
+    );
+    sftp.finish_transfer(id, SftpTransferPhase::Completed, "Uploaded".to_owned());
+
+    assert!(sftp.transfer_intents().is_empty());
+}
+
+#[test]
+fn reconnect_restarts_directory_discovery_and_discards_stale_children() {
+    let mut sftp = SftpBrowserState::default();
+    let root = Uuid::new_v4();
+    let child = Uuid::new_v4();
+    sftp.begin_download_discovery(
+        root,
+        "directory".to_owned(),
+        "/tmp/directory".into(),
+        "/remote/directory".to_owned(),
+    )
+    .expect("directory should queue");
+    sftp.register_download_root_intent(
+        root,
+        "/remote/directory".to_owned(),
+        "/tmp".into(),
+        vec![],
+        true,
+    );
+    sftp.queue_transfer_event(
+        child,
+        "directory/old.txt".to_owned(),
+        10,
+        false,
+        Some("/tmp/directory/old.txt".into()),
+        Some("/remote/directory/old.txt".to_owned()),
+    )
+    .expect("discovered child should queue");
+
+    sftp.prepare_for_reconnect();
+
+    assert!(sftp.pending_download_roots.contains(&root));
+    assert!(sftp.scanning_download_roots.contains(&root));
+    assert!(sftp.transfers.iter().any(|transfer| transfer.id == root));
+    assert!(!sftp.transfers.iter().any(|transfer| transfer.id == child));
+}
+
+#[test]
+fn reconnect_preserves_completed_directory_children_as_discovery_exclusions() {
+    let mut sftp = SftpBrowserState::default();
+    let root = Uuid::new_v4();
+    let child = Uuid::new_v4();
+    sftp.begin_download_discovery(
+        root,
+        "directory".to_owned(),
+        "/tmp/directory".into(),
+        "/remote/directory".to_owned(),
+    )
+    .expect("directory should queue");
+    sftp.register_download_root_intent(
+        root,
+        "/remote/directory".to_owned(),
+        "/tmp".into(),
+        vec![],
+        true,
+    );
+    sftp.queue_transfer_event(
+        child,
+        "done.txt".to_owned(),
+        10,
+        false,
+        Some("/tmp/directory/done.txt".into()),
+        Some("/remote/directory/done.txt".to_owned()),
+    )
+    .expect("child should queue");
+    sftp.register_discovered_download_intent(root, child);
+    sftp.start_transfer(
+        child,
+        "/remote/directory/done.txt".to_owned(),
+        "done.txt".to_owned(),
+        10,
+    );
+    assert!(sftp.finish_downloaded_transfer(child, 10, "/tmp/directory/done.txt".into()));
+
+    sftp.prepare_for_reconnect();
+
+    assert_eq!(
+        sftp.completed_directory_child_paths(root),
+        HashSet::from(["/remote/directory/done.txt".to_owned()])
+    );
+    assert!(sftp.transfers.iter().any(|transfer| transfer.id == child));
+}
+
+#[test]
+fn cancelling_a_transfer_removes_its_reconnect_intent_immediately() {
+    let mut sftp = SftpBrowserState::default();
+    let id = Uuid::new_v4();
+    sftp.queue_upload_transfer(
+        id,
+        "upload.txt".to_owned(),
+        10,
+        "/tmp/upload.txt".into(),
+        "/remote/upload.txt".to_owned(),
+    )
+    .expect("upload should queue");
+    sftp.register_upload_intent(
+        id,
+        Uuid::new_v4(),
+        "/remote/upload.txt".to_owned(),
+        "/tmp/upload.txt".into(),
+        10,
+        vec![],
+    );
+
+    assert!(sftp.request_transfer_cancel(id));
+    sftp.prepare_for_reconnect();
+
+    assert!(sftp.transfer_intents().is_empty());
+    assert!(!sftp.transfers.iter().any(|transfer| transfer.id == id));
+}
+
+#[test]
+fn reconnect_intent_revision_changes_when_a_transfer_is_registered_or_cancelled() {
+    let mut sftp = SftpBrowserState::default();
+    let initial = sftp.transfer_intents_with_revision().0;
+    let id = Uuid::new_v4();
+    sftp.queue_upload_transfer(
+        id,
+        "upload.txt".to_owned(),
+        10,
+        "/tmp/upload.txt".into(),
+        "/remote/upload.txt".to_owned(),
+    )
+    .expect("upload should queue");
+    sftp.register_upload_intent(
+        id,
+        Uuid::new_v4(),
+        "/remote/upload.txt".to_owned(),
+        "/tmp/upload.txt".into(),
+        10,
+        vec![],
+    );
+    let registered = sftp.transfer_intents_with_revision().0;
+    assert_ne!(registered, initial);
+
+    assert!(sftp.request_transfer_cancel(id));
+    assert!(sftp.transfer_intents().is_empty());
+    assert_ne!(sftp.transfer_intents_with_revision().0, registered);
+}
+
+#[test]
 fn upload_conflicts_resolve_only_the_selected_batch_and_retry_as_uploads() {
     let mut sftp = SftpBrowserState::default();
     let batch = Uuid::new_v4();

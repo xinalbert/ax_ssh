@@ -60,7 +60,7 @@ use self::session_groups::{
 use self::state::{
     ActiveSecurityPrompt, ActiveTabSnapshot, AppState, ClosedTab, ClosedTabKind, ConnectionStart,
     ConnectionTarget, PendingHostKey, PendingProbe, PersistenceCoordinator, SftpBrowserSnapshot,
-    SftpNavigation, SftpTransferPhase, SshConnectionPhase, SshSftpNavigation,
+    SftpNavigation, SftpTransferIntent, SftpTransferPhase, SshConnectionPhase, SshSftpNavigation,
     TerminalNoticeSnapshot, TerminalTabState, TerminalWorker, WorkspaceTabSummary,
     WorkspaceTransfer, finish_stored_credential_retry, prepare_authentication_retry,
     prepare_host_key_retry, prepare_stored_credential_retry, retire_session_attempt,

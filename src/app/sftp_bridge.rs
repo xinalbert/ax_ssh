@@ -9,6 +9,7 @@ pub(super) use self::drag::handle_native_dropped_file_on_remote_pane;
 use self::drag::*;
 use self::files::*;
 pub(super) use self::navigation::{load_local_directory, navigate_sftp_tab_to_path};
+pub(in crate::app) use self::transfers::requeue_transfer_intents;
 use self::transfers::*;
 
 use super::local_files::{
@@ -49,6 +50,23 @@ fn with_sftp_terminal_for_tab<T>(
     }
     if !terminal.connected {
         anyhow::bail!("SFTP session is no longer connected");
+    }
+    action(terminal)
+}
+
+fn with_sftp_transfer_intent_for_tab<T>(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    action: impl FnOnce(&mut TerminalTabState) -> Result<T>,
+) -> Result<T> {
+    let mut app = state
+        .lock()
+        .map_err(|_| anyhow::anyhow!("state lock poisoned"))?;
+    let terminal = app
+        .terminal_mut(tab_id)
+        .context("SFTP tab is no longer available")?;
+    if !terminal.is_sftp() {
+        anyhow::bail!("transfer target is no longer an SFTP tab");
     }
     action(terminal)
 }
@@ -164,6 +182,18 @@ fn with_window_sftp_terminal<T>(
         .active_tab(window_id)
         .context("no active SFTP tab for this window")?;
     with_sftp_terminal_for_tab(state, tab_id, action)
+}
+
+fn with_window_sftp_transfer_intent<T>(
+    state: &Arc<Mutex<AppState>>,
+    router: &WindowRouter,
+    window_id: Uuid,
+    action: impl FnOnce(&mut TerminalTabState) -> Result<T>,
+) -> Result<T> {
+    let tab_id = router
+        .active_tab(window_id)
+        .context("no active SFTP tab for this window")?;
+    with_sftp_transfer_intent_for_tab(state, tab_id, action)
 }
 
 // A modal captures its original target. Revalidate it before enqueueing a

@@ -121,7 +121,10 @@ pub(super) async fn download_open_local_handle(
         .context("local SFTP download is missing its target")?;
     let pending = prepare_local_download(target, cancellation, deadline).await?;
     let (chunk_tx, chunk_rx) = mpsc::channel(WRITER_QUEUE_CAPACITY);
-    let writer_cancel = cancellation.clone();
+    // Abort only this writer on an invalid stream. User cancellation belongs
+    // to the transfer and must remain independent of an attempt's cleanup.
+    let writer_abort = TransferCancellation::new();
+    let writer_cancel = writer_abort.clone();
     let expected_bytes = initial.size;
     let mut writer = tokio::task::spawn_blocking(move || {
         write_local_file(pending, chunk_rx, expected_bytes, &writer_cancel)
@@ -142,7 +145,7 @@ pub(super) async fn download_open_local_handle(
     if stream_result.is_err() {
         // A full byte count is insufficient: EOF and metadata validation must
         // also succeed before the writer is allowed to publish its part file.
-        cancellation.cancel();
+        writer_abort.cancel();
     }
     drop(chunk_tx);
 
@@ -310,7 +313,10 @@ pub(super) async fn download_open_handle(
     )
     .await?;
     let (chunk_tx, chunk_rx) = mpsc::channel(WRITER_QUEUE_CAPACITY);
-    let writer_cancel = cancellation.clone();
+    // Abort only this writer on an invalid stream. User cancellation belongs
+    // to the transfer and must remain independent of an attempt's cleanup.
+    let writer_abort = TransferCancellation::new();
+    let writer_cancel = writer_abort.clone();
     let expected_bytes = initial.size;
     let mut writer = tokio::task::spawn_blocking(move || {
         write_cache_file(pending, chunk_rx, expected_bytes, &writer_cancel)
@@ -329,7 +335,7 @@ pub(super) async fn download_open_handle(
     )
     .await;
     if stream_result.is_err() {
-        cancellation.cancel();
+        writer_abort.cancel();
     }
     drop(chunk_tx);
 

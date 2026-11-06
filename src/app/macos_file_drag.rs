@@ -1,4 +1,4 @@
-//! Main-thread AppKit bridge for SFTP remote-file promises.
+//! Main-thread AppKit bridge for SFTP remote-file and directory promises.
 //!
 //! This module deliberately exposes only owned local targets and transfer IDs
 //! to the application bridge. It does not know about Slint-generated types or
@@ -27,7 +27,8 @@ use uuid::Uuid;
 
 use super::macos_window;
 
-const FILE_PROMISE_UTI: &str = "public.data";
+const FILE_PROMISE_FILE_UTI: &str = "public.data";
+const FILE_PROMISE_DIRECTORY_UTI: &str = "public.directory";
 const FILE_PROMISE_ERROR_DOMAIN: &str = "AxSSHSftpFilePromise";
 const MAX_MOUSE_DOWN_WINDOWS: usize = 64;
 
@@ -286,6 +287,12 @@ struct NativeFilePromiseDrag {
     destination: Option<Retained<NativeFilePromiseDropDestination>>,
 }
 
+pub(super) struct NativeFilePromiseDescriptor {
+    pub(super) file_name: String,
+    pub(super) is_directory: bool,
+    pub(super) local_target: PathBuf,
+}
+
 thread_local! {
     static ACTIVE_DRAGS: RefCell<HashMap<Uuid, NativeFilePromiseDrag>> = RefCell::new(HashMap::new());
     static MOUSE_DOWN_EVENTS: RefCell<MouseDownEvents<Retained<NSEvent>>> = RefCell::default();
@@ -314,8 +321,8 @@ define_class!(
     unsafe impl NSObjectProtocol for NativeFilePromiseDelegate {}
 
     // SAFETY: The provider delegate only reads the per-drag ID and schedules
-    // its download through the main-thread registry. The operation queue is
-    // explicitly constrained to NSOperationQueue::mainQueue below.
+    // its download through the main-thread registry. The callback only queues
+    // an owned SFTP request and never performs network or filesystem I/O.
     #[allow(non_snake_case)]
     unsafe impl NSFilePromiseProviderDelegate for NativeFilePromiseDelegate {
         #[unsafe(method_id(filePromiseProvider:fileNameForType:))]
@@ -495,12 +502,11 @@ pub(super) fn begin_file_promise_drag(
     window: &slint::Window,
     window_id: Uuid,
     owner: FilePromiseOwner,
-    file_name: String,
-    local_target: PathBuf,
+    descriptor: NativeFilePromiseDescriptor,
     local_drop_region: Option<NativeDropRegion>,
     queue_download: impl Fn(Uuid, PathBuf) -> Result<()> + 'static,
 ) -> Result<()> {
-    validate_file_name(&file_name)?;
+    validate_file_name(&descriptor.file_name)?;
     let mtm =
         MainThreadMarker::new().context("macOS native file drag must start on the main thread")?;
     let drag_id = Uuid::new_v4();
@@ -515,7 +521,11 @@ pub(super) fn begin_file_promise_drag(
             )
         })?;
         let delegate = NativeFilePromiseDelegate::new(mtm, drag_id);
-        let file_type = NSString::from_str(FILE_PROMISE_UTI);
+        let file_type = NSString::from_str(if descriptor.is_directory {
+            FILE_PROMISE_DIRECTORY_UTI
+        } else {
+            FILE_PROMISE_FILE_UTI
+        });
         let provider = NSFilePromiseProvider::initWithFileType_delegate(
             NSFilePromiseProvider::alloc(),
             &file_type,
@@ -540,8 +550,8 @@ pub(super) fn begin_file_promise_drag(
             drags.borrow_mut().insert(
                 drag_id,
                 NativeFilePromiseDrag {
-                    file_name,
-                    local_target,
+                    file_name: descriptor.file_name,
+                    local_target: descriptor.local_target,
                     queue_download: Box::new(queue_download),
                     request: PromiseRequest::new(owner),
                     _provider: provider,

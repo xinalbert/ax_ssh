@@ -7,6 +7,10 @@ fn main() -> anyhow::Result<()> {
     let logging = ax_ssh::logging::LoggingGuard::init()?;
     tracing::info!(
         version = env!("CARGO_PKG_VERSION"),
+        revision = env!("AXSSH_BUILD_REVISION"),
+        process_id = std::process::id(),
+        debug_build = cfg!(debug_assertions),
+        executable = ?std::env::current_exe(),
         log_directory = %logging.directory().display(),
         crash_log = %logging.crash_log_path().display(),
         "AxSSH process started"

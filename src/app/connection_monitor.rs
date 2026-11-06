@@ -163,6 +163,14 @@ pub(super) fn spawn_session_monitor(
                         dispatch_active_snapshot(&ui, &state);
                     }
                     refresh_workspace(&ui, &state);
+                    if target == ConnectionTarget::Sftp {
+                        runtime_for_monitor.spawn(super::sftp_bridge::requeue_transfer_intents(
+                            state.clone(),
+                            tab_id,
+                            profile.id,
+                            attempt_id,
+                        ));
+                    }
                     if let Some(credential) = credential_to_store.take() {
                         persist_authenticated_credential(
                             &runtime_for_monitor,
@@ -319,6 +327,29 @@ pub(super) fn spawn_session_monitor(
                                 false,
                             );
                         }
+                        SftpTransferEvent::DiscoveryFailed {
+                            transfer_id,
+                            recoverable,
+                            ..
+                        } if !recoverable => {
+                            let _ = super::macos_file_drag::complete_file_promise_transfer(
+                                *transfer_id,
+                                false,
+                            );
+                        }
+                        SftpTransferEvent::DiscoveryFinished {
+                            transfer_id,
+                            skipped_entries,
+                            failed_files,
+                            cancelled,
+                            ..
+                        } => {
+                            let succeeded = !cancelled && *skipped_entries == 0 && *failed_files == 0;
+                            let _ = super::macos_file_drag::complete_file_promise_transfer(
+                                *transfer_id,
+                                succeeded,
+                            );
+                        }
                         _ => {}
                     }
                     let mut refresh_after_upload = None;
@@ -332,6 +363,7 @@ pub(super) fn spawn_session_monitor(
                         |terminal| match event {
                             SftpTransferEvent::Queued {
                                 transfer_id,
+                                root_transfer_id,
                                 remote_path,
                                 local_path,
                                 upload,
@@ -348,6 +380,12 @@ pub(super) fn spawn_session_monitor(
                                         local_path,
                                         Some(remote_path),
                                     );
+                                if let Some(root_transfer_id) = root_transfer_id {
+                                    terminal.sftp.register_discovered_download_intent(
+                                        root_transfer_id,
+                                        transfer_id,
+                                    );
+                                }
                             }
                             SftpTransferEvent::Started {
                                 transfer_id,
@@ -397,8 +435,13 @@ pub(super) fn spawn_session_monitor(
                                 transfer_id,
                                 name,
                                 message,
+                                recoverable,
                             } => {
-                                terminal.sftp.fail_download_root(transfer_id, name, message);
+                                if recoverable && terminal.reconnect_enabled {
+                                    terminal.sftp.defer_recoverable_failure(transfer_id, message);
+                                } else {
+                                    terminal.sftp.fail_download_root(transfer_id, name, message);
+                                }
                             }
                             SftpTransferEvent::DiscoveryFinished {
                                 transfer_id,
@@ -463,12 +506,17 @@ pub(super) fn spawn_session_monitor(
                             SftpTransferEvent::Failed {
                                 transfer_id,
                                 message,
+                                recoverable,
                             } => {
-                                terminal.sftp.finish_transfer(
-                                    transfer_id,
-                                    SftpTransferPhase::Failed,
-                                    message,
-                                );
+                                if recoverable && terminal.reconnect_enabled {
+                                    terminal.sftp.defer_recoverable_failure(transfer_id, message);
+                                } else {
+                                    terminal.sftp.finish_transfer(
+                                        transfer_id,
+                                        SftpTransferPhase::Failed,
+                                        message,
+                                    );
+                                }
                             }
                         },
                     ) else {
@@ -677,6 +725,7 @@ pub(super) fn spawn_session_monitor(
                 SshSessionEvent::Disconnected => {
                     terminal_event = true;
                     if retire_session_attempt(&state, tab_id, profile.id, attempt_id) {
+                        info!(%tab_id, session_id = %profile.id, %attempt_id, "SSH monitor received worker disconnect");
                         schedule_reconnect(
                             &runtime_for_monitor,
                             state.clone(),
@@ -882,6 +931,7 @@ pub(super) fn spawn_session_monitor(
                 SshSessionEvent::Failed(message) => {
                     terminal_event = true;
                     if retire_session_attempt(&state, tab_id, profile.id, attempt_id) {
+                        warn!(%tab_id, session_id = %profile.id, %attempt_id, %message, "SSH monitor received worker failure");
                         schedule_reconnect(
                             &runtime_for_monitor,
                             state.clone(),
@@ -911,6 +961,7 @@ pub(super) fn spawn_session_monitor(
         presentation.clear_pending_output();
         let retired = retire_session_attempt(&state, tab_id, profile.id, attempt_id);
         if !terminal_event && retired {
+            warn!(%tab_id, session_id = %profile.id, %attempt_id, "SSH worker event stream ended without a terminal event");
             schedule_reconnect(
                 &runtime_for_monitor,
                 state.clone(),

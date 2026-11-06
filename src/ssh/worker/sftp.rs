@@ -7,7 +7,7 @@ use std::sync::Arc;
 use russh::{ChannelStream, client};
 use tokio::sync::{OwnedSemaphorePermit, oneshot};
 use tokio::task::JoinSet;
-use tokio::time::{MissedTickBehavior, interval, timeout};
+use tokio::time::{Duration, Instant, MissedTickBehavior, interval, timeout};
 
 use crate::sftp::{
     SFTP_TRANSFER_EVENT_CAPACITY, SFTP_TRANSFER_QUEUE_WINDOW, SftpBrowserHandle,
@@ -111,12 +111,16 @@ async fn send_transfer_event_with_directory_state(
     let terminal_child = match &event {
         SftpTransferEvent::Completed { transfer_id, .. }
         | SftpTransferEvent::Cancelled { transfer_id }
-        | SftpTransferEvent::Failed { transfer_id, .. }
         | SftpTransferEvent::Skipped { transfer_id }
             if child_roots.contains_key(transfer_id) =>
         {
             Some((*transfer_id, event.clone()))
         }
+        SftpTransferEvent::Failed {
+            transfer_id,
+            recoverable: false,
+            ..
+        } if child_roots.contains_key(transfer_id) => Some((*transfer_id, event.clone())),
         _ => None,
     };
     if !send_sftp_transfer_event(event_tx, event, session_id).await {
@@ -137,7 +141,6 @@ struct DirectoryCancellationContext<'a> {
     child_roots: &'a mut HashMap<Uuid, Uuid>,
     discovery_by_transfer: &'a mut HashMap<Uuid, PendingDiscovery>,
     queued_discovery_roots: &'a mut VecDeque<SftpDownloadRoot>,
-    deferred_discovery_root: &'a mut Option<SftpDownloadRoot>,
     deferred_discovered: &'a mut Option<SftpDiscoveredDownload>,
     queued_requests: &'a mut VecDeque<SftpDownloadRequest>,
     pending_by_transfer: &'a mut HashMap<Uuid, PendingSftpOpen>,
@@ -155,13 +158,6 @@ async fn cancel_directory_download(transfer_id: Uuid, context: DirectoryCancella
         }
     }
     cancel_pending_discovery(context.discovery_by_transfer, transfer_id);
-    if context
-        .deferred_discovery_root
-        .as_ref()
-        .is_some_and(|root| root.transfer_id() == transfer_id)
-    {
-        *context.deferred_discovery_root = None;
-    }
     if let Some(index) = context
         .queued_discovery_roots
         .iter()
@@ -235,9 +231,15 @@ async fn cancel_directory_download(transfer_id: Uuid, context: DirectoryCancella
     }
 }
 
-type SftpChannelStream = ChannelStream<client::Msg>;
+type SftpChannelStream = super::super::sftp_stream::SftpStream;
+type BrowserChannelStream = ChannelStream<client::Msg>;
 
-const MAX_ACTIVE_SFTP_DISCOVERIES: usize = 8;
+// A discovery can block on its bounded child queue. Reserve file capacity so
+// discovery backpressure can never consume all channel admission permits.
+const MAX_ACTIVE_SFTP_DISCOVERIES: usize = 1;
+const MAX_BROWSER_REOPEN_ATTEMPTS: u8 = 2;
+const BROWSER_REOPEN_DELAY: Duration = Duration::from_secs(1);
+const BROWSER_REOPEN_STABILITY_WINDOW: Duration = Duration::from_secs(30);
 
 struct SftpUploadStartContext<'a> {
     connection: &'a SshConnection,
@@ -313,7 +315,8 @@ pub(super) async fn run_sftp_session(
     policy: crate::config::SftpTransferPolicy,
     latency_foreground_rx: watch::Receiver<bool>,
 ) {
-    let per_tab_limit = usize::from(policy.per_tab_transfers);
+    let per_tab_limit =
+        usize::from(policy.per_tab_transfers).min(super::super::sftp_stream::TRANSFER_CHANNELS);
     let rate_limiter = Arc::new(TransferRateLimiter::new(policy.rate_bytes_per_second()));
     if !send_event(&event_tx, SshSessionEvent::Authenticated, session_id).await {
         disconnect_sftp_connection(&connection, session_id).await;
@@ -345,8 +348,8 @@ pub(super) async fn run_sftp_session(
     let browser = match SftpBrowserHandle::spawn(
         &Handle::current(),
         stream,
-        initial_path,
-        browser_event_tx,
+        initial_path.clone(),
+        browser_event_tx.clone(),
     ) {
         Ok(browser) => browser,
         Err(error) => {
@@ -361,12 +364,17 @@ pub(super) async fn run_sftp_session(
             return;
         }
     };
+    let mut browser = browser;
     let mut latency = None::<LatencyMonitor>;
     let writes = SftpWriteWorker::spawn(connection.clone(), session_id, event_tx.clone());
     let mut latency_foreground_rx = Some(latency_foreground_rx);
     let mut connected = false;
     let mut failed = false;
     let mut browser_error: Option<String> = None;
+    let mut browser_path = initial_path;
+    let mut browser_reopen = JoinSet::<Result<BrowserChannelStream>>::new();
+    let mut browser_reopen_attempts = 0_u8;
+    let mut browser_ready_since = None::<Instant>;
     let mut transfers = Vec::<ActiveSftpTransfer>::new();
     let mut pending_openings = JoinSet::<Result<SftpChannelStream>>::new();
     let mut pending_by_transfer = HashMap::<Uuid, PendingSftpOpen>::new();
@@ -387,7 +395,6 @@ pub(super) async fn run_sftp_session(
     let mut directory_transfers = HashMap::<Uuid, DirectoryTransferAggregate>::new();
     let mut child_roots = HashMap::<Uuid, Uuid>::new();
     let mut queued_discovery_roots = VecDeque::<SftpDownloadRoot>::new();
-    let mut deferred_discovery_root = None::<SftpDownloadRoot>;
     let mut deferred_discovered = None::<SftpDiscoveredDownload>;
     let mut release_probes = JoinSet::<Option<String>>::new();
     let mut release_probe_started = false;
@@ -408,9 +415,59 @@ pub(super) async fn run_sftp_session(
                 info!(%session_id, "SSH transport closed during SFTP session");
                 break;
             }
+            reopened = browser_reopen.join_next(), if !browser_reopen.is_empty() => {
+                match reopened {
+                    Some(Ok(Ok(stream))) => {
+                        // Install the browser before processing its events,
+                        // including an immediate failure and Closed.
+                        let new_browser = match SftpBrowserHandle::spawn(
+                            &Handle::current(), stream, browser_path.clone(), browser_event_tx.clone(),
+                        ) {
+                            Ok(new_browser) => new_browser,
+                            Err(error) => {
+                                failed = true;
+                                send_event(
+                                    &event_tx,
+                                    SshSessionEvent::Failed(bounded_error_message(&error)),
+                                    session_id,
+                                ).await;
+                                break;
+                            }
+                        };
+                        let previous_browser = std::mem::replace(&mut browser, new_browser);
+                        if let Err(error) = previous_browser.shutdown().await {
+                            warn!(%session_id, %error, "failed to join closed SFTP browser");
+                        }
+                        info!(%session_id, path = %browser_path, "SFTP browser channel reopened on existing SSH transport");
+                    }
+                    Some(Ok(Err(error))) => {
+                        failed = true;
+                        let message = browser_error
+                            .take()
+                            .map(|reason| format!("{reason}; SFTP browser channel reopen failed: {error}"))
+                            .unwrap_or_else(|| format!("SFTP browser channel reopen failed: {error}"));
+                        warn!(%session_id, error = %message, "SFTP browser channel could not be reopened");
+                        send_event(&event_tx, SshSessionEvent::Failed(message), session_id).await;
+                        break;
+                    }
+                    Some(Err(error)) => {
+                        failed = true;
+                        let message = browser_error
+                            .take()
+                            .map(|reason| format!("{reason}; SFTP browser reopen task failed: {error}"))
+                            .unwrap_or_else(|| format!("SFTP browser reopen task failed: {error}"));
+                        warn!(%session_id, error = %message, "SFTP browser channel could not be reopened");
+                        send_event(&event_tx, SshSessionEvent::Failed(message), session_id).await;
+                        break;
+                    }
+                    None => {}
+                }
+            }
             discovery = discoveries.join_next_with_id(), if !discoveries.is_empty() => {
                 let _ = discovery;
-                if let Some(root) = queued_discovery_roots.pop_front() {
+                if discoveries.len() < MAX_ACTIVE_SFTP_DISCOVERIES
+                    && let Some(root) = queued_discovery_roots.pop_front()
+                {
                     spawn_pending_sftp_discovery(
                         &mut discoveries,
                         &mut discovery_by_transfer,
@@ -462,6 +519,7 @@ pub(super) async fn run_sftp_session(
                         }
                         let event = SftpTransferEvent::Queued {
                             transfer_id,
+                            root_transfer_id: (transfer_id != root_transfer_id).then_some(root_transfer_id),
                             remote_path: request.remote_path().to_owned(),
                             local_path: request.local_path(),
                             upload: false,
@@ -480,7 +538,13 @@ pub(super) async fn run_sftp_session(
                             );
                         }
                     }
-                    SftpDiscoveredDownload::Finished { root_transfer_id, name, outcome } => {
+                    SftpDiscoveredDownload::Finished {
+                        root_transfer_id,
+                        name,
+                        outcome,
+                        recoverable,
+                    } => {
+                        let recoverable = recoverable && connection.is_closed();
                         let Some(discovery) = discovery_by_transfer.remove(&root_transfer_id) else {
                             continue;
                         };
@@ -535,6 +599,18 @@ pub(super) async fn run_sftp_session(
                                         let _ = send_sftp_transfer_event(&event_tx, event, session_id).await;
                                     }
                                 }
+                                Err(message) if recoverable => {
+                                    directory_transfers.remove(&root_transfer_id);
+                                    report_discovery_failure(
+                                        &event_tx,
+                                        session_id,
+                                        &discovery.root,
+                                        name,
+                                        message,
+                                        true,
+                                    )
+                                    .await;
+                                }
                                 Err(message) if aggregate.children.is_empty() => {
                                     directory_transfers.remove(&root_transfer_id);
                                     report_discovery_failure(
@@ -543,6 +619,7 @@ pub(super) async fn run_sftp_session(
                                         &discovery.root,
                                         name,
                                         message,
+                                        recoverable,
                                     )
                                     .await;
                                 }
@@ -561,33 +638,6 @@ pub(super) async fn run_sftp_session(
                                 }
                             }
                         }
-                        if let Some(root) = queued_discovery_roots.pop_front() {
-                            spawn_pending_sftp_discovery(
-                                &mut discoveries,
-                                &mut discovery_by_transfer,
-                                &connection,
-                                root,
-                                discovered_download_tx.clone(),
-                            );
-                        }
-                    }
-                }
-            }
-            _ = std::future::ready(()), if deferred_discovery_root.is_some()
-                && (discoveries.len() < MAX_ACTIVE_SFTP_DISCOVERIES
-                    || queued_discovery_roots.len() < SFTP_TRANSFER_QUEUE_WINDOW) =>
-            {
-                if let Some(root) = deferred_discovery_root.take() {
-                    if discoveries.len() < MAX_ACTIVE_SFTP_DISCOVERIES {
-                        spawn_pending_sftp_discovery(
-                            &mut discoveries,
-                            &mut discovery_by_transfer,
-                            &connection,
-                            root,
-                            discovered_download_tx.clone(),
-                        );
-                    } else {
-                        queued_discovery_roots.push_back(root);
                     }
                 }
             }
@@ -625,9 +675,14 @@ pub(super) async fn run_sftp_session(
 
                 match opening {
                     Ok((_, Ok(stream))) => {
+                        let retry_connection = connection.clone();
                         transfers.push(ActiveSftpTransfer::Download(SftpDownloadHandle::spawn(
                             &Handle::current(),
                             stream,
+                            move || {
+                                let connection = retry_connection.clone();
+                                async move { connection.open_sftp_stream().await }
+                            },
                             pending.request,
                             transfer_event_tx.clone(),
                             rate_limiter.clone(),
@@ -639,6 +694,7 @@ pub(super) async fn run_sftp_session(
                             SftpTransferEvent::Failed {
                                 transfer_id,
                                 message: bounded_error_message(&error),
+                                recoverable: connection.is_closed(),
                             },
                             session_id,
                             &mut directory_transfers,
@@ -653,6 +709,7 @@ pub(super) async fn run_sftp_session(
                             SftpTransferEvent::Failed {
                                 transfer_id,
                                 message: bounded_text("SFTP subsystem opening task failed"),
+                                recoverable: connection.is_closed(),
                             },
                             session_id,
                             &mut directory_transfers,
@@ -687,10 +744,22 @@ pub(super) async fn run_sftp_session(
                         Ok(())
                     }
                     Some(SshCommand::ListSftp { request_id, path }) => {
-                        browser.request_list(Some(request_id), path)
+                        if let Err(error) = browser.request_list(Some(request_id), path) {
+                            send_sftp_event(&event_tx, SftpBrowserEvent::Failed {
+                                request_id: Some(request_id),
+                                message: bounded_error_message(&error),
+                            }, session_id).await;
+                        }
+                        Ok(())
                     }
                     Some(SshCommand::LoadMoreSftp { request_id }) => {
-                        browser.request_load_more(request_id)
+                        if let Err(error) = browser.request_load_more(request_id) {
+                            send_sftp_event(&event_tx, SftpBrowserEvent::Failed {
+                                request_id: Some(request_id),
+                                message: bounded_error_message(&error),
+                            }, session_id).await;
+                        }
+                        Ok(())
                     }
                     Some(SshCommand::OpenSftpFile { root }) => {
                         let transfer_id = root.transfer_id();
@@ -699,7 +768,6 @@ pub(super) async fn run_sftp_session(
                             || pending_by_transfer.contains_key(&transfer_id)
                             || discovery_by_transfer.contains_key(&transfer_id)
                             || directory_transfers.contains_key(&transfer_id)
-                            || deferred_discovery_root.as_ref().is_some_and(|queued| queued.transfer_id() == transfer_id)
                             || queued_discovery_roots.iter().any(|queued| queued.transfer_id() == transfer_id)
                             || queued_requests.iter().any(|request| request.transfer_id() == transfer_id);
                         if already_active {
@@ -708,6 +776,7 @@ pub(super) async fn run_sftp_session(
                                 SftpTransferEvent::Failed {
                                     transfer_id,
                                     message: "SFTP transfer is already active".to_owned(),
+                                    recoverable: false,
                                 },
                                 session_id,
                             )
@@ -731,7 +800,7 @@ pub(super) async fn run_sftp_session(
                                 discovered_download_tx.clone(),
                             );
                             Ok(())
-                        } else {
+                        } else if queued_discovery_roots.len() < SFTP_TRANSFER_QUEUE_WINDOW {
                             if expected_directory {
                                 directory_transfers.insert(
                                     transfer_id,
@@ -741,7 +810,19 @@ pub(super) async fn run_sftp_session(
                                     },
                                 );
                             }
-                            deferred_discovery_root = Some(root);
+                            queued_discovery_roots.push_back(root);
+                            Ok(())
+                        } else {
+                            send_sftp_transfer_event(
+                                &event_tx,
+                                SftpTransferEvent::Failed {
+                                    transfer_id,
+                                    message: "SFTP recursive discovery queue is full".to_owned(),
+                                    recoverable: false,
+                                },
+                                session_id,
+                            )
+                            .await;
                             Ok(())
                         }
                     }
@@ -757,6 +838,7 @@ pub(super) async fn run_sftp_session(
                                 SftpTransferEvent::Failed {
                                     transfer_id,
                                     message: "SFTP transfer is already active".to_owned(),
+                                    recoverable: false,
                                 },
                                 session_id,
                             )
@@ -764,6 +846,7 @@ pub(super) async fn run_sftp_session(
                         } else {
                             let event = SftpTransferEvent::Queued {
                                 transfer_id,
+                                root_transfer_id: None,
                                 remote_path: request.remote_path().to_owned(),
                                 local_path: request.local_path(),
                                 upload: false,
@@ -797,7 +880,7 @@ pub(super) async fn run_sftp_session(
                             let message = "SFTP transfer is already active".to_owned();
                             send_sftp_transfer_event(
                                 &event_tx,
-                                SftpTransferEvent::Failed { transfer_id, message: message.clone() },
+                                SftpTransferEvent::Failed { transfer_id, message: message.clone(), recoverable: false },
                                 session_id,
                             ).await;
                             let _ = accepted.send(Err(message));
@@ -867,7 +950,6 @@ pub(super) async fn run_sftp_session(
                                     child_roots: &mut child_roots,
                                     discovery_by_transfer: &mut discovery_by_transfer,
                                     queued_discovery_roots: &mut queued_discovery_roots,
-                                    deferred_discovery_root: &mut deferred_discovery_root,
                                     deferred_discovered: &mut deferred_discovered,
                                     queued_requests: &mut queued_requests,
                                     pending_by_transfer: &mut pending_by_transfer,
@@ -883,17 +965,6 @@ pub(super) async fn run_sftp_session(
                             .find(|transfer| transfer.transfer_id() == transfer_id)
                         {
                             transfer.cancel();
-                            Ok(())
-                        } else if deferred_discovery_root
-                            .as_ref()
-                            .is_some_and(|root| root.transfer_id() == transfer_id)
-                        {
-                            deferred_discovery_root = None;
-                            send_sftp_transfer_event(
-                                &event_tx,
-                                SftpTransferEvent::Cancelled { transfer_id },
-                                session_id,
-                            ).await;
                             Ok(())
                         } else if let Some(index) = queued_discovery_roots
                             .iter()
@@ -957,6 +1028,7 @@ pub(super) async fn run_sftp_session(
                                         SftpTransferEvent::Failed {
                                             transfer_id,
                                             message: "SFTP transfer is no longer active".to_owned(),
+                                            recoverable: false,
                                         },
                                         session_id,
                                     )
@@ -997,7 +1069,14 @@ pub(super) async fn run_sftp_session(
                         }
                         Ok(())
                     }
-                    Some(SshCommand::Disconnect) | None => break,
+                    Some(SshCommand::Disconnect) => {
+                        info!(%session_id, "SFTP disconnect requested by controller");
+                        break;
+                    }
+                    None => {
+                        info!(%session_id, "SFTP controller command channel closed");
+                        break;
+                    }
                     Some(SshCommand::ClipboardImage { reply, .. }) => {
                         if reply.send(Err(anyhow::anyhow!("paste images into an SSH terminal pane"))).is_err() { debug!("attachment requester cancelled"); }
                         Ok(())
@@ -1022,7 +1101,7 @@ pub(super) async fn run_sftp_session(
                 }
             }
             transfer_event = transfer_events.recv() => {
-                let Some(transfer_event) = transfer_event else {
+                let Some(mut transfer_event) = transfer_event else {
                     failed = true;
                     send_event(
                         &event_tx,
@@ -1032,6 +1111,11 @@ pub(super) async fn run_sftp_session(
                     .await;
                     break;
                 };
+                // A failed file stream does not prove loss of the SSH transport.
+                // Exhausted local retries finish just this file while siblings run.
+                if let SftpTransferEvent::Failed { recoverable, .. } = &mut transfer_event {
+                    *recoverable &= connection.is_closed();
+                }
                 let terminal_transfer_id = match &transfer_event {
                     SftpTransferEvent::Completed { transfer_id, .. }
                     | SftpTransferEvent::Cancelled { transfer_id }
@@ -1118,8 +1202,17 @@ pub(super) async fn run_sftp_session(
                 };
                 let closed = matches!(event, SftpBrowserEvent::Closed);
                 let initial_page_ready = !connected && initial_sftp_directory_ready(&event);
-                if let SftpBrowserEvent::Failed { message, .. } = &event {
+                if let SftpBrowserEvent::Failed {
+                    request_id: None,
+                    message,
+                } = &event
+                {
                     browser_error = Some(message.clone());
+                }
+                if let SftpBrowserEvent::DirectoryPage { path, .. } = &event {
+                    browser_path = path.clone();
+                    browser_error = None;
+                    browser_ready_since.get_or_insert_with(Instant::now);
                 }
                 if !send_sftp_event(&event_tx, event, session_id).await {
                     break;
@@ -1134,21 +1227,65 @@ pub(super) async fn run_sftp_session(
                     }
                 }
                 if closed {
-                    if let Some(message) = browser_error.take() {
+                    if connection.is_closed() {
                         failed = true;
-                        send_event(
-                            &event_tx,
-                            SshSessionEvent::Failed(message),
-                            session_id,
-                        )
-                        .await;
+                        let message = browser_error
+                            .take()
+                            .unwrap_or_else(|| "SFTP subsystem channel closed unexpectedly".to_owned());
+                        send_event(&event_tx, SshSessionEvent::Failed(message), session_id).await;
+                        break;
                     }
-                    break;
+                    if browser_reopen.is_empty() {
+                        if browser_ready_since.take()
+                            .is_some_and(|started| started.elapsed() >= BROWSER_REOPEN_STABILITY_WINDOW)
+                        {
+                            browser_reopen_attempts = 0;
+                        }
+                        browser_reopen_attempts = browser_reopen_attempts.saturating_add(1);
+                        if browser_reopen_attempts > MAX_BROWSER_REOPEN_ATTEMPTS {
+                            failed = true;
+                            let message = browser_error
+                                .take()
+                                .map(|reason| format!(
+                                    "{reason}; SFTP browser channel closed repeatedly on an otherwise live SSH connection"
+                                ))
+                                .unwrap_or_else(|| {
+                                    "SFTP browser channel closed repeatedly on an otherwise live SSH connection".to_owned()
+                                });
+                            warn!(%session_id, error = %message, "SFTP browser channel reopen limit reached");
+                            send_event(&event_tx, SshSessionEvent::Failed(message), session_id).await;
+                            break;
+                        }
+                        let connection = connection.clone();
+                        let path = browser_path.clone();
+                        let reopen_attempt = browser_reopen_attempts;
+                        let reason = browser_error.as_deref().unwrap_or("browser closed without a reported error");
+                        info!(%session_id, %reopen_attempt, path = %path, %reason, "SFTP browser channel closed; reopening on existing SSH transport");
+                        browser_reopen.spawn(async move {
+                            tokio::time::sleep(BROWSER_REOPEN_DELAY * u32::from(reopen_attempt)).await;
+                            connection
+                                .open_browser_sftp_stream()
+                                .await
+                                .context("cannot reopen SFTP subsystem")
+                        });
+                    }
                 }
             }
         }
     }
 
+    browser_reopen.abort_all();
+    while let Some(reopened) = browser_reopen.join_next().await {
+        match reopened {
+            Err(error) if !error.is_cancelled() => {
+                warn!(%session_id, %error, "SFTP browser reopen task failed during shutdown");
+            }
+            Ok(Err(error)) => {
+                debug!(%session_id, %error, "SFTP browser reopening ended during shutdown");
+            }
+            _ => {}
+        }
+    }
     shutdown_pending_sftp_discoveries(&mut discoveries, &mut discovery_by_transfer, session_id)
         .await;
     release_probes.abort_all();
@@ -1193,8 +1330,8 @@ async fn open_initial_sftp_stream(
     connection: &SshConnection,
     command_rx: &mut mpsc::Receiver<SshCommand>,
     session_id: Uuid,
-) -> Option<Result<SftpChannelStream>> {
-    let opening = connection.open_sftp_stream();
+) -> Option<Result<BrowserChannelStream>> {
+    let opening = connection.open_browser_sftp_stream();
     tokio::pin!(opening);
     loop {
         tokio::select! {
@@ -1271,12 +1408,16 @@ fn spawn_pending_sftp_discovery(
             } => result,
             _ = cancelled => Err(anyhow::anyhow!("SFTP recursive discovery cancelled")),
         };
+        let recoverable = result
+            .as_ref()
+            .is_err_and(crate::sftp::transfer_error_is_recoverable);
         let outcome = result.as_ref().cloned().map_err(bounded_error_message);
         let _ = final_tx
             .send(SftpDiscoveredDownload::Finished {
                 root_transfer_id: transfer_id,
                 name: discovery_root.name().to_owned(),
                 outcome,
+                recoverable,
             })
             .await;
         result
@@ -1297,11 +1438,13 @@ async fn report_discovery_failure(
     root: &SftpDownloadRoot,
     name: String,
     message: String,
+    recoverable: bool,
 ) {
     if !send_sftp_transfer_event(
         event_tx,
         SftpTransferEvent::Queued {
             transfer_id: root.transfer_id(),
+            root_transfer_id: None,
             remote_path: root.remote_path().to_owned(),
             local_path: Some(root.local_path()),
             upload: false,
@@ -1320,6 +1463,7 @@ async fn report_discovery_failure(
             transfer_id: root.transfer_id(),
             name,
             message,
+            recoverable,
         },
         session_id,
     )
@@ -1362,6 +1506,7 @@ fn start_queued_sftp_transfers(
 fn upload_queued_event(request: &SftpUploadRequest) -> SftpTransferEvent {
     SftpTransferEvent::Queued {
         transfer_id: request.transfer_id(),
+        root_transfer_id: None,
         remote_path: request.remote_path().to_owned(),
         local_path: Some(request.local_path().to_owned()),
         upload: true,
@@ -1394,7 +1539,10 @@ fn start_queued_uploads(
         active_upload_requests.insert(transfer_id, request.clone());
         transfers.push(ActiveSftpTransfer::Upload(SftpUploadHandle::spawn(
             &Handle::current(),
-            async move { connection.open_sftp_stream().await },
+            move || {
+                let connection = connection.clone();
+                async move { connection.open_sftp_stream().await }
+            },
             request,
             context.transfer_event_tx.clone(),
             slot,
@@ -1533,6 +1681,7 @@ async fn reap_finished_sftp_transfers(
                 .send(SftpTransferEvent::Failed {
                     transfer_id,
                     message: bounded_error_message(&error),
+                    recoverable: true,
                 })
                 .await
                 .is_err()
@@ -1580,6 +1729,22 @@ pub(super) async fn send_sftp_transfer_event(
     event: SftpTransferEvent,
     session_id: Uuid,
 ) -> bool {
+    match &event {
+        SftpTransferEvent::Failed {
+            transfer_id,
+            message,
+            recoverable,
+        }
+        | SftpTransferEvent::DiscoveryFailed {
+            transfer_id,
+            message,
+            recoverable,
+            ..
+        } => {
+            warn!(%session_id, %transfer_id, %message, %recoverable, "SFTP transfer reported failure");
+        }
+        _ => {}
+    }
     send_event(event_tx, SshSessionEvent::SftpTransfer(event), session_id).await
 }
 

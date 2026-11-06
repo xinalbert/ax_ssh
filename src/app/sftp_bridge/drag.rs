@@ -452,7 +452,7 @@ pub(super) fn begin_native_remote_file_drag(
     let tab_id = router
         .active_tab(window_id)
         .context("no active SFTP tab for this window")?;
-    let (file_name, remote_path, total_bytes, local_target, attempt_id) =
+    let (file_name, is_directory, remote_path, total_bytes, local_target, attempt_id) =
         with_sftp_terminal_for_tab(state, tab_id, |terminal| {
             let entry = terminal
                 .sftp
@@ -461,8 +461,8 @@ pub(super) fn begin_native_remote_file_drag(
                 .find(|entry| entry.path == remote_path)
                 .cloned()
                 .context("remote entry is no longer visible")?;
-            if entry.is_dir || entry.is_symlink {
-                anyhow::bail!("only regular remote files support native dragging")
+            if entry.is_symlink {
+                anyhow::bail!("symbolic links cannot be dragged to the local file system")
             }
             if ax_ssh::sftp::transfer_name_matches_filter(&entry.name, &filter_patterns) {
                 anyhow::bail!("file is excluded by SFTP transfer filters")
@@ -477,6 +477,7 @@ pub(super) fn begin_native_remote_file_drag(
                 .context("SFTP connection attempt is no longer available")?;
             Ok((
                 entry.name.clone(),
+                entry.is_dir,
                 entry.path,
                 entry.size,
                 local_directory.join(entry.name),
@@ -502,19 +503,33 @@ pub(super) fn begin_native_remote_file_drag(
         ui.window(),
         window_id,
         super::macos_file_drag::FilePromiseOwner { tab_id, attempt_id },
-        file_name,
-        local_target,
+        super::macos_file_drag::NativeFilePromiseDescriptor {
+            file_name,
+            is_directory,
+            local_target,
+        },
         local_drop_region,
         move |transfer_id, target| {
-            let result = queue_native_remote_download(
-                &state_for_transfer,
-                tab_id,
-                attempt_id,
-                transfer_id,
-                remote_path.clone(),
-                total_bytes,
-                target,
-            );
+            let result = if is_directory {
+                queue_native_remote_directory_download(
+                    &state_for_transfer,
+                    tab_id,
+                    attempt_id,
+                    transfer_id,
+                    remote_path.clone(),
+                    target,
+                )
+            } else {
+                queue_native_remote_download(
+                    &state_for_transfer,
+                    tab_id,
+                    attempt_id,
+                    transfer_id,
+                    remote_path.clone(),
+                    total_bytes,
+                    target,
+                )
+            };
             if let Err(error) = &result {
                 set_native_sftp_drag_status(
                     &state_for_transfer,
@@ -553,6 +568,13 @@ pub(super) fn queue_native_remote_download(
         terminal
             .sftp
             .queue_transfer(transfer_id, name, total_bytes)?;
+        terminal.sftp.register_download_file_intent(
+            transfer_id,
+            remote_path.clone(),
+            local_target.clone(),
+            total_bytes,
+            false,
+        );
         let result = worker.request_open_sftp_file_at_local_path(
             transfer_id,
             remote_path,
@@ -564,6 +586,86 @@ pub(super) fn queue_native_remote_download(
                 transfer_id,
                 SftpTransferPhase::Failed,
                 format!("Native download request was rejected: {error}"),
+            );
+            return Err(error);
+        }
+        Ok(())
+    })
+}
+
+#[cfg(target_os = "macos")]
+fn queue_native_remote_directory_download(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    attempt_id: Uuid,
+    transfer_id: Uuid,
+    remote_path: String,
+    local_target: PathBuf,
+) -> Result<()> {
+    let filter_patterns = active_sftp_transfer_filter_patterns(state)?;
+    let local_directory = local_target
+        .parent()
+        .filter(|path| !path.as_os_str().is_empty())
+        .context("native directory download target has no parent directory")?
+        .to_owned();
+    let local_name = local_target
+        .file_name()
+        .and_then(|name| name.to_str())
+        .filter(|name| !name.is_empty())
+        .context("native directory download target has no UTF-8 directory name")?
+        .to_owned();
+    if !local_target.is_absolute() {
+        anyhow::bail!("native directory download target must be absolute");
+    }
+
+    with_sftp_terminal_for_tab(state, tab_id, |terminal| {
+        if terminal.ssh_route().and_then(|(_, attempt)| attempt) != Some(attempt_id) {
+            anyhow::bail!("SFTP connection changed since the drag started");
+        }
+        let worker = terminal.worker.as_ref().context("SFTP tab has no worker")?;
+        if !terminal.sftp.reserve_download_root(transfer_id) {
+            anyhow::bail!("native directory download is already active");
+        }
+        let queued = terminal.sftp.begin_download_discovery(
+            transfer_id,
+            local_name,
+            local_target.clone(),
+            remote_path.clone(),
+        );
+        if let Err(error) = queued {
+            terminal.sftp.finish_download_root(
+                transfer_id,
+                0,
+                0,
+                0,
+                false,
+                Some(error.to_string()),
+            );
+            return Err(error);
+        }
+        terminal.sftp.register_download_root_intent(
+            transfer_id,
+            remote_path.clone(),
+            local_directory.clone(),
+            filter_patterns.clone(),
+            true,
+        );
+        if let Err(error) = worker.request_open_sftp_file(
+            transfer_id,
+            remote_path,
+            local_directory,
+            filter_patterns,
+            true,
+        ) {
+            terminal.sftp.finish_download_root(
+                transfer_id,
+                0,
+                0,
+                0,
+                false,
+                Some(format!(
+                    "Native directory download request was rejected: {error}"
+                )),
             );
             return Err(error);
         }

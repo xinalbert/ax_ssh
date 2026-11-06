@@ -221,7 +221,7 @@ pub(super) fn wire_transfers(
             &state_for_transfer_cancel,
         );
         let result = parse_transfer_id(id.as_str()).and_then(|transfer_id| {
-            with_window_sftp_terminal(
+            with_window_sftp_transfer_intent(
                 &state_for_transfer_cancel,
                 &router_for_transfer_cancel,
                 window_id,
@@ -229,11 +229,13 @@ pub(super) fn wire_transfers(
                     if !terminal.sftp.transfer_is_cancellable(transfer_id) {
                         anyhow::bail!("SFTP transfer is no longer cancellable");
                     }
-                    terminal
-                        .worker
-                        .as_ref()
-                        .context("active SFTP tab has no worker")?
-                        .request_cancel_sftp_transfer(transfer_id)?;
+                    if !terminal.sftp.reconnect_replay_pending && terminal.connected {
+                        terminal
+                            .worker
+                            .as_ref()
+                            .context("active SFTP tab has no worker")?
+                            .request_cancel_sftp_transfer(transfer_id)?;
+                    }
                     if !terminal.sftp.request_transfer_cancel(transfer_id) {
                         anyhow::bail!("SFTP transfer changed before cancellation was recorded");
                     }
@@ -363,8 +365,217 @@ struct PreparedRemoteDownloads {
     tab_id: Uuid,
     entries: Vec<SftpEntry>,
     local_directory: PathBuf,
-    submitter: ax_ssh::ssh::SftpDownloadSubmitter,
     filters: Vec<String>,
+}
+
+fn sftp_submission_was_interrupted(error: &anyhow::Error) -> bool {
+    error.downcast_ref::<ax_ssh::ssh::SftpSubmissionError>()
+        == Some(&ax_ssh::ssh::SftpSubmissionError::Disconnected)
+}
+
+fn sftp_tab_is_reconnecting(state: &Arc<Mutex<AppState>>, tab_id: Uuid) -> bool {
+    state.lock().is_ok_and(|app| {
+        app.terminal(tab_id).is_some_and(|terminal| {
+            terminal.is_sftp() && terminal.reconnect_enabled && !terminal.connected
+        })
+    })
+}
+
+fn sftp_tab_is_currently_connected(state: &Arc<Mutex<AppState>>, tab_id: Uuid) -> bool {
+    state.lock().is_ok_and(|app| {
+        app.terminal(tab_id)
+            .is_some_and(|terminal| terminal.is_sftp() && terminal.connected)
+    })
+}
+
+fn sftp_tab_has_replay_pending(state: &Arc<Mutex<AppState>>, tab_id: Uuid) -> bool {
+    state.lock().is_ok_and(|app| {
+        app.terminal(tab_id)
+            .is_some_and(|terminal| terminal.is_sftp() && terminal.sftp.reconnect_replay_pending)
+    })
+}
+
+fn transfer_intent_is_current(
+    state: &Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    profile_id: Uuid,
+    attempt_id: Uuid,
+    intent: &SftpTransferIntent,
+) -> bool {
+    state.lock().is_ok_and(|app| {
+        app.terminal(tab_id).is_some_and(|terminal| {
+            terminal.profile_id() == Some(profile_id)
+                && terminal.ssh_route().and_then(|(_, attempt)| attempt) == Some(attempt_id)
+                && terminal.sftp.reconnect_replay_pending
+                && terminal.sftp.has_transfer_intent(intent)
+        })
+    })
+}
+
+pub(in crate::app) async fn requeue_transfer_intents(
+    state: Arc<Mutex<AppState>>,
+    tab_id: Uuid,
+    profile_id: Uuid,
+    attempt_id: Uuid,
+) {
+    let (download, upload) = {
+        let Ok(app) = state.lock() else {
+            return;
+        };
+        let Some(terminal) = app.terminal(tab_id) else {
+            return;
+        };
+        if terminal.profile_id() != Some(profile_id)
+            || terminal.ssh_route().and_then(|(_, attempt)| attempt) != Some(attempt_id)
+            || !terminal.sftp.reconnect_replay_pending
+        {
+            return;
+        }
+        let Some(worker) = terminal.worker.as_ref() else {
+            return;
+        };
+        let Ok(download) = worker.sftp_download_submitter() else {
+            return;
+        };
+        let Ok(upload) = worker.sftp_upload_submitter() else {
+            return;
+        };
+        (download, upload)
+    };
+    let mut submitted = std::collections::HashSet::new();
+    loop {
+        let Some((revision, intents)) = state.lock().ok().and_then(|app| {
+            let terminal = app.terminal(tab_id)?;
+            (terminal.profile_id() == Some(profile_id)
+                && terminal.ssh_route().and_then(|(_, attempt)| attempt) == Some(attempt_id)
+                && terminal.sftp.reconnect_replay_pending)
+                .then(|| terminal.sftp.transfer_intents_with_revision())
+        }) else {
+            return;
+        };
+        let mut retry_required = false;
+        for intent in intents {
+            let transfer_id = match &intent {
+                SftpTransferIntent::DownloadRoot { transfer_id, .. }
+                | SftpTransferIntent::DownloadFile { transfer_id, .. }
+                | SftpTransferIntent::Upload { transfer_id, .. } => *transfer_id,
+            };
+            if submitted.contains(&transfer_id) {
+                continue;
+            }
+            if !transfer_intent_is_current(&state, tab_id, profile_id, attempt_id, &intent) {
+                continue;
+            }
+            let intent_for_recheck = intent.clone();
+            let result = match intent {
+                SftpTransferIntent::DownloadRoot {
+                    transfer_id,
+                    remote_path,
+                    local_directory,
+                    filter_patterns,
+                    expected_directory,
+                    completed_children: _,
+                } => {
+                    let excluded_remote_paths = state
+                        .lock()
+                        .ok()
+                        .and_then(|app| {
+                            app.terminal(tab_id).map(|terminal| {
+                                terminal.sftp.completed_directory_child_paths(transfer_id)
+                            })
+                        })
+                        .unwrap_or_default();
+                    download
+                        .submit_with_excluded(
+                            transfer_id,
+                            remote_path,
+                            local_directory,
+                            filter_patterns,
+                            expected_directory,
+                            excluded_remote_paths,
+                        )
+                        .await
+                }
+                SftpTransferIntent::DownloadFile {
+                    transfer_id,
+                    remote_path,
+                    local_path,
+                    total_bytes,
+                    replay_on_reconnect: _,
+                } => {
+                    download
+                        .submit_file(transfer_id, remote_path, local_path, total_bytes)
+                        .await
+                }
+                SftpTransferIntent::Upload {
+                    transfer_id,
+                    batch_id,
+                    remote_path,
+                    local_path,
+                    total_bytes,
+                    remote_directories,
+                } => {
+                    upload
+                        .submit(
+                            batch_id,
+                            vec![(
+                                transfer_id,
+                                remote_path,
+                                local_path,
+                                total_bytes,
+                                remote_directories,
+                            )],
+                        )
+                        .await
+                }
+            };
+            if let Err(error) = result {
+                tracing::debug!(tab_id = %tab_id, %error, "SFTP transfer intent could not be requeued after reconnect");
+                if sftp_submission_was_interrupted(&error) {
+                    retry_required = true;
+                } else if transfer_intent_is_current(
+                    &state,
+                    tab_id,
+                    profile_id,
+                    attempt_id,
+                    &intent_for_recheck,
+                ) {
+                    let _ = with_sftp_transfer_intent_for_tab(&state, tab_id, |terminal| {
+                        terminal.sftp.finish_transfer(
+                            transfer_id,
+                            SftpTransferPhase::Failed,
+                            "Transfer retry request was rejected".to_owned(),
+                        );
+                        Ok(())
+                    });
+                }
+            } else {
+                submitted.insert(transfer_id);
+            }
+        }
+        if retry_required {
+            return;
+        }
+        let replay_complete = state.lock().is_ok_and(|mut app| {
+            let Some(terminal) = app.terminal_mut(tab_id) else {
+                return false;
+            };
+            if terminal.profile_id() != Some(profile_id)
+                || terminal.ssh_route().and_then(|(_, attempt)| attempt) != Some(attempt_id)
+                || !terminal.sftp.reconnect_replay_pending
+            {
+                return false;
+            }
+            if terminal.sftp.transfer_intent_revision != revision {
+                return false;
+            }
+            terminal.sftp.reconnect_replay_pending = false;
+            true
+        });
+        if replay_complete {
+            return;
+        }
+    }
 }
 
 fn prepare_selected_remote_downloads(
@@ -386,16 +597,10 @@ fn prepare_selected_remote_downloads(
             anyhow::bail!("no remote files or folders are selected");
         }
         let local_directory = PathBuf::from(&terminal.sftp.local.path);
-        let submitter = terminal
-            .worker
-            .as_ref()
-            .context("active SFTP tab has no worker")?
-            .sftp_download_submitter()?;
         Ok(PreparedRemoteDownloads {
             tab_id,
             entries,
             local_directory,
-            submitter,
             filters,
         })
     })
@@ -411,7 +616,6 @@ fn queue_selected_remote_downloads(
         tab_id,
         entries,
         local_directory,
-        submitter,
         filters,
     } = prepared;
     runtime.spawn(async move {
@@ -468,10 +672,10 @@ fn queue_selected_remote_downloads(
                 dispatch_active_snapshot(&ui, &state);
                 continue;
             }
-            let reserved = loop {
-                match with_sftp_terminal_for_tab(&state, tab_id, |terminal| {
+            let (reserved, connected) = loop {
+                match with_sftp_transfer_intent_for_tab(&state, tab_id, |terminal| {
                     if !terminal.sftp.reserve_download_root(transfer_id) {
-                        return Ok(false);
+                        return Ok((false, terminal.connected));
                     }
                     let row = if entry.is_dir {
                         terminal.sftp.begin_download_discovery(
@@ -496,17 +700,24 @@ fn queue_selected_remote_downloads(
                             .finish_download_root(transfer_id, 0, 0, 0, false, None);
                         return Err(error);
                     }
-                    Ok(true)
+                    terminal.sftp.register_download_root_intent(
+                        transfer_id,
+                        remote_path.clone(),
+                        local_directory.clone(),
+                        filters.clone(),
+                        entry.is_dir,
+                    );
+                    Ok((true, terminal.connected))
                 }) {
-                    Ok(true) => break true,
-                    Ok(false) => {
+                    Ok((true, connected)) => break (true, connected),
+                    Ok((false, _)) => {
                         dispatch_active_snapshot(&ui, &state);
                         tokio::time::sleep(Duration::from_millis(100)).await;
                     }
                     Err(error) => {
                         failed = failed.saturating_add(1);
                         first_issue.get_or_insert_with(|| error.to_string());
-                        break false;
+                        break (false, false);
                     }
                 }
             };
@@ -514,17 +725,60 @@ fn queue_selected_remote_downloads(
                 continue;
             }
             dispatch_active_snapshot(&ui, &state);
-            if let Err(error) = submitter
-                .submit(
-                    transfer_id,
-                    remote_path.clone(),
-                    local_directory.clone(),
-                    filters.clone(),
-                    entry.is_dir,
-                )
-                .await
-            {
-                let _ = with_sftp_terminal_for_tab(&state, tab_id, |terminal| {
+            if !connected {
+                if sftp_tab_is_reconnecting(&state, tab_id) {
+                    queued = queued.saturating_add(1);
+                    continue;
+                }
+                failed = failed.saturating_add(1);
+                first_issue.get_or_insert_with(|| "SFTP session is no longer connected".to_owned());
+                let _ = with_sftp_transfer_intent_for_tab(&state, tab_id, |terminal| {
+                    terminal.sftp.finish_transfer(
+                        transfer_id,
+                        SftpTransferPhase::Failed,
+                        "SFTP session is no longer connected".to_owned(),
+                    );
+                    Ok(())
+                });
+                continue;
+            }
+            if sftp_tab_has_replay_pending(&state, tab_id) {
+                queued = queued.saturating_add(1);
+                continue;
+            }
+            let submitter = with_sftp_transfer_intent_for_tab(&state, tab_id, |terminal| {
+                if !terminal.connected || terminal.sftp.reconnect_replay_pending {
+                    anyhow::bail!("SFTP session is no longer connected");
+                }
+                terminal
+                    .worker
+                    .as_ref()
+                    .context("SFTP tab has no worker")?
+                    .sftp_download_submitter()
+            });
+            let result = match submitter {
+                Ok(submitter) => {
+                    submitter
+                        .submit(
+                            transfer_id,
+                            remote_path.clone(),
+                            local_directory.clone(),
+                            filters.clone(),
+                            entry.is_dir,
+                        )
+                        .await
+                }
+                Err(error) => Err(error),
+            };
+            if let Err(error) = result {
+                if sftp_submission_was_interrupted(&error)
+                    || sftp_tab_is_reconnecting(&state, tab_id)
+                    || sftp_tab_has_replay_pending(&state, tab_id)
+                {
+                    queued = queued.saturating_add(1);
+                    continue;
+                }
+                let _ = with_sftp_transfer_intent_for_tab(&state, tab_id, |terminal| {
                     terminal.sftp.finish_transfer(
                         transfer_id,
                         SftpTransferPhase::Failed,
@@ -558,27 +812,56 @@ async fn queue_upload_file_for_tab(
     batch_id: Uuid,
     file: PreparedLocalUpload,
 ) -> Result<()> {
-    let (submitter, file) = with_sftp_terminal_for_tab(state, tab_id, |terminal| {
-        let name = file
-            .remote_path
-            .rsplit('/')
-            .next()
-            .unwrap_or_default()
-            .to_owned();
-        terminal.sftp.queue_upload_transfer(
-            file.id,
-            name,
-            file.size,
-            file.local_path.clone(),
-            file.remote_path.clone(),
-        )?;
-        let submitter = terminal
-            .worker
-            .as_ref()
-            .context("SFTP tab has no worker")?
-            .sftp_upload_submitter()?;
-        Ok((submitter, file))
-    })?;
+    let (submitter, file, waiting_for_replay) =
+        with_sftp_transfer_intent_for_tab(state, tab_id, |terminal| {
+            let name = file
+                .remote_path
+                .rsplit('/')
+                .next()
+                .unwrap_or_default()
+                .to_owned();
+            terminal.sftp.queue_upload_transfer(
+                file.id,
+                name,
+                file.size,
+                file.local_path.clone(),
+                file.remote_path.clone(),
+            )?;
+            terminal.sftp.register_upload_intent(
+                file.id,
+                batch_id,
+                file.remote_path.clone(),
+                file.local_path.clone(),
+                file.size,
+                file.remote_directories.clone(),
+            );
+            let waiting_for_replay = terminal.sftp.reconnect_replay_pending;
+            if !terminal.connected || waiting_for_replay {
+                return Ok((None, file, waiting_for_replay));
+            }
+            let submitter = terminal
+                .worker
+                .as_ref()
+                .context("SFTP tab has no worker")?
+                .sftp_upload_submitter()?;
+            Ok((Some(submitter), file, false))
+        })?;
+    let Some(submitter) = submitter else {
+        let transfer_id = file.id;
+        return if waiting_for_replay || sftp_tab_is_reconnecting(state, tab_id) {
+            Ok(())
+        } else {
+            let _ = with_sftp_transfer_intent_for_tab(state, tab_id, |terminal| {
+                terminal.sftp.finish_transfer(
+                    transfer_id,
+                    SftpTransferPhase::Failed,
+                    "SFTP session is no longer connected".to_owned(),
+                );
+                Ok(())
+            });
+            anyhow::bail!("SFTP session is no longer connected")
+        };
+    };
     let transfer_id = file.id;
     if let Err(error) = submitter
         .submit(
@@ -593,7 +876,13 @@ async fn queue_upload_file_for_tab(
         )
         .await
     {
-        with_sftp_terminal_for_tab(state, tab_id, |terminal| {
+        if sftp_submission_was_interrupted(&error)
+            || sftp_tab_is_reconnecting(state, tab_id)
+            || sftp_tab_has_replay_pending(state, tab_id)
+        {
+            return Ok(());
+        }
+        with_sftp_transfer_intent_for_tab(state, tab_id, |terminal| {
             terminal.sftp.finish_transfer(
                 transfer_id,
                 SftpTransferPhase::Failed,
@@ -635,6 +924,14 @@ pub(super) fn queue_local_upload_paths(
         while let Some(file) = file_rx.recv().await {
             total_bytes = total_bytes.saturating_add(file.size);
             file_count = file_count.saturating_add(1);
+            if !sftp_tab_is_currently_connected(&state_for_task, tab_id)
+                && !sftp_tab_is_reconnecting(&state_for_task, tab_id)
+            {
+                failed_count = failed_count.saturating_add(1);
+                first_failure
+                    .get_or_insert_with(|| "SFTP session is no longer connected".to_owned());
+                continue;
+            }
             if let Err(error) =
                 queue_upload_file_for_tab(&state_for_task, tab_id, batch_id, file).await
             {
@@ -765,7 +1062,7 @@ pub(super) fn wire_selected_transfer_actions(
     ui.on_cancel_selected_sftp_transfers(move || {
         log_ui_action("sftp.cancel-selected-transfers");
         sync_window_active(&router_for_cancel, window_id, &state_for_cancel);
-        let result = with_window_sftp_terminal(
+        let result = with_window_sftp_transfer_intent(
             &state_for_cancel,
             &router_for_cancel,
             window_id,
@@ -802,6 +1099,14 @@ pub(super) fn request_selected_transfer_actions(
 ) -> Result<()> {
     if transfer_ids.is_empty() {
         anyhow::bail!("no selected transfers support this action");
+    }
+    if matches!(action, SelectedTransferAction::Cancel)
+        && (!terminal.connected || terminal.sftp.reconnect_replay_pending)
+    {
+        for transfer_id in transfer_ids {
+            let _ = terminal.sftp.request_transfer_cancel(transfer_id);
+        }
+        return Ok(());
     }
     let worker = terminal
         .worker
@@ -862,6 +1167,13 @@ pub(super) fn queue_remote_downloads(
             );
             continue;
         }
+        terminal.sftp.register_download_root_intent(
+            transfer_id,
+            entry.path.clone(),
+            local_directory.clone(),
+            filter_patterns.to_vec(),
+            entry.is_dir,
+        );
         match worker.request_open_sftp_file(
             transfer_id,
             entry.path,

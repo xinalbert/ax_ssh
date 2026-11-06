@@ -7,8 +7,9 @@ use russh::{Channel, ChannelId, keys::PrivateKey, server};
 use russh_sftp::protocol::{
     Attrs, Data, File, FileAttributes, Handle as FileHandle, Name, OpenFlags, Status, StatusCode,
 };
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
+use std::sync::atomic::AtomicBool;
 use std::sync::{Arc, Mutex};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::sync::{Notify, Semaphore};
@@ -20,6 +21,16 @@ struct RemoteFiles {
     files: Mutex<HashMap<String, Vec<u8>>>,
     read_started: Notify,
     read_gate: Semaphore,
+    authentications: AtomicU64,
+    sftp_channels: Mutex<Vec<(server::Handle, ChannelId)>>,
+    close_subsystems: AtomicBool,
+    channel_limit: AtomicU64,
+    rejected_channels: AtomicU64,
+    reject_next_channels: AtomicU64,
+    active_channels: AtomicU64,
+    peak_channels: AtomicU64,
+    close_next_read: AtomicBool,
+    close_next_write: AtomicBool,
 }
 
 struct Peer {
@@ -37,6 +48,7 @@ impl server::Handler for Peer {
         user: &str,
         password: &str,
     ) -> Result<server::Auth, Self::Error> {
+        self.files.authentications.fetch_add(1, Ordering::Relaxed);
         Ok(if user == "fixture" && password == "fixture-ephemeral" {
             server::Auth::Accept
         } else {
@@ -50,8 +62,38 @@ impl server::Handler for Peer {
         reply: server::ChannelOpenHandle,
         _: &mut server::Session,
     ) -> Result<(), Self::Error> {
+        let remaining = self.files.reject_next_channels.load(Ordering::Acquire);
+        let forced = remaining > 0;
+        if forced {
+            self.files
+                .reject_next_channels
+                .fetch_sub(1, Ordering::AcqRel);
+        }
+        if forced
+            || self.files.active_channels.load(Ordering::Acquire)
+                >= self.files.channel_limit.load(Ordering::Acquire)
+        {
+            self.files.rejected_channels.fetch_add(1, Ordering::Relaxed);
+            reply
+                .reject(russh::ChannelOpenFailure::AdministrativelyProhibited)
+                .await;
+            return Ok(());
+        }
+        let active = self.files.active_channels.fetch_add(1, Ordering::AcqRel) + 1;
+        self.files.peak_channels.fetch_max(active, Ordering::AcqRel);
         self.channels.insert(channel.id(), channel);
         reply.accept().await;
+        Ok(())
+    }
+
+    async fn channel_close(
+        &mut self,
+        id: ChannelId,
+        _: &mut server::Session,
+    ) -> Result<(), Self::Error> {
+        if self.channels.remove(&id).is_some() {
+            self.files.active_channels.fetch_sub(1, Ordering::AcqRel);
+        }
         Ok(())
     }
 
@@ -62,18 +104,34 @@ impl server::Handler for Peer {
         session: &mut server::Session,
     ) -> Result<(), Self::Error> {
         if name != "sftp" || self.reject_subsystem {
+            self.channels.remove(&id);
+            self.files.active_channels.fetch_sub(1, Ordering::AcqRel);
             session.channel_failure(id)?;
             session.close(id)?;
         } else {
             let channel = self.channels.remove(&id).expect("accepted fixture channel");
             session.channel_success(id)?;
+            self.files
+                .sftp_channels
+                .lock()
+                .expect("fixture channels")
+                .push((session.handle(), id));
+            if self.files.close_subsystems.load(Ordering::Acquire) {
+                self.files.active_channels.fetch_sub(1, Ordering::AcqRel);
+                session.close(id)?;
+                return Ok(());
+            }
             let files = self.files.clone();
+            let slot = FixtureSessionSlot(files.clone());
+            let file_channel = (session.handle(), id);
             self.tasks.spawn(async move {
+                let _slot = slot;
                 russh_sftp::server::run(
                     channel.into_stream(),
                     FilePeer {
                         files,
                         listed: false,
+                        channel: file_channel,
                     },
                 )
                 .await;
@@ -88,20 +146,32 @@ impl server::Handler for Peer {
         _: &[u8],
         session: &mut server::Session,
     ) -> Result<(), Self::Error> {
+        if self.channels.remove(&id).is_some() {
+            self.files.active_channels.fetch_sub(1, Ordering::AcqRel);
+        }
         session.channel_failure(id)?;
         session.close(id)?;
         Ok(())
     }
 }
 
+struct FixtureSessionSlot(Arc<RemoteFiles>);
+
+impl Drop for FixtureSessionSlot {
+    fn drop(&mut self) {
+        self.0.active_channels.fetch_sub(1, Ordering::AcqRel);
+    }
+}
+
 struct FilePeer {
     files: Arc<RemoteFiles>,
     listed: bool,
+    channel: (server::Handle, ChannelId),
 }
 
 fn attributes(path: &str, files: &RemoteFiles) -> Result<FileAttributes, StatusCode> {
     let mut attrs = FileAttributes::empty();
-    if path == "/remote" {
+    if path == "/remote" || path == "/remote/child" {
         attrs.set_dir(true);
     } else {
         let files = files.files.lock().expect("fixture files");
@@ -170,7 +240,7 @@ impl russh_sftp::server::Handler for FilePeer {
         })
     }
     async fn opendir(&mut self, id: u32, path: String) -> Result<FileHandle, StatusCode> {
-        if path != "/remote" {
+        if path != "/remote" && path != "/remote/child" {
             return Err(StatusCode::PermissionDenied);
         }
         self.listed = false;
@@ -238,6 +308,19 @@ impl russh_sftp::server::Handler for FilePeer {
         offset: u64,
         len: u32,
     ) -> Result<Data, StatusCode> {
+        if self.files.close_next_read.swap(false, Ordering::AcqRel) {
+            self.channel
+                .0
+                .eof(self.channel.1)
+                .await
+                .expect("file channel EOF");
+            self.channel
+                .0
+                .close(self.channel.1)
+                .await
+                .expect("close failed file channel");
+            return Err(StatusCode::Failure);
+        }
         if handle.ends_with("slow.bin") {
             self.files.read_started.notify_one();
             self.files
@@ -265,6 +348,19 @@ impl russh_sftp::server::Handler for FilePeer {
         offset: u64,
         data: Vec<u8>,
     ) -> Result<Status, StatusCode> {
+        if self.files.close_next_write.swap(false, Ordering::AcqRel) {
+            self.channel
+                .0
+                .eof(self.channel.1)
+                .await
+                .expect("upload channel EOF");
+            self.channel
+                .0
+                .close(self.channel.1)
+                .await
+                .expect("close failed upload channel");
+            return Err(StatusCode::Failure);
+        }
         let mut files = self.files.files.lock().expect("fixture files");
         let bytes = files.get_mut(&handle).ok_or(StatusCode::NoSuchFile)?;
         let start = offset as usize;
@@ -332,6 +428,16 @@ impl Fixture {
             ])),
             read_started: Notify::new(),
             read_gate: Semaphore::new(0),
+            authentications: AtomicU64::new(0),
+            sftp_channels: Mutex::new(Vec::new()),
+            close_subsystems: AtomicBool::new(false),
+            channel_limit: AtomicU64::new(u64::MAX),
+            rejected_channels: AtomicU64::new(0),
+            reject_next_channels: AtomicU64::new(0),
+            active_channels: AtomicU64::new(0),
+            peak_channels: AtomicU64::new(0),
+            close_next_read: AtomicBool::new(false),
+            close_next_write: AtomicBool::new(false),
         });
         let server_files = files.clone();
         let server = tokio::spawn(async move {
@@ -365,7 +471,23 @@ impl Fixture {
         }
     }
 
+    async fn close_sftp_channel(&self, index: usize) {
+        let (session, channel) =
+            self.files.sftp_channels.lock().expect("fixture channels")[index].clone();
+        session
+            .close(channel)
+            .await
+            .expect("close only the SFTP channel");
+    }
+
     async fn worker(&self) -> (SshSessionHandle, mpsc::Receiver<SshSessionEvent>) {
+        self.worker_with_limit(2).await
+    }
+
+    async fn worker_with_limit(
+        &self,
+        limit: i32,
+    ) -> (SshSessionHandle, mpsc::Receiver<SshSessionEvent>) {
         // Supply a known-hosts snapshot, preserving the real Handler trust check.
         let ssh = self.profile.ssh().expect("SSH profile");
         let socket = TcpStream::connect((ssh.host.as_str(), ssh.port))
@@ -391,11 +513,12 @@ impl Fixture {
         );
         let connection = SshConnection {
             handle: Arc::new(transport),
+            sftp_slots: Arc::new(Semaphore::new(crate::ssh::sftp_stream::BACKGROUND_CHANNELS)),
         };
         let (command_tx, command_rx) = mpsc::channel(COMMAND_CAPACITY);
         let (event_tx, event_rx) = mpsc::channel(EVENT_CAPACITY);
         let (latency_foreground_tx, latency_rx) = watch::channel(false);
-        let policy = crate::config::SftpTransferSettings::default().policy(None);
+        let policy = crate::config::SftpTransferPolicy::normalized(limit, 0);
         let id = Uuid::new_v4();
         let task = tokio::spawn(run_sftp_session(
             connection,
@@ -451,6 +574,319 @@ async fn until(
     })
     .await
     .expect("worker should make progress")
+}
+
+#[tokio::test]
+async fn sftp_many_roots_and_full_discovery_queue_respect_session_budget() {
+    let fixture = Fixture::new(false).await;
+    fixture.files.channel_limit.store(8, Ordering::Release);
+    {
+        let mut files = fixture.files.files.lock().expect("fixture files");
+        files.clear();
+        // Exceed both the discovery channel (16) and transfer queue (512),
+        // proving discovery backpressure leaves capacity for file transfers.
+        for index in 0..530 {
+            files.insert(format!("/remote/batch-{index}.txt"), CONTENT.to_vec());
+        }
+    }
+    let (worker, mut events) = fixture.worker_with_limit(16).await;
+    until(&mut events, |event| {
+        matches!(event, SshSessionEvent::Connected)
+    })
+    .await;
+    let root = Uuid::new_v4();
+    worker
+        .sftp_download_submitter()
+        .submit(
+            root,
+            "/remote".into(),
+            fixture.directory.clone(),
+            Vec::new(),
+            true,
+        )
+        .await
+        .expect("large directory accepted");
+    let mut remaining = HashSet::new();
+    for index in 0..12 {
+        let id = Uuid::new_v4();
+        remaining.insert(id);
+        std::fs::create_dir(fixture.directory.join(format!("root-{index}")))
+            .expect("destination directory");
+        worker
+            .sftp_download_submitter()
+            .submit(
+                id,
+                format!("/remote/batch-{index}.txt"),
+                fixture.directory.join(format!("root-{index}")),
+                Vec::new(),
+                false,
+            )
+            .await
+            .expect("file root accepted");
+    }
+    let mut directory_done = false;
+    timeout(Duration::from_secs(45), async {
+        while !directory_done || !remaining.is_empty() {
+            let event = events.recv().await.expect("live worker");
+            match event {
+                SshSessionEvent::SftpTransfer(SftpTransferEvent::Completed {
+                    transfer_id, ..
+                }) => {
+                    remaining.remove(&transfer_id);
+                }
+                SshSessionEvent::SftpTransfer(SftpTransferEvent::DiscoveryFinished {
+                    transfer_id,
+                    discovered_files,
+                    failed_files,
+                    ..
+                }) if transfer_id == root => {
+                    assert_eq!(discovered_files, 530);
+                    assert_eq!(failed_files, 0);
+                    directory_done = true;
+                }
+                SshSessionEvent::Failed(_)
+                | SshSessionEvent::Disconnected
+                | SshSessionEvent::SftpTransfer(
+                    SftpTransferEvent::Failed { .. } | SftpTransferEvent::DiscoveryFailed { .. },
+                ) => panic!("batch must finish on one transport: {event:?}"),
+                _ => {}
+            }
+        }
+    })
+    .await
+    .expect("bounded discovery makes progress");
+    assert_eq!(fixture.files.authentications.load(Ordering::Acquire), 1);
+    assert!(fixture.files.peak_channels.load(Ordering::Acquire) <= 8);
+    assert!(fixture.directory.join("remote/batch-529.txt").is_file());
+    worker.shutdown().await.expect("batch worker shutdown");
+}
+
+#[tokio::test]
+async fn sftp_channel_refusal_retries_locally_without_stopping_another_file() {
+    let fixture = Fixture::new(false).await;
+    let (worker, mut events) = fixture.worker().await;
+    until(&mut events, |event| {
+        matches!(event, SshSessionEvent::Connected)
+    })
+    .await;
+    let slow = Uuid::new_v4();
+    worker
+        .sftp_download_submitter()
+        .submit_file(
+            slow,
+            "/remote/slow.bin".into(),
+            fixture.directory.join("slow.bin"),
+            256 * 1024,
+        )
+        .await
+        .expect("slow download accepted");
+    timeout(
+        Duration::from_secs(5),
+        fixture.files.read_started.notified(),
+    )
+    .await
+    .expect("slow file in flight");
+    fixture
+        .files
+        .reject_next_channels
+        .store(1, Ordering::Release);
+    let id = Uuid::new_v4();
+    worker
+        .sftp_download_submitter()
+        .submit_file(
+            id,
+            "/remote/file.txt".into(),
+            fixture.directory.join("file.txt"),
+            CONTENT.len() as u64,
+        )
+        .await
+        .expect("download accepted");
+    until(&mut events, |event| matches!(event,
+        SshSessionEvent::SftpTransfer(SftpTransferEvent::Completed { transfer_id, .. }) if *transfer_id == id
+    )).await;
+    assert_eq!(fixture.files.rejected_channels.load(Ordering::Acquire), 1);
+    fixture.files.read_gate.add_permits(64);
+    until(&mut events, |event| matches!(event,
+        SshSessionEvent::SftpTransfer(SftpTransferEvent::Completed { transfer_id, .. }) if *transfer_id == slow
+    )).await;
+    assert_eq!(
+        std::fs::read(fixture.directory.join("slow.bin")).expect("complete slow file"),
+        vec![42; 256 * 1024]
+    );
+    assert_eq!(fixture.files.authentications.load(Ordering::Acquire), 1);
+    worker.shutdown().await.expect("worker shutdown");
+}
+
+#[tokio::test]
+async fn sftp_persistent_channel_refusal_finishes_only_the_failed_file() {
+    let fixture = Fixture::new(false).await;
+    let (worker, mut events) = fixture.worker().await;
+    until(&mut events, |event| {
+        matches!(event, SshSessionEvent::Connected)
+    })
+    .await;
+    fixture
+        .files
+        .reject_next_channels
+        .store(100, Ordering::Release);
+    let id = Uuid::new_v4();
+    worker
+        .sftp_download_submitter()
+        .submit_file(
+            id,
+            "/remote/file.txt".into(),
+            fixture.directory.join("refused.txt"),
+            CONTENT.len() as u64,
+        )
+        .await
+        .expect("accepted download");
+    let event = until(&mut events, |event| matches!(event,
+        SshSessionEvent::SftpTransfer(SftpTransferEvent::Failed { transfer_id, .. }) if *transfer_id == id
+    )).await;
+    assert!(matches!(
+        event,
+        SshSessionEvent::SftpTransfer(SftpTransferEvent::Failed {
+            recoverable: false,
+            ..
+        })
+    ));
+    assert_eq!(fixture.files.rejected_channels.load(Ordering::Acquire), 3);
+    fixture
+        .files
+        .reject_next_channels
+        .store(0, Ordering::Release);
+    let request_id = 991;
+    worker
+        .request_list_sftp(request_id, "/remote".into())
+        .expect("browser remains usable");
+    until(&mut events, |event| matches!(event,
+        SshSessionEvent::Sftp(SftpBrowserEvent::DirectoryPage { request_id: Some(id), .. }) if *id == request_id
+    )).await;
+    assert_eq!(fixture.files.authentications.load(Ordering::Acquire), 1);
+    worker.shutdown().await.expect("worker shutdown");
+}
+
+#[tokio::test]
+async fn sftp_file_channel_loss_retries_and_cancellation_stops_channel_backoff() {
+    let fixture = Fixture::new(false).await;
+    let (worker, mut events) = fixture.worker().await;
+    until(&mut events, |event| {
+        matches!(event, SshSessionEvent::Connected)
+    })
+    .await;
+    fixture.files.close_next_read.store(true, Ordering::Release);
+    let id = Uuid::new_v4();
+    worker
+        .sftp_download_submitter()
+        .submit_file(
+            id,
+            "/remote/file.txt".into(),
+            fixture.directory.join("retried.txt"),
+            CONTENT.len() as u64,
+        )
+        .await
+        .expect("file accepted");
+    timeout(Duration::from_secs(40), async {
+        loop {
+            match events.recv().await.expect("live worker") {
+                SshSessionEvent::SftpTransfer(SftpTransferEvent::Completed {
+                    transfer_id, ..
+                }) if transfer_id == id => break,
+                SshSessionEvent::Failed(message) => {
+                    panic!("file retry retired transport: {message}")
+                }
+                SshSessionEvent::SftpTransfer(SftpTransferEvent::Failed { message, .. }) => {
+                    panic!("file retry exhausted: {message}")
+                }
+                _ => {}
+            }
+        }
+    })
+    .await
+    .expect("file retry including remote handle cleanup");
+    assert_eq!(
+        std::fs::read(fixture.directory.join("retried.txt")).expect("retried file"),
+        CONTENT
+    );
+    fixture
+        .files
+        .reject_next_channels
+        .store(100, Ordering::Release);
+    let cancelled = Uuid::new_v4();
+    worker
+        .sftp_download_submitter()
+        .submit_file(
+            cancelled,
+            "/remote/file.txt".into(),
+            fixture.directory.join("cancelled.txt"),
+            CONTENT.len() as u64,
+        )
+        .await
+        .expect("file accepted");
+    timeout(Duration::from_secs(3), async {
+        while fixture.files.rejected_channels.load(Ordering::Acquire) == 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("channel refusal received");
+    worker
+        .request_cancel_sftp_transfer(cancelled)
+        .expect("cancel request");
+    until(&mut events, |event| matches!(event,
+        SshSessionEvent::SftpTransfer(SftpTransferEvent::Cancelled { transfer_id }) if *transfer_id == cancelled
+    )).await;
+    assert!(!fixture.directory.join("cancelled.txt").exists());
+    assert_eq!(fixture.files.authentications.load(Ordering::Acquire), 1);
+    timeout(Duration::from_secs(2), worker.shutdown())
+        .await
+        .expect("backoff cancellation is prompt")
+        .expect("worker shutdown");
+}
+
+#[tokio::test]
+async fn sftp_upload_channel_loss_revalidates_and_retries_on_same_transport() {
+    let fixture = Fixture::new(false).await;
+    let (worker, mut events) = fixture.worker().await;
+    until(&mut events, |event| {
+        matches!(event, SshSessionEvent::Connected)
+    })
+    .await;
+    fixture
+        .files
+        .close_next_write
+        .store(true, Ordering::Release);
+    let local = fixture.directory.join("source.txt");
+    std::fs::write(&local, CONTENT).expect("upload source");
+    let id = Uuid::new_v4();
+    worker
+        .request_open_sftp_upload_batch(
+            Uuid::new_v4(),
+            vec![(
+                id,
+                "/remote/retried-upload.txt".into(),
+                local,
+                CONTENT.len() as u64,
+                vec![],
+            )],
+        )
+        .await
+        .expect("accepted upload");
+    until(&mut events, |event| matches!(event,
+        SshSessionEvent::SftpTransfer(SftpTransferEvent::Completed { transfer_id, .. }) if *transfer_id == id
+    )).await;
+    assert_eq!(
+        fixture
+            .files
+            .files
+            .lock()
+            .expect("remote files")
+            .get("/remote/retried-upload.txt")
+            .expect("published upload"),
+        CONTENT
+    );
+    assert_eq!(fixture.files.authentications.load(Ordering::Acquire), 1);
+    worker.shutdown().await.expect("worker shutdown");
 }
 
 #[tokio::test]
@@ -567,6 +1003,210 @@ async fn sftp_worker_lists_downloads_uploads_and_executes_writes() {
         .await,
         SshSessionEvent::Disconnected
     ));
+}
+
+#[tokio::test]
+async fn sftp_browser_channel_reopens_without_reconnecting_live_transport() {
+    let fixture = Fixture::new(false).await;
+    let (worker, mut events) = fixture.worker().await;
+    until(&mut events, |event| {
+        matches!(event, SshSessionEvent::Connected)
+    })
+    .await;
+    worker
+        .request_list_sftp(70, "/remote/child".into())
+        .expect("navigate before channel close");
+    until(&mut events, |event| {
+        matches!(
+            event,
+            SshSessionEvent::Sftp(SftpBrowserEvent::DirectoryPage {
+                request_id: Some(70),
+                ..
+            })
+        )
+    })
+    .await;
+
+    let download_id = Uuid::new_v4();
+    worker
+        .request_open_sftp_file_at_local_path(
+            download_id,
+            "/remote/slow.bin".into(),
+            fixture.directory.join("slow.bin"),
+            256 * 1024,
+        )
+        .expect("start independent download");
+    timeout(
+        Duration::from_secs(10),
+        fixture.files.read_started.notified(),
+    )
+    .await
+    .expect("download is active before browser channel closes");
+    fixture.close_sftp_channel(0).await;
+    until(&mut events, |event| {
+        matches!(event, SshSessionEvent::Sftp(SftpBrowserEvent::Closed))
+    })
+    .await;
+    worker
+        .request_list_sftp(71, "/remote".into())
+        .expect("stale navigation queued during reopen");
+    worker
+        .request_load_more_sftp(72)
+        .expect("stale page request queued during reopen");
+    let mut failed_requests = Vec::new();
+    timeout(Duration::from_secs(10), async {
+        loop {
+            let event = events.recv().await.expect("worker event stream");
+            match event {
+                SshSessionEvent::Sftp(SftpBrowserEvent::DirectoryPage {
+                    path, entries, ..
+                }) => {
+                    assert_eq!(path, "/remote/child");
+                    assert!(entries.iter().any(|entry| entry.name == "file.txt"));
+                    break;
+                }
+                SshSessionEvent::Sftp(SftpBrowserEvent::Failed {
+                    request_id: Some(id),
+                    ..
+                }) => failed_requests.push(id),
+                SshSessionEvent::Failed(message) => {
+                    panic!("browser channel closure escalated to session failure: {message}");
+                }
+                SshSessionEvent::Disconnected => {
+                    panic!("browser channel closure disconnected the live SSH transport");
+                }
+                _ => {}
+            }
+        }
+    })
+    .await
+    .expect("browser should reopen on the existing transport");
+    assert_eq!(failed_requests, vec![71, 72]);
+    assert_eq!(fixture.files.authentications.load(Ordering::Relaxed), 1);
+    assert_eq!(
+        fixture
+            .files
+            .sftp_channels
+            .lock()
+            .expect("fixture channels")
+            .len(),
+        3
+    );
+    fixture.files.read_gate.add_permits(64);
+    until(&mut events, |event| matches!(event,
+        SshSessionEvent::SftpTransfer(SftpTransferEvent::Completed { transfer_id, .. }) if *transfer_id == download_id
+    )).await;
+    assert_eq!(
+        std::fs::read(fixture.directory.join("slow.bin")).expect("download bytes"),
+        vec![42; 256 * 1024]
+    );
+    worker.shutdown().await.expect("worker shutdown");
+}
+
+#[tokio::test]
+async fn sftp_browser_immediate_channel_closures_exhaust_bounded_reopens() {
+    let fixture = Fixture::new(false).await;
+    fixture
+        .files
+        .close_subsystems
+        .store(true, Ordering::Release);
+    let (worker, mut events) = fixture.worker().await;
+    let failure = timeout(Duration::from_secs(10), async {
+        loop {
+            let event = events.recv().await.expect("worker event stream");
+            match event {
+                SshSessionEvent::Failed(message) => break message,
+                SshSessionEvent::Connected | SshSessionEvent::Disconnected => {
+                    panic!("unexpected event: {event:?}")
+                }
+                _ => {}
+            }
+        }
+    })
+    .await
+    .expect("repeated channel closures must stop");
+    assert!(failure.contains("closed repeatedly"), "{failure}");
+    assert_eq!(fixture.files.authentications.load(Ordering::Relaxed), 1);
+    assert_eq!(
+        fixture
+            .files
+            .sftp_channels
+            .lock()
+            .expect("fixture channels")
+            .len(),
+        3
+    );
+    worker.shutdown().await.expect("failed worker joins");
+}
+
+#[tokio::test]
+async fn sftp_browser_directory_pages_do_not_reset_unstable_reopen_budget() {
+    let fixture = Fixture::new(false).await;
+    let (worker, mut events) = fixture.worker().await;
+    until(&mut events, |event| {
+        matches!(event, SshSessionEvent::Connected)
+    })
+    .await;
+    for index in 0..3 {
+        fixture.close_sftp_channel(index).await;
+        let event = until(&mut events, |event| {
+            matches!(
+                event,
+                SshSessionEvent::Sftp(SftpBrowserEvent::DirectoryPage { .. })
+                    | SshSessionEvent::Failed(_)
+            )
+        })
+        .await;
+        if index < 2 {
+            assert!(matches!(
+                event,
+                SshSessionEvent::Sftp(SftpBrowserEvent::DirectoryPage { .. })
+            ));
+        } else {
+            assert!(
+                matches!(event, SshSessionEvent::Failed(message) if message.contains("closed repeatedly"))
+            );
+        }
+    }
+    assert_eq!(fixture.files.authentications.load(Ordering::Relaxed), 1);
+    assert_eq!(
+        fixture
+            .files
+            .sftp_channels
+            .lock()
+            .expect("fixture channels")
+            .len(),
+        3
+    );
+    worker.shutdown().await.expect("failed worker joins");
+}
+
+#[tokio::test]
+async fn sftp_browser_pending_reopen_is_cancelled_on_disconnect() {
+    let fixture = Fixture::new(false).await;
+    let (worker, mut events) = fixture.worker().await;
+    until(&mut events, |event| {
+        matches!(event, SshSessionEvent::Connected)
+    })
+    .await;
+    fixture.close_sftp_channel(0).await;
+    until(&mut events, |event| {
+        matches!(event, SshSessionEvent::Sftp(SftpBrowserEvent::Closed))
+    })
+    .await;
+    timeout(Duration::from_millis(500), worker.shutdown())
+        .await
+        .expect("disconnect must interrupt reopen backoff")
+        .expect("worker shutdown");
+    assert_eq!(
+        fixture
+            .files
+            .sftp_channels
+            .lock()
+            .expect("fixture channels")
+            .len(),
+        1
+    );
 }
 
 #[tokio::test]

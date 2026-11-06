@@ -20,7 +20,7 @@ pub(in crate::app) fn schedule_reconnect(
     protocol: ReconnectProtocol,
     target: ConnectionTarget,
 ) {
-    let (generation, _attempt, delay) = {
+    let (generation, attempt, delay) = {
         let Ok(mut app) = state.lock() else {
             set_status(&ui, "Cannot read session state");
             return;
@@ -43,6 +43,11 @@ pub(in crate::app) fn schedule_reconnect(
         );
         (generation, attempt, delay)
     };
+    info!(
+        %tab_id, %profile_id, ?protocol, %generation, %attempt,
+        delay_seconds = delay.as_secs(),
+        "automatic reconnect scheduled"
+    );
     refresh_workspace(&ui, &state);
 
     let runtime = runtime.clone();

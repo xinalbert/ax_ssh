@@ -38,7 +38,8 @@ where
         .trim_end_matches('/');
     let temporary = format!(
         "{parent}/.{}.axssh-upload-{}",
-        request.name, request.transfer_id
+        request.name,
+        request.execution_id()
     );
     if let Err(error) =
         ensure_remote_upload_directories(&session, &request.remote_directories).await
@@ -216,7 +217,9 @@ where
                 if current != existing {
                     anyhow::bail!("remote upload target changed before publication");
                 }
-                posix_rename_upload(&session, &temporary, &target_path).await
+                posix_rename_upload(&session, &temporary, &target_path)
+                    .await
+                    .context(UploadPublicationUncertain)
             } else {
                 if current.is_some() {
                     anyhow::bail!("remote upload target appeared before publication");
@@ -226,8 +229,10 @@ where
                     session.rename(temporary.clone(), target_path.clone()),
                 )
                 .await
-                .context("publishing remote upload timed out")?
-                .context("cannot publish remote upload")?;
+                .context("publishing remote upload timed out")
+                .context(UploadPublicationUncertain)?
+                .context("cannot publish remote upload")
+                .context(UploadPublicationUncertain)?;
                 Ok(())
             }
         }

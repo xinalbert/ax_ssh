@@ -116,7 +116,6 @@ struct TransferCancellationInner {
 }
 
 impl TransferCancellation {
-    #[cfg(test)]
     pub(super) fn new() -> Self {
         Self::with_limiter(Arc::new(TransferRateLimiter::new(None)))
     }

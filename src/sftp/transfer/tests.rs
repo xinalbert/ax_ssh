@@ -6,6 +6,14 @@ use russh_sftp::protocol::{Attrs, Data, Handle as RemoteHandle, Status, Version}
 
 mod performance;
 
+#[test]
+fn uncertain_upload_publication_is_not_automatically_replayed() {
+    let lost = anyhow::Error::from(io::Error::from(io::ErrorKind::ConnectionReset));
+    assert!(transfer_error_is_recoverable(&lost));
+    let publication = lost.context(UploadPublicationUncertain);
+    assert!(!transfer_error_is_recoverable(&publication));
+}
+
 #[tokio::test(start_paused = true)]
 async fn connection_rate_limiter_spaces_upload_and_download_chunks() {
     let limiter = Arc::new(TransferRateLimiter::new(Some(1024 * 1024)));
@@ -41,6 +49,26 @@ fn transfer_filter_patterns_match_exact_names_and_wildcards() {
     assert!(transfer_name_matches_filter("._notes", &patterns));
     assert!(transfer_name_matches_filter("report.tmp", &patterns));
     assert!(!transfer_name_matches_filter("report.txt", &patterns));
+}
+
+#[test]
+fn recursive_download_children_have_stable_root_scoped_ids() {
+    let first_root = Uuid::new_v4();
+    let second_root = Uuid::new_v4();
+    let path = "/remote/directory/report.txt";
+
+    assert_eq!(
+        stable_child_transfer_id(first_root, path),
+        stable_child_transfer_id(first_root, path)
+    );
+    assert_ne!(
+        stable_child_transfer_id(first_root, path),
+        stable_child_transfer_id(second_root, path)
+    );
+    assert_ne!(
+        stable_child_transfer_id(first_root, path),
+        stable_child_transfer_id(first_root, "/remote/directory/other.txt")
+    );
 }
 
 #[test]
@@ -162,7 +190,7 @@ async fn cancelling_upload_while_opening_a_channel_releases_its_slot() {
     let (events, mut receiver) = mpsc::channel(4);
     let worker = SftpUploadHandle::spawn(
         &Handle::current(),
-        std::future::pending::<Result<tokio::io::DuplexStream>>(),
+        std::future::pending::<Result<tokio::io::DuplexStream>>,
         request,
         events,
         SftpUploadHandle::reserve_global_slot().expect("slot"),
@@ -597,6 +625,76 @@ struct DownloadTestServer {
     reads: Arc<Mutex<Vec<(u64, u32)>>>,
 }
 
+#[derive(Clone)]
+struct DirectoryEntry {
+    name: String,
+    directory: bool,
+    size: u64,
+}
+
+struct DirectoryDiscoveryServer {
+    directories: HashMap<String, Vec<DirectoryEntry>>,
+}
+
+impl DirectoryDiscoveryServer {
+    fn directory_attrs(id: u32) -> Attrs {
+        let mut attrs = FileAttributes::empty();
+        attrs.set_dir(true);
+        Attrs { id, attrs }
+    }
+}
+
+impl russh_sftp::server::Handler for DirectoryDiscoveryServer {
+    type Error = StatusCode;
+
+    fn unimplemented(&self) -> Self::Error {
+        StatusCode::OpUnsupported
+    }
+
+    async fn lstat(&mut self, id: u32, path: String) -> std::result::Result<Attrs, Self::Error> {
+        if self.directories.contains_key(&path) {
+            Ok(Self::directory_attrs(id))
+        } else {
+            Err(StatusCode::NoSuchFile)
+        }
+    }
+
+    async fn opendir(
+        &mut self,
+        id: u32,
+        path: String,
+    ) -> std::result::Result<RemoteHandle, Self::Error> {
+        self.directories
+            .contains_key(&path)
+            .then_some(RemoteHandle { id, handle: path })
+            .ok_or(StatusCode::NoSuchFile)
+    }
+
+    async fn readdir(
+        &mut self,
+        id: u32,
+        handle: String,
+    ) -> std::result::Result<russh_sftp::protocol::Name, Self::Error> {
+        let entries = self.directories.remove(&handle).ok_or(StatusCode::Eof)?;
+        Ok(russh_sftp::protocol::Name {
+            id,
+            files: entries
+                .iter()
+                .map(|entry| {
+                    let mut attrs = FileAttributes::empty();
+                    if entry.directory {
+                        attrs.set_dir(true);
+                    } else {
+                        attrs.set_regular(true);
+                        attrs.size = Some(entry.size);
+                    }
+                    File::new(entry.name.clone(), attrs)
+                })
+                .collect(),
+        })
+    }
+}
+
 impl DownloadTestServer {
     fn attrs(&self, id: u32) -> Attrs {
         let mut attrs = FileAttributes::empty();
@@ -806,6 +904,112 @@ fn recursive_discovery_accepts_entries_without_count_or_size_budgets() {
     entries.set_regular(true);
     entries.size = Some(1);
     assert!(download_entry("/srv", File::new("file.txt", entries)).is_ok());
+}
+
+#[test]
+fn recursive_download_root_rejects_a_directory_replaced_by_a_file() {
+    let mut regular = FileAttributes::empty();
+    regular.set_regular(true);
+    regular.size = Some(1);
+    assert!(
+        validate_download_root_type(&regular, true)
+            .expect_err("directory expectation must reject a regular file")
+            .to_string()
+            .contains("replaced")
+    );
+    assert!(!validate_download_root_type(&regular, false).expect("regular file root"));
+
+    let mut directory = FileAttributes::empty();
+    directory.set_dir(true);
+    assert!(validate_download_root_type(&directory, true).expect("directory root"));
+}
+
+async fn discover_directory_fixture(
+    entries: Vec<DirectoryEntry>,
+    local_directory: PathBuf,
+) -> Result<SftpDiscoverySummary> {
+    let (client_stream, server_stream) = tokio::io::duplex(64 * 1024);
+    tokio::spawn(russh_sftp::server::run(
+        server_stream,
+        DirectoryDiscoveryServer {
+            directories: HashMap::from([("/srv/root".to_owned(), entries)]),
+        },
+    ));
+    let root = SftpDownloadRoot::new(
+        Uuid::new_v4(),
+        "/srv/root".to_owned(),
+        local_directory,
+        Vec::new(),
+        true,
+    )?;
+    let (discovered_tx, mut discovered_rx) = mpsc::channel(4);
+    let result = discover_download_requests(client_stream, root, discovered_tx).await;
+    while discovered_rx.recv().await.is_some() {}
+    result
+}
+
+#[tokio::test]
+async fn recursive_discovery_materializes_an_empty_directory() {
+    let local = TestCacheDir::new();
+    fs::create_dir(local.path()).expect("local directory fixture should be created");
+
+    let summary = discover_directory_fixture(Vec::new(), local.path().to_owned())
+        .await
+        .expect("empty remote directory should discover");
+
+    assert!(summary.is_directory);
+    assert_eq!(summary.discovered_files, 0);
+    assert!(local.path().join("root").is_dir());
+}
+
+#[tokio::test]
+async fn recursive_discovery_materializes_nested_empty_directories() {
+    let local = TestCacheDir::new();
+    fs::create_dir(local.path()).expect("local directory fixture should be created");
+    let nested = DirectoryEntry {
+        name: "nested".to_owned(),
+        directory: true,
+        size: 0,
+    };
+    let (client_stream, server_stream) = tokio::io::duplex(64 * 1024);
+    tokio::spawn(russh_sftp::server::run(
+        server_stream,
+        DirectoryDiscoveryServer {
+            directories: HashMap::from([
+                ("/srv/root".to_owned(), vec![nested]),
+                ("/srv/root/nested".to_owned(), Vec::new()),
+            ]),
+        },
+    ));
+    let root = SftpDownloadRoot::new(
+        Uuid::new_v4(),
+        "/srv/root".to_owned(),
+        local.path().to_owned(),
+        Vec::new(),
+        true,
+    )
+    .expect("root request should validate");
+    let (discovered_tx, mut discovered_rx) = mpsc::channel(4);
+    let summary = discover_download_requests(client_stream, root, discovered_tx)
+        .await
+        .expect("nested empty directory should discover");
+    while discovered_rx.recv().await.is_some() {}
+
+    assert!(summary.is_directory);
+    assert!(local.path().join("root/nested").is_dir());
+}
+
+#[tokio::test]
+async fn recursive_discovery_refuses_an_existing_directory_target() {
+    let local = TestCacheDir::new();
+    fs::create_dir_all(local.path().join("root")).expect("existing local directory fixture");
+
+    let error = discover_directory_fixture(Vec::new(), local.path().to_owned())
+        .await
+        .expect_err("existing directory target must not be overwritten");
+
+    assert!(error.to_string().contains("already exists"));
+    assert!(local.path().join("root").is_dir());
 }
 
 #[tokio::test]

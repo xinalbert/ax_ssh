@@ -94,6 +94,100 @@ async fn finish(sender: mpsc::Sender<SshSessionEvent>, task: JoinHandle<()>) {
 }
 
 #[tokio::test]
+async fn sftp_file_failure_keeps_live_attempt_and_other_transfer_running() {
+    let fixture = Fixture::new(ConnectionTarget::Sftp);
+    fixture
+        .state
+        .lock()
+        .expect("state")
+        .terminal_mut(fixture.tab)
+        .expect("tab")
+        .reconnect_enabled = true;
+    let (sender, task) = fixture.monitor(ConnectionTarget::Sftp);
+    let failed = Uuid::new_v4();
+    let sibling = Uuid::new_v4();
+    sender
+        .send(SshSessionEvent::Connected)
+        .await
+        .expect("connected");
+    for id in [failed, sibling] {
+        sender
+            .send(SshSessionEvent::SftpTransfer(SftpTransferEvent::Queued {
+                transfer_id: id,
+                root_transfer_id: None,
+                remote_path: format!("/remote/{id}"),
+                local_path: None,
+                upload: false,
+                name: id.to_string(),
+                total_bytes: 100,
+            }))
+            .await
+            .expect("queue");
+    }
+    sender
+        .send(SshSessionEvent::SftpTransfer(SftpTransferEvent::Failed {
+            transfer_id: failed,
+            message: "server refused one channel after retries".into(),
+            recoverable: false,
+        }))
+        .await
+        .expect("file failure");
+    sender
+        .send(SshSessionEvent::SftpTransfer(SftpTransferEvent::Started {
+            transfer_id: sibling,
+            remote_path: "/remote/sibling".into(),
+            name: "sibling".into(),
+            total_bytes: 100,
+        }))
+        .await
+        .expect("sibling continues");
+    fixture
+        .wait(|terminal| {
+            terminal
+                .sftp
+                .transfers
+                .iter()
+                .any(|row| row.id == failed && row.phase == SftpTransferPhase::Failed)
+        })
+        .await;
+    // A transport failure can arrive after a recoverable file error; preserve
+    // that intent but wait for the worker's actual session terminal event.
+    sender
+        .send(SshSessionEvent::SftpTransfer(SftpTransferEvent::Failed {
+            transfer_id: sibling,
+            message: "transport lost".into(),
+            recoverable: true,
+        }))
+        .await
+        .expect("recoverable failure");
+    fixture
+        .wait(|terminal| {
+            terminal
+                .sftp
+                .transfers
+                .iter()
+                .any(|row| row.id == sibling && row.phase == SftpTransferPhase::Queued)
+        })
+        .await;
+    {
+        let app = fixture.state.lock().expect("state");
+        let terminal = app.terminal(fixture.tab).expect("tab");
+        assert!(terminal.connected);
+        assert!(terminal.worker_running);
+        assert!(!task.is_finished());
+    }
+    // Prevent reconnect after intentionally ending this isolated event stream.
+    fixture
+        .state
+        .lock()
+        .expect("state")
+        .terminal_mut(fixture.tab)
+        .expect("tab")
+        .reconnect_enabled = false;
+    finish(sender, task).await;
+}
+
+#[tokio::test]
 async fn ssh_monitor_parses_output_handles_latency_and_preserves_connected_transport_on_auxiliary_errors()
  {
     let fixture = Fixture::new(ConnectionTarget::Terminal);
@@ -310,6 +404,7 @@ async fn sftp_monitor_routes_directory_transfer_and_write_events_to_the_current_
         }),
         SshSessionEvent::SftpTransfer(SftpTransferEvent::Queued {
             transfer_id: id,
+            root_transfer_id: None,
             remote_path: "/remote/file".into(),
             local_path: None,
             upload: false,
@@ -362,6 +457,7 @@ async fn sftp_monitor_routes_directory_transfer_and_write_events_to_the_current_
             transfer_id: Uuid::new_v4(),
             name: "unreadable".into(),
             message: "permission denied".into(),
+            recoverable: false,
         }),
         SshSessionEvent::SftpWrite(ax_ssh::sftp::SftpWriteEvent::Failed {
             operation_id: Uuid::new_v4(),

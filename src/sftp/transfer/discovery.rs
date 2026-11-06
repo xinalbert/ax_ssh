@@ -98,14 +98,12 @@ pub(super) async fn discover_initialized_download_requests(
         .await
         .context("inspecting recursive-download root timed out")?
         .with_context(|| format!("cannot inspect remote path {:?}", root.remote_path))?;
-    if attrs.attrs.is_symlink() {
-        anyhow::bail!("remote symbolic links cannot be downloaded");
-    }
-    if attrs.attrs.is_regular() {
+    let is_directory = validate_download_root_type(&attrs.attrs, root.expected_directory())?;
+    if !is_directory {
         let total_bytes = validate_regular_metadata(&attrs.attrs)?.size;
         let request = SftpDownloadRequest::for_local_download(
             if root.expected_directory() {
-                Uuid::new_v4()
+                stable_child_transfer_id(root.transfer_id, root.remote_path.as_str())
             } else {
                 root.transfer_id
             },
@@ -114,13 +112,15 @@ pub(super) async fn discover_initialized_download_requests(
             vec![root.name.clone()],
             total_bytes,
         )?;
-        discovered_tx
-            .send(SftpDiscoveredDownload::Request {
-                root_transfer_id: root.transfer_id,
-                request,
-            })
-            .await
-            .context("SFTP download receiver stopped during discovery")?;
+        if !root.excludes_remote_path(root.remote_path()) {
+            discovered_tx
+                .send(SftpDiscoveredDownload::Request {
+                    root_transfer_id: root.transfer_id,
+                    request,
+                })
+                .await
+                .context("SFTP download receiver stopped during discovery")?;
+        }
         return Ok(SftpDiscoverySummary {
             discovered_files: 1,
             skipped_entries: 0,
@@ -128,15 +128,21 @@ pub(super) async fn discover_initialized_download_requests(
             is_directory: root.expected_directory(),
         });
     }
-    if !attrs.attrs.is_dir() {
-        anyhow::bail!("remote path is neither a regular file nor a directory");
-    }
-
     let handle = timeout(REQUEST_TIMEOUT, session.opendir(root.remote_path.clone()))
         .await
         .context("opening remote download directory timed out")?
         .with_context(|| format!("cannot open remote directory {:?}", root.remote_path))?
         .handle;
+    // Materialize the promised root only after the remote directory can be
+    // opened, so a rejected or vanished target cannot leave a local shell.
+    let root_target =
+        LocalDownloadTarget::new(root.local_directory.clone(), vec![root.name.clone()])?;
+    if let Err(error) =
+        prepare_local_directory(root_target, root.allow_existing_local_directories()).await
+    {
+        close_remote_handle(session, handle).await;
+        return Err(error);
+    }
     let mut pending = vec![DownloadDirectoryFrame {
         remote_directory: root.remote_path.clone(),
         local_components: vec![root.name.clone()],
@@ -168,12 +174,35 @@ pub(super) async fn discover_initialized_download_requests(
             child_components.push(name.clone());
             if is_directory {
                 match timeout(REQUEST_TIMEOUT, session.opendir(path.clone())).await {
-                    Ok(Ok(response)) => pending.push(DownloadDirectoryFrame {
-                        remote_directory: path,
-                        local_components: child_components,
-                        handle: response.handle,
-                        entries: std::collections::VecDeque::new(),
-                    }),
+                    Ok(Ok(response)) => {
+                        let local_target = match LocalDownloadTarget::new(
+                            root.local_directory.clone(),
+                            child_components.clone(),
+                        ) {
+                            Ok(target) => target,
+                            Err(error) => {
+                                close_remote_handle(session, response.handle).await;
+                                record_discovery_issue(&mut summary, error);
+                                continue;
+                            }
+                        };
+                        if let Err(error) = prepare_local_directory(
+                            local_target,
+                            root.allow_existing_local_directories(),
+                        )
+                        .await
+                        {
+                            close_remote_handle(session, response.handle).await;
+                            record_discovery_issue(&mut summary, error);
+                            continue;
+                        }
+                        pending.push(DownloadDirectoryFrame {
+                            remote_directory: path,
+                            local_components: child_components,
+                            handle: response.handle,
+                            entries: std::collections::VecDeque::new(),
+                        });
+                    }
                     Ok(Err(error)) => {
                         record_discovery_issue(
                             &mut summary,
@@ -191,7 +220,7 @@ pub(super) async fn discover_initialized_download_requests(
                 continue;
             }
             let request = match SftpDownloadRequest::for_local_download(
-                Uuid::new_v4(),
+                stable_child_transfer_id(root.transfer_id, path.as_str()),
                 path,
                 root.local_directory.clone(),
                 child_components,
@@ -203,6 +232,9 @@ pub(super) async fn discover_initialized_download_requests(
                     continue;
                 }
             };
+            if root.excludes_remote_path(request.remote_path()) {
+                continue;
+            }
             discovered_tx
                 .send(SftpDiscoveredDownload::Request {
                     root_transfer_id: root.transfer_id,
@@ -248,6 +280,25 @@ pub(super) async fn discover_initialized_download_requests(
         }
     }
     Ok(summary)
+}
+
+pub(super) fn validate_download_root_type(
+    attrs: &FileAttributes,
+    expected_directory: bool,
+) -> Result<bool> {
+    if attrs.is_symlink() {
+        anyhow::bail!("remote symbolic links cannot be downloaded");
+    }
+    if attrs.is_regular() {
+        if expected_directory {
+            anyhow::bail!("remote directory was replaced by a regular file");
+        }
+        return Ok(false);
+    }
+    if attrs.is_dir() {
+        return Ok(true);
+    }
+    anyhow::bail!("remote path is neither a regular file nor a directory")
 }
 
 fn record_discovery_issue(summary: &mut SftpDiscoverySummary, error: impl std::fmt::Display) {

@@ -18,6 +18,76 @@ use super::worker::{MAX_ERROR_CHARS, bounded_error_message};
 const TEST_USER: &str = "ax-test-user";
 const TEST_PASSWORD: &str = "ax-test-password";
 
+#[tokio::test]
+async fn disconnect_diagnostics_preserve_transport_results_and_bound_remote_messages() {
+    use tracing::instrument::WithSubscriber as _;
+
+    #[derive(Clone)]
+    struct Capture(Arc<Mutex<Vec<u8>>>);
+    impl std::io::Write for Capture {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0
+                .lock()
+                .expect("captured diagnostics")
+                .extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+    let output = Arc::new(Mutex::new(Vec::<u8>::new()));
+    let writer = Capture(output.clone());
+    let subscriber = tracing_subscriber::fmt()
+        .without_time()
+        .with_ansi(false)
+        .with_writer(move || writer.clone())
+        .finish();
+    async {
+        let span = tracing::info_span!("ssh_worker", worker_session_id = "fixture-worker");
+        let mut handler = span.in_scope(|| {
+            ClientHandler::new(
+                None,
+                known_hosts::Snapshot::default(),
+                "fixture.invalid".into(),
+                22,
+                FingerprintObservation::default(),
+                None,
+            )
+        });
+        client::Handler::disconnected(
+            &mut handler,
+            client::DisconnectReason::ReceivedDisconnect(client::RemoteDisconnectInfo {
+                reason_code: russh::Disconnect::ByApplication,
+                message: "remote-fixture-".repeat(1024),
+                lang_tag: String::new(),
+            }),
+        )
+        .await
+        .expect("server disconnect keeps the default successful join result");
+        let error = client::Handler::disconnected(
+            &mut handler,
+            client::DisconnectReason::Error(russh::Error::KeepaliveTimeout.into()),
+        )
+        .await
+        .expect_err("transport error must propagate to russh's join handle");
+        assert!(matches!(
+            error.downcast_ref::<russh::Error>(),
+            Some(russh::Error::KeepaliveTimeout)
+        ));
+    }
+    .with_subscriber(subscriber)
+    .await;
+    let bytes = output.lock().expect("captured diagnostics");
+    let log = std::str::from_utf8(&bytes).expect("UTF-8 logs");
+    assert!(log.contains("received a server disconnect"), "{log}");
+    assert!(log.contains("ByApplication"), "{log}");
+    assert!(log.contains("Keepalive timeout"), "{log}");
+    assert!(log.contains("fixture-worker"), "{log}");
+    assert!(log.len() < 2000, "remote messages must be bounded");
+}
+
 fn test_profile(name: &str, host: String) -> SessionProfile {
     let mut profile = SessionProfile::new(name, host, TEST_USER);
     profile
@@ -386,9 +456,9 @@ impl server::Handler for TestServer {
     async fn auth_publickey(
         &mut self,
         user: &str,
-        public_key: &PublicKey,
+        key: server::VerifiedPublicKey<'_>,
     ) -> Result<Auth, Self::Error> {
-        if user == TEST_USER && self.expected_public_key.as_ref() == Some(public_key) {
+        if user == TEST_USER && self.expected_public_key.as_ref() == Some(key.public_key) {
             Ok(Auth::Accept)
         } else {
             Ok(Auth::reject())

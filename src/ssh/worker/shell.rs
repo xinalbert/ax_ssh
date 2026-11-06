@@ -319,6 +319,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                                 transfer_id: root.transfer_id(),
                                 message: "Remote file opening is available only in an SFTP tab"
                                     .to_owned(),
+                                recoverable: false,
                             },
                             session_id,
                         )
@@ -332,6 +333,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                                 transfer_id: request.transfer_id(),
                                 message: "Remote file opening is available only in an SFTP tab"
                                     .to_owned(),
+                                recoverable: false,
                             },
                             session_id,
                         )
@@ -347,6 +349,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                             SftpTransferEvent::Failed {
                                 transfer_id: request.transfer_id(),
                                 message: message.clone(),
+                                recoverable: false,
                             },
                             session_id,
                         )

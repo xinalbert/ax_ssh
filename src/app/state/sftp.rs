@@ -173,6 +173,212 @@ impl SftpBrowserState {
         Ok(())
     }
 
+    pub(in crate::app) fn register_download_root_intent(
+        &mut self,
+        transfer_id: Uuid,
+        remote_path: String,
+        local_directory: PathBuf,
+        filter_patterns: Vec<String>,
+        expected_directory: bool,
+    ) {
+        if !self.transfer_intents.contains_key(&transfer_id) {
+            self.transfer_intent_order.push_back(transfer_id);
+        }
+        self.transfer_intents.insert(
+            transfer_id,
+            SftpTransferIntent::DownloadRoot {
+                transfer_id,
+                remote_path,
+                local_directory,
+                filter_patterns,
+                expected_directory,
+                completed_children: HashSet::new(),
+            },
+        );
+        self.transfer_intent_revision = self.transfer_intent_revision.wrapping_add(1);
+    }
+
+    pub(in crate::app) fn register_download_file_intent(
+        &mut self,
+        transfer_id: Uuid,
+        remote_path: String,
+        local_path: PathBuf,
+        total_bytes: u64,
+        replay_on_reconnect: bool,
+    ) {
+        if !self.transfer_intents.contains_key(&transfer_id) {
+            self.transfer_intent_order.push_back(transfer_id);
+        }
+        self.transfer_intents.insert(
+            transfer_id,
+            SftpTransferIntent::DownloadFile {
+                transfer_id,
+                remote_path,
+                local_path,
+                total_bytes,
+                replay_on_reconnect,
+            },
+        );
+        self.transfer_intent_revision = self.transfer_intent_revision.wrapping_add(1);
+    }
+
+    pub(in crate::app) fn register_upload_intent(
+        &mut self,
+        transfer_id: Uuid,
+        batch_id: Uuid,
+        remote_path: String,
+        local_path: PathBuf,
+        total_bytes: u64,
+        remote_directories: Vec<String>,
+    ) {
+        if !self.transfer_intents.contains_key(&transfer_id) {
+            self.transfer_intent_order.push_back(transfer_id);
+        }
+        self.transfer_intents.insert(
+            transfer_id,
+            SftpTransferIntent::Upload {
+                transfer_id,
+                batch_id,
+                remote_path,
+                local_path,
+                total_bytes,
+                remote_directories,
+            },
+        );
+        self.transfer_intent_revision = self.transfer_intent_revision.wrapping_add(1);
+    }
+
+    pub(in crate::app) fn remove_transfer_intent(&mut self, transfer_id: Uuid) {
+        let removed = self.transfer_intents.remove(&transfer_id).is_some();
+        self.transfer_intent_order.retain(|id| *id != transfer_id);
+        self.directory_children.remove(&transfer_id);
+        self.directory_children
+            .retain(|_, root_id| *root_id != transfer_id);
+        if removed {
+            self.transfer_intent_revision = self.transfer_intent_revision.wrapping_add(1);
+        }
+    }
+
+    fn mark_directory_child_completed(&mut self, transfer_id: Uuid) {
+        let Some(root_id) = self.directory_children.get(&transfer_id).copied() else {
+            return;
+        };
+        let remote_path = self
+            .transfers
+            .iter()
+            .find(|transfer| transfer.id == transfer_id)
+            .and_then(|transfer| transfer.remote_path.clone());
+        let Some(remote_path) = remote_path else {
+            return;
+        };
+        if let Some(SftpTransferIntent::DownloadRoot {
+            completed_children, ..
+        }) = self.transfer_intents.get_mut(&root_id)
+        {
+            completed_children.insert(remote_path);
+            self.transfer_intent_revision = self.transfer_intent_revision.wrapping_add(1);
+        }
+    }
+
+    pub(in crate::app) fn transfer_intents(&self) -> Vec<SftpTransferIntent> {
+        self.transfer_intent_order
+            .iter()
+            .filter_map(|id| self.transfer_intents.get(id).cloned())
+            .collect()
+    }
+
+    pub(in crate::app) fn transfer_intents_with_revision(&self) -> (u64, Vec<SftpTransferIntent>) {
+        (self.transfer_intent_revision, self.transfer_intents())
+    }
+
+    pub(in crate::app) fn has_transfer_intent(&self, intent: &SftpTransferIntent) -> bool {
+        let transfer_id = match intent {
+            SftpTransferIntent::DownloadRoot { transfer_id, .. }
+            | SftpTransferIntent::DownloadFile { transfer_id, .. }
+            | SftpTransferIntent::Upload { transfer_id, .. } => *transfer_id,
+        };
+        self.transfer_intents
+            .get(&transfer_id)
+            .is_some_and(|current| current == intent)
+    }
+
+    pub(in crate::app) fn completed_directory_child_paths(&self, root_id: Uuid) -> HashSet<String> {
+        let Some(SftpTransferIntent::DownloadRoot {
+            completed_children, ..
+        }) = self.transfer_intents.get(&root_id)
+        else {
+            return HashSet::new();
+        };
+        completed_children.clone()
+    }
+
+    pub(in crate::app) fn prepare_for_reconnect(&mut self) {
+        self.reset_navigation();
+        self.open = false;
+        self.loading = false;
+        self.pending_download_roots.clear();
+        self.scanning_download_roots.clear();
+        self.upload_conflicts.clear();
+        self.selected_transfers.clear();
+        self.reconnect_replay_pending = true;
+        let intent_count = self.transfer_intents.len();
+        self.transfer_intents.retain(|_, intent| {
+            !matches!(
+                intent,
+                SftpTransferIntent::DownloadFile {
+                    replay_on_reconnect: false,
+                    ..
+                }
+            )
+        });
+        self.transfer_intent_order
+            .retain(|id| self.transfer_intents.contains_key(id));
+        if self.transfer_intents.len() != intent_count {
+            self.transfer_intent_revision = self.transfer_intent_revision.wrapping_add(1);
+        }
+        let intents = &self.transfer_intents;
+        self.transfers
+            .retain(|transfer| !transfer.phase.active() || intents.contains_key(&transfer.id));
+        for transfer in &mut self.transfers {
+            if transfer.phase.active() {
+                transfer.phase = SftpTransferPhase::Queued;
+                transfer.downloaded_bytes = 0;
+                transfer.bytes_per_second = 0;
+                transfer.started_at = None;
+                transfer.status = "Waiting for reconnection".to_owned();
+            }
+        }
+        for intent in self.transfer_intents.values() {
+            let SftpTransferIntent::DownloadRoot {
+                transfer_id,
+                expected_directory,
+                ..
+            } = intent
+            else {
+                continue;
+            };
+            self.pending_download_roots.insert(*transfer_id);
+            if *expected_directory {
+                self.scanning_download_roots.insert(*transfer_id);
+            }
+        }
+    }
+
+    pub(in crate::app) fn clear_transfer_intents(&mut self) {
+        if !self.transfer_intents.is_empty() {
+            self.transfer_intent_revision = self.transfer_intent_revision.wrapping_add(1);
+        }
+        self.transfer_intents.clear();
+        self.transfer_intent_order.clear();
+        self.directory_children.clear();
+        self.reconnect_replay_pending = false;
+        self.transfers.clear();
+        self.pending_download_roots.clear();
+        self.scanning_download_roots.clear();
+        self.upload_conflicts.clear();
+        self.selected_transfers.clear();
+    }
+
     pub(in crate::app) fn finish_download_root(
         &mut self,
         id: Uuid,
@@ -212,9 +418,21 @@ impl SftpBrowserState {
         self.finish_transfer(id, phase, status);
     }
 
+    pub(in crate::app) fn register_discovered_download_intent(
+        &mut self,
+        root_transfer_id: Uuid,
+        transfer_id: Uuid,
+    ) {
+        if self.transfer_intents.contains_key(&root_transfer_id) {
+            self.directory_children
+                .insert(transfer_id, root_transfer_id);
+        }
+    }
+
     pub(in crate::app) fn fail_download_root(&mut self, id: Uuid, name: String, message: String) {
         self.pending_download_roots.remove(&id);
         self.scanning_download_roots.remove(&id);
+        self.remove_transfer_intent(id);
         self.record_transfer_failure(id, name, message);
     }
 
@@ -422,7 +640,9 @@ impl SftpBrowserState {
         transfer.bytes_per_second = 0;
         transfer.status = "Downloaded".to_owned();
         transfer.local_path = Some(local_path);
+        self.mark_directory_child_completed(id);
         self.selected_transfers.remove(&id);
+        self.remove_transfer_intent(id);
         true
     }
 
@@ -587,14 +807,18 @@ impl SftpBrowserState {
     }
 
     pub(in crate::app) fn request_transfer_cancel(&mut self, id: Uuid) -> bool {
-        let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
-            return false;
-        };
-        if !transfer.phase.can_request_cancel() {
-            return false;
+        {
+            let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id)
+            else {
+                return false;
+            };
+            if !transfer.phase.can_request_cancel() {
+                return false;
+            }
+            transfer.phase = SftpTransferPhase::Cancelling;
+            transfer.status = "Cancelling".to_owned();
         }
-        transfer.phase = SftpTransferPhase::Cancelling;
-        transfer.status = "Cancelling".to_owned();
+        self.remove_transfer_intent(id);
         true
     }
 
@@ -666,51 +890,75 @@ impl SftpBrowserState {
         self.scanning_download_roots.remove(&id);
         self.upload_conflicts
             .retain(|conflict| conflict.transfer_id != id);
-        let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
-            return;
+        let completed = {
+            let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id)
+            else {
+                return;
+            };
+            let allowed = matches!(
+                (transfer.phase, phase),
+                (SftpTransferPhase::Queued, SftpTransferPhase::Completed)
+                    | (SftpTransferPhase::Queued, SftpTransferPhase::Cancelled)
+                    | (SftpTransferPhase::Queued, SftpTransferPhase::Failed)
+                    | (SftpTransferPhase::Queued, SftpTransferPhase::Skipped)
+                    | (
+                        SftpTransferPhase::AwaitingConflict,
+                        SftpTransferPhase::Cancelled
+                    )
+                    | (
+                        SftpTransferPhase::AwaitingConflict,
+                        SftpTransferPhase::Failed
+                    )
+                    | (SftpTransferPhase::Downloading, SftpTransferPhase::Cancelled)
+                    | (SftpTransferPhase::Downloading, SftpTransferPhase::Failed)
+                    | (SftpTransferPhase::Uploading, SftpTransferPhase::Cancelled)
+                    | (SftpTransferPhase::Uploading, SftpTransferPhase::Failed)
+                    | (SftpTransferPhase::Uploading, SftpTransferPhase::Skipped)
+                    | (SftpTransferPhase::Pausing, SftpTransferPhase::Cancelled)
+                    | (SftpTransferPhase::Pausing, SftpTransferPhase::Failed)
+                    | (SftpTransferPhase::Paused, SftpTransferPhase::Cancelled)
+                    | (SftpTransferPhase::Paused, SftpTransferPhase::Failed)
+                    | (SftpTransferPhase::Resuming, SftpTransferPhase::Cancelled)
+                    | (SftpTransferPhase::Resuming, SftpTransferPhase::Failed)
+                    | (SftpTransferPhase::Cancelling, SftpTransferPhase::Cancelled)
+                    | (SftpTransferPhase::Cancelling, SftpTransferPhase::Failed)
+                    | (SftpTransferPhase::Downloading, SftpTransferPhase::Completed)
+                    | (SftpTransferPhase::Uploading, SftpTransferPhase::Completed)
+                    | (SftpTransferPhase::Pausing, SftpTransferPhase::Completed)
+                    | (SftpTransferPhase::Resuming, SftpTransferPhase::Completed)
+            );
+            if !allowed {
+                return;
+            }
+            transfer.phase = phase;
+            if phase == SftpTransferPhase::Completed {
+                transfer.downloaded_bytes = transfer.total_bytes;
+            }
+            transfer.status = status;
+            !transfer.phase.active() && phase == SftpTransferPhase::Completed
         };
-        let allowed = matches!(
-            (transfer.phase, phase),
-            (SftpTransferPhase::Queued, SftpTransferPhase::Completed)
-                | (SftpTransferPhase::Queued, SftpTransferPhase::Cancelled)
-                | (SftpTransferPhase::Queued, SftpTransferPhase::Failed)
-                | (SftpTransferPhase::Queued, SftpTransferPhase::Skipped)
-                | (
-                    SftpTransferPhase::AwaitingConflict,
-                    SftpTransferPhase::Cancelled
-                )
-                | (
-                    SftpTransferPhase::AwaitingConflict,
-                    SftpTransferPhase::Failed
-                )
-                | (SftpTransferPhase::Downloading, SftpTransferPhase::Cancelled)
-                | (SftpTransferPhase::Downloading, SftpTransferPhase::Failed)
-                | (SftpTransferPhase::Uploading, SftpTransferPhase::Cancelled)
-                | (SftpTransferPhase::Uploading, SftpTransferPhase::Failed)
-                | (SftpTransferPhase::Uploading, SftpTransferPhase::Skipped)
-                | (SftpTransferPhase::Pausing, SftpTransferPhase::Cancelled)
-                | (SftpTransferPhase::Pausing, SftpTransferPhase::Failed)
-                | (SftpTransferPhase::Paused, SftpTransferPhase::Cancelled)
-                | (SftpTransferPhase::Paused, SftpTransferPhase::Failed)
-                | (SftpTransferPhase::Resuming, SftpTransferPhase::Cancelled)
-                | (SftpTransferPhase::Resuming, SftpTransferPhase::Failed)
-                | (SftpTransferPhase::Cancelling, SftpTransferPhase::Cancelled)
-                | (SftpTransferPhase::Cancelling, SftpTransferPhase::Failed)
-                | (SftpTransferPhase::Downloading, SftpTransferPhase::Completed)
-                | (SftpTransferPhase::Uploading, SftpTransferPhase::Completed)
-                | (SftpTransferPhase::Pausing, SftpTransferPhase::Completed)
-                | (SftpTransferPhase::Resuming, SftpTransferPhase::Completed)
-        );
-        if !allowed {
-            return;
+        if completed {
+            self.mark_directory_child_completed(id);
         }
-        transfer.phase = phase;
-        if phase == SftpTransferPhase::Completed {
-            transfer.downloaded_bytes = transfer.total_bytes;
-        }
-        transfer.status = status;
-        if !transfer.phase.active() {
+        if !self
+            .transfers
+            .iter()
+            .any(|transfer| transfer.id == id && transfer.phase.active())
+        {
             self.selected_transfers.remove(&id);
+            self.remove_transfer_intent(id);
+        }
+    }
+
+    pub(in crate::app) fn defer_recoverable_failure(&mut self, id: Uuid, message: String) {
+        self.pending_download_roots.remove(&id);
+        self.scanning_download_roots.remove(&id);
+        if let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) {
+            transfer.phase = SftpTransferPhase::Queued;
+            transfer.downloaded_bytes = 0;
+            transfer.bytes_per_second = 0;
+            transfer.started_at = None;
+            transfer.status = format!("Waiting for reconnection: {message}");
         }
     }
 

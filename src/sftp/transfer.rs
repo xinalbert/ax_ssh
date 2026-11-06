@@ -21,6 +21,7 @@ use self::local::*;
 use self::pipeline::{REQUEST_WINDOW, RequestWindow};
 use self::upload::*;
 
+use std::collections::HashSet;
 use std::error::Error as StdError;
 use std::fmt;
 use std::fs::{self, File as LocalFile, OpenOptions};
@@ -35,6 +36,7 @@ use anyhow::{Context, Result};
 use directories::ProjectDirs;
 use russh_sftp::client::{Config, RawSftpSession};
 use russh_sftp::protocol::{File, FileAttributes, OpenFlags, Packet, StatusCode};
+use sha1::{Digest, Sha1};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::runtime::Handle;
 use tokio::sync::{Mutex as AsyncMutex, Notify, mpsc};
@@ -49,6 +51,66 @@ use super::{
 
 pub(crate) const SFTP_TRANSFER_EVENT_CAPACITY: usize = 32;
 pub(crate) const SFTP_TRANSFER_QUEUE_WINDOW: usize = 512;
+
+pub(crate) fn stable_child_transfer_id(root: Uuid, remote_path: &str) -> Uuid {
+    let mut digest = Sha1::new();
+    digest.update(root.as_bytes());
+    digest.update([0]);
+    digest.update(remote_path.as_bytes());
+    let digest = digest.finalize();
+    let mut bytes = [0_u8; 16];
+    bytes.copy_from_slice(&digest[..16]);
+    Uuid::from_bytes(bytes)
+}
+
+pub(crate) fn transfer_error_is_recoverable(error: &anyhow::Error) -> bool {
+    // A lost rename response cannot prove whether the server published the file.
+    // Replaying KeepBoth could publish a duplicate, so require explicit review.
+    if error.downcast_ref::<UploadPublicationUncertain>().is_some() {
+        return false;
+    }
+    error.chain().any(|cause| {
+        cause.is::<tokio::time::error::Elapsed>()
+            || matches!(
+                cause.downcast_ref::<russh::Error>(),
+                Some(
+                    russh::Error::Disconnect
+                        | russh::Error::HUP
+                        | russh::Error::SendError
+                        | russh::Error::ConnectionTimeout
+                        | russh::Error::KeepaliveTimeout
+                        | russh::Error::InactivityTimeout
+                )
+            )
+            || cause
+                .downcast_ref::<russh_sftp::client::error::Error>()
+                .is_some_and(|error| !matches!(error, russh_sftp::client::error::Error::Status(_)))
+            || cause.downcast_ref::<std::io::Error>().is_some_and(|error| {
+                matches!(
+                    error.kind(),
+                    std::io::ErrorKind::BrokenPipe
+                        | std::io::ErrorKind::ConnectionAborted
+                        | std::io::ErrorKind::ConnectionReset
+                        | std::io::ErrorKind::NotConnected
+                        | std::io::ErrorKind::UnexpectedEof
+                        | std::io::ErrorKind::TimedOut
+                )
+            })
+    })
+}
+
+#[derive(Debug)]
+struct UploadPublicationUncertain;
+
+impl fmt::Display for UploadPublicationUncertain {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str(
+            "upload publication was not confirmed; check the remote target before retrying",
+        )
+    }
+}
+
+impl StdError for UploadPublicationUncertain {}
 
 const DOWNLOAD_CHUNK_BYTES: u32 = 64 * 1024;
 const WRITER_QUEUE_CAPACITY: usize = 2;
@@ -78,6 +140,7 @@ pub enum SftpUploadConflictChoice {
 pub enum SftpTransferEvent {
     Queued {
         transfer_id: Uuid,
+        root_transfer_id: Option<Uuid>,
         remote_path: String,
         local_path: Option<PathBuf>,
         upload: bool,
@@ -109,6 +172,7 @@ pub enum SftpTransferEvent {
         transfer_id: Uuid,
         name: String,
         message: String,
+        recoverable: bool,
     },
     DiscoveryFinished {
         transfer_id: Uuid,
@@ -139,6 +203,7 @@ pub enum SftpTransferEvent {
     Failed {
         transfer_id: Uuid,
         message: String,
+        recoverable: bool,
     },
 }
 
@@ -154,6 +219,7 @@ pub(crate) struct SftpUploadRequest {
     local_identity: Arc<LocalUploadIdentity>,
     conflict_choice: Option<SftpUploadConflictChoice>,
     expected_remote: Option<RemoteUploadFingerprint>,
+    execution_id: Uuid,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -223,6 +289,7 @@ impl SftpUploadRequest {
             local_identity: Arc::new(local_upload_identity(&metadata)),
             conflict_choice: None,
             expected_remote: None,
+            execution_id: Uuid::new_v4(),
         })
     }
 
@@ -257,6 +324,10 @@ impl SftpUploadRequest {
     pub(crate) fn total_bytes(&self) -> u64 {
         self.total_bytes
     }
+
+    pub(crate) fn execution_id(&self) -> Uuid {
+        self.execution_id
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -277,6 +348,7 @@ pub(crate) enum SftpDiscoveredDownload {
         root_transfer_id: Uuid,
         name: String,
         outcome: std::result::Result<SftpDiscoverySummary, String>,
+        recoverable: bool,
     },
 }
 
@@ -386,6 +458,8 @@ pub(crate) struct SftpDownloadRoot {
     name: String,
     filter_patterns: Vec<String>,
     expected_directory: bool,
+    allow_existing_local_directories: bool,
+    excluded_remote_paths: HashSet<String>,
 }
 
 impl SftpDownloadRoot {
@@ -395,6 +469,45 @@ impl SftpDownloadRoot {
         local_directory: PathBuf,
         filter_patterns: Vec<String>,
         expected_directory: bool,
+    ) -> Result<Self> {
+        Self::new_with_options(
+            transfer_id,
+            remote_path,
+            local_directory,
+            filter_patterns,
+            expected_directory,
+            false,
+            HashSet::new(),
+        )
+    }
+
+    pub(crate) fn new_with_existing_directories(
+        transfer_id: Uuid,
+        remote_path: String,
+        local_directory: PathBuf,
+        filter_patterns: Vec<String>,
+        expected_directory: bool,
+        excluded_remote_paths: HashSet<String>,
+    ) -> Result<Self> {
+        Self::new_with_options(
+            transfer_id,
+            remote_path,
+            local_directory,
+            filter_patterns,
+            expected_directory,
+            true,
+            excluded_remote_paths,
+        )
+    }
+
+    fn new_with_options(
+        transfer_id: Uuid,
+        remote_path: String,
+        local_directory: PathBuf,
+        filter_patterns: Vec<String>,
+        expected_directory: bool,
+        allow_existing_local_directories: bool,
+        excluded_remote_paths: HashSet<String>,
     ) -> Result<Self> {
         let name = validate_download_path(&remote_path)?.to_owned();
         if local_directory.as_os_str().is_empty() {
@@ -422,6 +535,8 @@ impl SftpDownloadRoot {
             name,
             filter_patterns,
             expected_directory,
+            allow_existing_local_directories,
+            excluded_remote_paths,
         })
     }
 
@@ -448,6 +563,14 @@ impl SftpDownloadRoot {
     pub(crate) fn expected_directory(&self) -> bool {
         self.expected_directory
     }
+
+    pub(crate) fn allow_existing_local_directories(&self) -> bool {
+        self.allow_existing_local_directories
+    }
+
+    pub(crate) fn excludes_remote_path(&self, path: &str) -> bool {
+        self.excluded_remote_paths.contains(path)
+    }
 }
 
 pub(crate) struct SftpDownloadHandle {
@@ -467,7 +590,7 @@ impl SftpUploadHandle {
         global_upload_limiter().try_acquire()
     }
 
-    pub(crate) fn spawn<F, S>(
+    pub(crate) fn spawn<F, Fut, S>(
         runtime: &Handle,
         opening: F,
         request: SftpUploadRequest,
@@ -476,7 +599,8 @@ impl SftpUploadHandle {
         rate_limiter: Arc<TransferRateLimiter>,
     ) -> Self
     where
-        F: Future<Output = Result<S>> + Send + 'static,
+        F: FnMut() -> Fut + Send + 'static,
+        Fut: Future<Output = Result<S>> + Send + 'static,
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let transfer_id = request.transfer_id;
@@ -543,20 +667,29 @@ impl Drop for SftpUploadHandle {
 }
 
 impl SftpDownloadHandle {
-    pub(crate) fn spawn<S>(
+    pub(crate) fn spawn<F, Fut, S>(
         runtime: &Handle,
         stream: S,
+        reopening: F,
         request: SftpDownloadRequest,
         event_tx: mpsc::Sender<SftpTransferEvent>,
         rate_limiter: Arc<TransferRateLimiter>,
     ) -> Self
     where
+        F: FnMut() -> Fut + Send + 'static,
+        Fut: Future<Output = Result<S>> + Send + 'static,
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let transfer_id = request.transfer_id;
         let cancellation = TransferCancellation::with_limiter(rate_limiter);
         let task_cancellation = cancellation.clone();
-        let task = runtime.spawn(run_download(stream, request, task_cancellation, event_tx));
+        let task = runtime.spawn(run_download(
+            stream,
+            reopening,
+            request,
+            task_cancellation,
+            event_tx,
+        ));
         Self {
             transfer_id,
             cancellation,
@@ -717,24 +850,47 @@ fn snapshot_local_file_for_open_at(
     pending.finish()
 }
 
-async fn run_download<S>(
+async fn run_download<F, Fut, S>(
     stream: S,
+    mut reopening: F,
     request: SftpDownloadRequest,
     cancellation: TransferCancellation,
     event_tx: mpsc::Sender<SftpTransferEvent>,
 ) where
+    F: FnMut() -> Fut + Send,
+    Fut: Future<Output = Result<S>> + Send + 'static,
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let transfer_id = request.transfer_id;
     let writes_local_target = request.local_target.is_some();
-    let result = if writes_local_target {
-        download_to_local(stream, &request, &cancellation, &event_tx).await
-    } else {
-        match cache_namespace() {
-            Ok(cache_dir) => {
+    let mut first_stream = Some(stream);
+    let mut retries = 0;
+    let result = loop {
+        let attempt = async {
+            let stream = match first_stream.take() {
+                Some(stream) => stream,
+                None => tokio::select! {
+                    _ = cancellation.cancelled() => return Err(cancelled_error()),
+                    result = reopening() => result?,
+                },
+            };
+            if writes_local_target {
+                download_to_local(stream, &request, &cancellation, &event_tx).await
+            } else {
+                let cache_dir = cache_namespace()?;
                 download_to_cache(stream, &request, &cancellation, &event_tx, &cache_dir).await
             }
-            Err(error) => Err(error),
+        }
+        .await;
+        match attempt {
+            Err(error) if transfer_error_is_recoverable(&error) && retries < 2 => {
+                retries += 1;
+                tracing::warn!(%transfer_id, retries, %error, "retrying failed SFTP file on the same connection");
+                if let Err(error) = transfer_retry_delay(&cancellation, retries).await {
+                    break Err(error);
+                }
+            }
+            result => break result,
         }
     };
     let terminal_event = match result {
@@ -763,6 +919,7 @@ async fn run_download<S>(
         Err(error) => SftpTransferEvent::Failed {
             transfer_id,
             message: bounded_error(&error),
+            recoverable: transfer_error_is_recoverable(&error),
         },
     };
     let cleanup_path = match &terminal_event {
@@ -790,36 +947,52 @@ async fn run_download<S>(
     }
 }
 
-async fn run_upload<F, S>(
-    opening: F,
-    request: SftpUploadRequest,
+async fn run_upload<F, Fut, S>(
+    mut opening: F,
+    mut request: SftpUploadRequest,
     cancellation: TransferCancellation,
     event_tx: mpsc::Sender<SftpTransferEvent>,
     _global_slot: UploadPermit,
 ) where
-    F: Future<Output = Result<S>> + Send,
+    F: FnMut() -> Fut + Send,
+    Fut: Future<Output = Result<S>> + Send + 'static,
     S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
 {
     let total_bytes = request.total_bytes;
-    let event = SftpTransferEvent::Started {
-        transfer_id: request.transfer_id,
-        remote_path: request.remote_path.clone(),
-        name: request.name.clone(),
-        total_bytes,
+    let mut retries = 0;
+    let result = loop {
+        let attempt = async {
+            let stream = tokio::select! {
+                _ = cancellation.cancelled() => return Err(cancelled_error()),
+                result = opening() => result?,
+            };
+            send_transfer_state(
+                &event_tx,
+                SftpTransferEvent::Started {
+                    transfer_id: request.transfer_id,
+                    remote_path: request.remote_path.clone(),
+                    name: request.name.clone(),
+                    total_bytes,
+                },
+            )
+            .await?;
+            upload_initialized(stream, &request, &cancellation, &event_tx).await
+        }
+        .await;
+        match attempt {
+            Err(error) if transfer_error_is_recoverable(&error) && retries < 2 => {
+                retries += 1;
+                tracing::warn!(transfer_id = %request.transfer_id, retries, %error, "retrying failed SFTP upload on the same connection");
+                if let Err(error) = transfer_retry_delay(&cancellation, retries).await {
+                    break Err(error);
+                }
+                // A previous remote temporary file may remain after channel loss.
+                // Never reuse it or publish unverified bytes from that execution.
+                request.execution_id = Uuid::new_v4();
+            }
+            result => break result,
+        }
     };
-    let result = async {
-        let stream = await_step(
-            &cancellation,
-            Instant::now() + DOWNLOAD_TIMEOUT,
-            REQUEST_TIMEOUT * 2,
-            "opening upload subsystem",
-            opening,
-        )
-        .await??;
-        send_transfer_state(&event_tx, event).await?;
-        upload_initialized(stream, &request, &cancellation, &event_tx).await
-    }
-    .await;
     let terminal = match result {
         Ok(UploadOutcome::Conflict(remote)) => SftpTransferEvent::UploadConflict {
             transfer_id: request.transfer_id,
@@ -847,9 +1020,17 @@ async fn run_upload<F, S>(
         Err(error) => SftpTransferEvent::Failed {
             transfer_id: request.transfer_id,
             message: bounded_error(&error),
+            recoverable: transfer_error_is_recoverable(&error),
         },
     };
     let _ = send_transfer_state(&event_tx, terminal).await;
+}
+
+async fn transfer_retry_delay(cancellation: &TransferCancellation, retry: u32) -> Result<()> {
+    tokio::select! {
+        _ = cancellation.cancelled() => Err(cancelled_error()),
+        _ = tokio::time::sleep(Duration::from_secs(u64::from(retry))) => Ok(()),
+    }
 }
 
 enum UploadOutcome {

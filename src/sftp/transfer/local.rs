@@ -45,6 +45,51 @@ impl LocalDownloadTarget {
             .fold(self.root.clone(), |path, component| path.join(component))
     }
 
+    /// Create a directory target without replacing an existing local entry.
+    ///
+    /// The selected root is canonicalized first and every new component is
+    /// created with `create_dir`, so a concurrent file, directory, or symlink
+    /// at the promised destination causes the operation to fail. Existing
+    /// intermediate components must remain real directories. The final
+    /// component is accepted only when reconnect recovery explicitly permits
+    /// the already materialized directory tree.
+    pub(super) fn prepare_directory(&self, allow_existing_target: bool) -> Result<PathBuf> {
+        let root = fs::canonicalize(&self.root)
+            .with_context(|| format!("cannot resolve local download directory {:?}", self.root))?;
+        Self::validate_directory(&root)?;
+        let mut current = root.clone();
+        for (index, component) in self.components.iter().enumerate() {
+            current.push(component);
+            let is_final = index + 1 == self.components.len();
+            match fs::create_dir(&current) {
+                Ok(()) => {}
+                Err(error) if error.kind() == io::ErrorKind::AlreadyExists => {
+                    if is_final && !allow_existing_target {
+                        anyhow::bail!("local download directory already exists: {current:?}");
+                    }
+                }
+                Err(error) => {
+                    return Err(error).with_context(|| {
+                        format!("cannot create local download directory {current:?}")
+                    });
+                }
+            }
+            let metadata = fs::symlink_metadata(&current)
+                .with_context(|| format!("cannot inspect local download directory {current:?}"))?;
+            if metadata.file_type().is_symlink() || !metadata.is_dir() {
+                anyhow::bail!("local download path contains a symbolic link or non-directory");
+            }
+            let canonical = fs::canonicalize(&current)
+                .with_context(|| format!("cannot resolve local download directory {current:?}"))?;
+            if !canonical.starts_with(&root) {
+                anyhow::bail!("local download directory escaped the selected directory");
+            }
+            sync_local_directory(&canonical)?;
+            current = canonical;
+        }
+        Ok(current)
+    }
+
     fn prepare(&self) -> Result<LocalPendingFile> {
         let root = fs::canonicalize(&self.root)
             .with_context(|| format!("cannot resolve local download directory {:?}", self.root))?;
@@ -176,6 +221,15 @@ pub(super) async fn prepare_local_download(
     )
     .await?
     .context("local download preparation task failed")?
+}
+
+pub(super) async fn prepare_local_directory(
+    target: LocalDownloadTarget,
+    allow_existing: bool,
+) -> Result<PathBuf> {
+    tokio::task::spawn_blocking(move || target.prepare_directory(allow_existing))
+        .await
+        .context("local download directory task failed")?
 }
 
 pub(super) fn write_local_file(
@@ -376,6 +430,38 @@ mod tests {
         let components = vec!["n".repeat(600), "d".repeat(4_500)];
         assert!(validate_local_components(&components).is_ok());
         assert!(validate_local_components(&["line\nbreak".to_owned()]).is_err());
+    }
+
+    #[test]
+    fn local_directory_target_creates_empty_directory_without_overwrite() {
+        let root = std::env::temp_dir().join(format!("axssh-directory-{}", Uuid::new_v4()));
+        fs::create_dir(&root).expect("fixture directory should be created");
+        let target = LocalDownloadTarget::new(root.clone(), vec!["empty".to_owned()])
+            .expect("directory target should validate");
+
+        let created = target
+            .prepare_directory(false)
+            .expect("directory target should be created");
+        assert!(created.is_dir());
+        assert!(target.prepare_directory(false).is_err());
+        assert!(target.prepare_directory(true).is_ok());
+
+        fs::remove_dir_all(root).expect("fixture directory should be removed");
+    }
+
+    #[test]
+    fn local_directory_target_rejects_an_existing_non_directory() {
+        let root = std::env::temp_dir().join(format!("axssh-directory-{}", Uuid::new_v4()));
+        fs::create_dir(&root).expect("fixture directory should be created");
+        fs::write(root.join("occupied"), b"existing").expect("fixture file should be created");
+        let target = LocalDownloadTarget::new(root.clone(), vec!["occupied".to_owned()])
+            .expect("directory target should validate");
+
+        assert!(target.prepare_directory(false).is_err());
+        assert!(target.prepare_directory(true).is_err());
+        assert!(root.join("occupied").is_file());
+
+        fs::remove_dir_all(root).expect("fixture directory should be removed");
     }
 
     #[test]

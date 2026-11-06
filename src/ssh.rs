@@ -18,8 +18,8 @@ use crate::config::{AuthMethod, SessionProfile};
 pub use self::known_hosts::TrustDecision;
 pub use self::private_keys::discover_private_keys;
 pub use self::worker::{
-    SftpDownloadSubmitter, SftpUploadSubmitter, SshSessionEvent, SshSessionHandle,
-    SshTerminalSettings,
+    SftpDownloadSubmitter, SftpSubmissionError, SftpUploadSubmitter, SshSessionEvent,
+    SshSessionHandle, SshTerminalSettings,
 };
 
 /// Startup and final results for a worker-owned remote audio channel.
@@ -52,6 +52,7 @@ pub fn remove_known_host(host: &str, port: u16, fingerprint: &str) -> Result<boo
 
 mod known_hosts;
 mod private_keys;
+mod sftp_stream;
 mod system_release;
 mod worker;
 mod x11;
@@ -215,6 +216,7 @@ struct ClientHandler {
     port: u16,
     observation: FingerprintObservation,
     x11_dispatcher: Option<x11::X11Dispatcher>,
+    worker_span: tracing::Span,
 }
 
 impl ClientHandler {
@@ -233,12 +235,108 @@ impl ClientHandler {
             port,
             observation,
             x11_dispatcher,
+            worker_span: tracing::Span::current(),
         }
     }
 }
 
 impl client::Handler for ClientHandler {
     type Error = anyhow::Error;
+
+    async fn channel_failure(
+        &mut self,
+        channel: russh::ChannelId,
+        _: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        warn!(parent: &self.worker_span, %channel, "SSH server rejected a channel request");
+        Ok(())
+    }
+
+    async fn channel_open_failure(
+        &mut self,
+        channel: russh::ChannelId,
+        reason: ChannelOpenFailure,
+        description: &str,
+        _: &str,
+        _: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        warn!(
+            parent: &self.worker_span,
+            %channel,
+            reason_code = reason.code(),
+            description = ?worker::bounded_text(description),
+            "SSH server rejected channel opening"
+        );
+        Ok(())
+    }
+
+    async fn exit_status(
+        &mut self,
+        channel: russh::ChannelId,
+        exit_status: u32,
+        _: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        if exit_status != 0 {
+            warn!(parent: &self.worker_span, %channel, %exit_status, "SSH remote channel process exited unsuccessfully");
+        }
+        Ok(())
+    }
+
+    async fn exit_signal(
+        &mut self,
+        channel: russh::ChannelId,
+        signal_name: russh::Sig,
+        core_dumped: bool,
+        error_message: &str,
+        _: &str,
+        _: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        warn!(
+            parent: &self.worker_span,
+            %channel, ?signal_name, %core_dumped,
+            message = ?worker::bounded_text(error_message),
+            "SSH remote channel process exited after a signal"
+        );
+        Ok(())
+    }
+
+    async fn disconnected(
+        &mut self,
+        reason: client::DisconnectReason<Self::Error>,
+    ) -> Result<(), Self::Error> {
+        match reason {
+            client::DisconnectReason::ReceivedDisconnect(info) => {
+                warn!(
+                    parent: &self.worker_span,
+                    host = %self.host,
+                    port = self.port,
+                    reason_code = ?info.reason_code,
+                    message = ?worker::bounded_text(&info.message),
+                    "SSH transport received a server disconnect"
+                );
+                Ok(())
+            }
+            client::DisconnectReason::Error(error) => {
+                if matches!(
+                    error.downcast_ref::<russh::Error>(),
+                    Some(russh::Error::Disconnect)
+                ) {
+                    // russh also returns Disconnect after our own disconnect request.
+                    info!(parent: &self.worker_span, "SSH transport task ended");
+                } else {
+                    warn!(
+                        parent: &self.worker_span,
+                        host = %self.host,
+                        port = self.port,
+                        error = %worker::bounded_error_message(&error),
+                        "SSH transport ended with an error"
+                    );
+                }
+                // Preserve russh's default error propagation to its join handle.
+                Err(error)
+            }
+        }
+    }
 
     async fn check_server_key(
         &mut self,
@@ -603,6 +701,7 @@ pub async fn probe_host_key(profile: &SessionProfile) -> Result<HostKeyProbe> {
 #[derive(Clone)]
 pub struct SshConnection {
     handle: Arc<client::Handle<ClientHandler>>,
+    sftp_slots: Arc<tokio::sync::Semaphore>,
 }
 
 impl SshConnection {
@@ -703,6 +802,9 @@ impl SshConnection {
         info!(session_id = %profile.id, "SSH authentication succeeded");
         Ok(Self {
             handle: Arc::new(handle),
+            sftp_slots: Arc::new(tokio::sync::Semaphore::new(
+                sftp_stream::BACKGROUND_CHANNELS,
+            )),
         })
     }
 
@@ -830,7 +932,37 @@ impl SshConnection {
         Ok((SshShell { channel }, x11_status))
     }
 
-    pub(crate) async fn open_sftp_stream(&self) -> Result<ChannelStream<client::Msg>> {
+    async fn open_sftp_stream(&self) -> Result<sftp_stream::SftpStream> {
+        let permit = self
+            .sftp_slots
+            .clone()
+            .acquire_owned()
+            .await
+            .context("SFTP channel admission closed")?;
+        let stream = self.open_browser_sftp_stream().await?;
+        Ok(sftp_stream::SftpStream::new(stream, permit))
+    }
+
+    // The browser has its own reserved channel; background work cannot starve it.
+    async fn open_browser_sftp_stream(&self) -> Result<ChannelStream<client::Msg>> {
+        let mut attempt = 0_u32;
+        loop {
+            match self.try_open_sftp_stream().await {
+                Err(error)
+                    if !self.is_closed()
+                        && attempt < 2
+                        && sftp_stream::channel_open_can_retry(&error) =>
+                {
+                    warn!(attempt = attempt + 1, %error, "SFTP channel refused; retrying on the existing SSH connection");
+                    tokio::time::sleep(Duration::from_millis(250) * (1 << attempt)).await;
+                    attempt += 1;
+                }
+                result => return result,
+            }
+        }
+    }
+
+    async fn try_open_sftp_stream(&self) -> Result<ChannelStream<client::Msg>> {
         let channel = timeout(CONNECT_TIMEOUT, self.handle.channel_open_session())
             .await
             .context("timed out opening the SFTP SSH channel")?

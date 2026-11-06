@@ -329,7 +329,8 @@ component SftpEntry inherits Rectangle {
         height: parent.height;
         enabled: root.shown && root.interactive && root.drag-enabled
             && (root.entry.kind == "file" || root.entry.kind == "folder")
-            && !(root.native-file-drag-enabled && root.remote-actions && root.entry.kind == "file");
+            && !(root.native-file-drag-enabled && root.remote-actions
+                && (root.entry.kind == "file" || root.entry.kind == "folder"));
         allow-copy: true;
         data: root.drag-data(root.entry.path);
         changed dragging => {
@@ -359,7 +360,7 @@ component SftpEntry inherits Rectangle {
             enabled: root.shown && root.interactive && root.drag-enabled
                 && (root.entry.kind == "file" || root.entry.kind == "folder")
                 && !(root.native-file-drag-enabled && root.remote-actions
-                    && root.entry.kind == "file");
+                    && (root.entry.kind == "file" || root.entry.kind == "folder"));
             mouse-cursor: root.entry.kind == "folder" || root.entry.kind == "file"
                 ? pointer : default;
             double-clicked => {
@@ -376,7 +377,7 @@ component SftpEntry inherits Rectangle {
         width: max(0px, parent.width - self.x);
         height: parent.height;
         enabled: root.shown && root.interactive && root.native-file-drag-enabled
-            && root.remote-actions && root.entry.kind == "file";
+            && root.remote-actions && (root.entry.kind == "file" || root.entry.kind == "folder");
         mouse-cursor: pointer;
         pointer-event(event) => {
             if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
@@ -403,7 +404,13 @@ component SftpEntry inherits Rectangle {
                 root.begin-native-file-drag(root.entry.path);
             }
         }
-        double-clicked => { root.open-file(root.entry.path); }
+        double-clicked => {
+            if root.entry.kind == "folder" {
+                root.open-directory(root.entry.path);
+            } else {
+                root.open-file(root.entry.path);
+            }
+        }
     }
     file-actions := FlatActionMenu {
         actions: root.context-actions;

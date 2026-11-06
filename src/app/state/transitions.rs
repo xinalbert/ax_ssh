@@ -124,6 +124,7 @@ pub(in crate::app) fn retire_session_attempt(
     match state.lock() {
         Ok(mut app) if matches_attempt(&app, tab_id, session_id, attempt_id) => {
             if let Some(terminal) = app.terminal_mut(tab_id) {
+                let preserve_sftp_transfers = terminal.reconnect_enabled;
                 let generation = terminal.reconnect_generation();
                 terminal.finish_reconnect_attempt(generation);
                 terminal.worker = None;
@@ -135,7 +136,12 @@ pub(in crate::app) fn retire_session_attempt(
                 if terminal.is_sftp() && !terminal.sftp.path.is_empty() {
                     terminal.sftp_initial_path = Some(terminal.sftp.path.clone());
                 }
-                terminal.sftp.reset();
+                if terminal.is_sftp() && preserve_sftp_transfers {
+                    terminal.sftp.prepare_for_reconnect();
+                } else {
+                    terminal.sftp.clear_transfer_intents();
+                    terminal.sftp.reset();
+                }
             }
             true
         }
