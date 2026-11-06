@@ -21,9 +21,10 @@ or build dependency.
 
 ## Dependency baseline
 
-The lockfile uses Tokio 1.53.3, arboard 3.7.0, serde_json 1.0.154, uuid 1.28.0,
-rubato 5.0.1, and base64 0.23.1. CPAL stays pinned to 0.17.3 to preserve macOS 11
-support. Slint and its local patches remain on 1.18.1.
+The lockfile uses Tokio 1.54.1, arboard 3.7.0, serde_json 1.0.154, uuid 1.29.0,
+notify 8.2.1, russh 0.65.0, rubato 5.0.1, and base64 0.23.1. CPAL stays pinned
+to 0.17.3 to preserve macOS 11 support. Slint and its local patches remain on
+1.18.1.
 
 The audio worker uses rubato's `Fft` with `FixedSync::Both` and borrowed planar
 buffer adapters. It retains preallocated processing buffers, startup-delay
@@ -217,10 +218,15 @@ development output with `cargo clean --profile dev --package ax_ssh`.
   in bounded 16 KiB chunks.
 - Keep SFTP on a child subsystem channel of the authenticated SSH worker. Do
   not expose the russh handle or `RawSftpSession` to application state or Slint.
+  Share background channel admission in `src/ssh/sftp_stream.rs`, reserve browser
+  and file-consumer capacity, and keep channel/file retries bounded and cancellable.
+  Loopback tests cover server session limits, full discovery queues, per-file
+  channel loss, retry cancellation, and preservation of the live attempt.
   SFTP-only Tabs must not allocate a PTY or interactive shell, while retaining
   the same host-key and credential gates as terminal Tabs. Preserve the inbound
-  packet, path/name, page, directory-budget, request, and shutdown limits.
-  Regular downloads must retain their 512 MiB file cap, 64 KiB request chunks,
+  packet, path/name validation, page, request, and shutdown limits.
+  Regular downloads have no artificial file-size cap; private-cache opening
+  retains its 512 MiB cap. Preserve 64 KiB request chunks,
   bounded writer/event queues, per-operation and overall timeouts, per-Tab
   concurrency cap, cancellation, validated no-replace local publication, and
   owned joins. A completed download remains in Local files; only an explicit
@@ -461,6 +467,17 @@ range behavior are covered by `scripts/test_generate_release_highlights.py` in C
 and flushes when the process-owned guard is dropped. Logs live in the `logs`
 subdirectory of the platform-local AxSSH application data directory. The
 default filter is `ax_ssh=info,russh=warn`; `RUST_LOG` overrides it.
+Startup records the executable, process ID, revision and debug/release mode.
+SSH worker spans correlate the Tab/worker ID and unique task ID with the profile and process;
+transport diagnostics distinguish a server disconnect (reason code and bounded
+message) from a transport error, and record channel request/open rejections and
+unsuccessful remote process exits or signals. SFTP failures include the transfer ID and
+recoverable flag. The application records worker failure/disconnect, unexpected
+event-stream end, local channel/file retry attempts, and the scheduled reconnect
+delay/attempt. A transfer failure on a live SSH connection must not trigger
+whole-session retirement; session terminal events own reconnect scheduling. These records are enabled by the default
+filter and contain no credential or file payloads; technical errors may contain
+the affected path or a bounded server-provided message.
 The About page receives this already-created directory from the process boundary
 and can open it without performing filesystem work on the Slint thread.
 The same directory contains `ax_ssh-crash.log`, a private append-only report

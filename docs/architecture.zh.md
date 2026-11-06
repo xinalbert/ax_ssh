@@ -925,9 +925,10 @@ Alt 组合，因此不支持的方向或已达 pane 上限时，普通终端 Met
 
 ## SSH 安全契约
 
-`russh::client::Handler::check_server_key` 是信任边界。应用锁定 `russh 0.64.1`，为兼容
-现有服务器启用其可选 RSA feature。由于锁定的 RSA 实现没有针对 RUSTSEC-2023-0071 的修复版本，
-该版本有意接受此风险；如果部署环境中的攻击者能够观察签名时序，应优先使用 Ed25519 或 ECDSA。
+`russh::client::Handler::check_server_key` 是信任边界。应用锁定 `russh 0.65.0`，为兼容
+现有服务器启用其可选 RSA feature。该版本还修复客户端对 `EXT_INFO` 消息数量无上限，以及对端
+声明最大包大小为零时 channel 写入停滞的问题。锁定的 RSA 实现仍没有针对 RUSTSEC-2023-0071 的
+修复版本；如果部署环境中的攻击者能够观察签名时序，应优先使用 Ed25519 或 ECDSA。
 应用对 `PublicKeyOrCertificate` 回调只接受具体的 `PublicKey` 变体。服务端证书会被拒绝，
 因为当前 profile/known_hosts 契约尚未实现证书颁发机构校验。未知和不匹配的主机密钥都在
 认证前拒绝。首次拒绝握手可以把 SHA-256 指纹交给确认 UI，但只有用户明确决定后，
@@ -1036,8 +1037,12 @@ cookie 只能证明持有此转发连接的授权，不能证明远端 UID/PID�
   已知系统版本、SSH RTT 和更新时间；测量中、超时、过期及不可用状态替代数值，断开后不显示
   连接数据。关闭/窗口操作保留独立指针区域，拖动期间（包括预览）禁用摘要提示；
 - SFTP-only worker 观察 SSH transport，浏览器观察 SFTP subsystem channel；即使没有界面命令，
-  任一连接关闭也会进入既有有界重连流程。目录请求遇到传输或协议故障时也会结束浏览器，路径或权限
-  状态错误则只影响该次请求；
+  浏览器 channel 在 SSH transport 仍存活时会先在同一条已认证连接上重新打开 `sftp` subsystem，
+  并恢复最后成功显示的远端目录，独立的传输 channel 继续运行。最多连续重开两次，分别退避 1/2 秒；
+  只有目录页成功且该浏览器连续存活 30 秒后才恢复重试额度。transport 已关闭、重开失败或额度耗尽后，
+  才进入既有有界 SSH 重连流程。退出时取消并 join 待完成的重开任务；恢复期间无法提交的浏览命令只报告
+  请求级错误。目录请求遇到传输或协议故障时会结束该浏览器，
+  路径或权限状态错误则只影响该次请求；
 - 关闭 Tab 先取消并请求断开，再使 Tab/attempt 路由失效，清理任务转交应用 shutdown registry；
 - 窗口退出对所有剩余 worker 请求断开，与先前正在关闭的 worker 一起在 25 秒应用总时限内并发等待 join，超时后中止剩余任务，显式
   释放所有 detached/主窗口 Slint model 和窗口强引用，最后再关闭 Tokio。
@@ -1070,7 +1075,7 @@ russh handle 或 worker。
 交给 application-owned 的本地 snapshot。旧 profile 缺少远端值时使用 `~`，本地值为空时解析为
 平台 home 目录。进程内重连时，SFTP Tab 会保留上一次成功显示的远端目录作为下一次初始路径；首个
 目录页尚未成功时，则保留该 Tab 指定的目标路径。重连不会将路径写回 profile；本地目录导航仍属于
-各自 Tab，未完成的传输会取消而不会自动重放。
+各自 Tab，未完成传输的旧 worker 任务会取消；可恢复传输意图会按下方传输契约在重连后重放。
 
 第一阶段提供双栏目录浏览。Slint 拥有两个受约束的 splitter：一个调整远端/本地宽度，另一个调整
 文件区/Transfers 高度。`WorkspaceShell` 只在当前进程生命周期内保留两个比例和 Transfers 折叠状态，
@@ -1137,7 +1142,17 @@ Slint 不持有网络 handle，也不执行文件系统操作。为下载选择�
 小型下载根 intent。worker 自己打开 SFTP subsystem 进行递归发现，
 拒绝链接及不安全/非 regular 条目，并生成以当前 Local files 目录为根的自有文件请求。目录会保留相对
 目录树。发现采用迭代目录遍历，并通过有界队列逐项发送文件请求；队列满时等待空位，不截断后续文件。
-文件数、目录数、目录深度、批次总大小和常规传输单文件大小均没有客户端人为上限。远端和本地文件浏览只按页呈现，不会因目录文本总量达到固定预算而停止枚举。文件名和路径不设客户端字符数上限；服务器和操作系统自身的限制仍然有效，相关失败会记录在对应条目。无效、不支持、无法读取或被显式过滤的条目会在扫描结果中说明，其余文件继续处理。每个 SFTP Tab 的并发 transfer 数可设置为 1-16（默认 2）；并发设置只控制处理速度和排队，不丢弃已接受文件。每个 transfer 独占单独的 SFTP subsystem stream。
+文件数、目录数、目录深度、批次总大小和常规传输单文件大小均没有客户端人为上限。远端和本地文件浏览只按页呈现，不会因目录文本总量达到固定预算而停止枚举。文件名和路径不设客户端字符数上限；服务器和操作系统自身的限制仍然有效，相关失败会记录在对应条目。无效、不支持、无法读取或被显式过滤的条目会在扫描结果中说明，其余文件继续处理。每个 SFTP Tab 的并发 transfer 偏好可设置为 1-16（默认 2）；并发设置只控制处理速度和排队，不丢弃已接受文件。worker 的准入队列有界；递归根队列满时会报告明确的不可恢复失败，不会静默覆盖较早的根。每个 transfer 独占单独的 SFTP subsystem stream。
+
+SSH owner 为后台 SFTP 共用六个准入许可，覆盖目录发现、文件传输和串行写操作；许可随 stream 存活，直到库内部 I/O 释放它。
+目录发现一次一个，文件有效并发取设置值与四的较小值，为 discovery producer 和 write worker 保留空间，避免子项队列满时消费者无法取得通道。
+browser 另有保留通道，best-effort release probe 最多再占一个。SFTP 无法协商服务器会话限制，服务端可能设置更低值。
+新通道被 `AdministrativelyProhibited` 或 `ResourceShortage` 拒绝时，在原 transport 上最多重试两次，退避 250/500 ms，也覆盖旧通道异步关闭的短暂间隔。
+
+文件 stream 的临时 I/O 故障最多重试两次，退避 1/2 秒，重验元数据并使用新的私有临时数据。失败只中止本次 local writer，不把用户整个 transfer 标记为取消；用户取消仍能停止打开、退避及活动 I/O。
+上传重试使用新的临时 execution ID；若最终发布未确认则明确提示检查目标，不自动重放，因为丢失 rename 回复不能证明远端是否已发布。
+局部重试耗尽会明确结束对应文件/根任务，其余文件继续。仅 transport 已关闭时才将传输失败标为等待重连；application 等待 worker 的 session 终态，不再因单个传输错误退役存活 SSH attempt。
+既有 browser 有界恢复耗尽后仍可报告 session failure。
 
 所有 SFTP Tab 共享的同时上传数也可在 Settings > SFTP 中设置为 1-32（默认 8）。降低该值不会取消已经取得许可的上传，只会限制后续上传。下载根 intent 携带用户配置的 basename 文件名过滤模式；仅在用户启用过滤时，application bridge 和递归 worker 才使用同一 `*` 匹配器。默认关闭过滤，避免无提示地漏传系统文件。浏览器的 Hidden 开关仍只控制显示。`AppSettings` 持久化过滤启用状态和规范化后的自定义模式。`AppSettings::sftp_transfers` 保存每 Tab 并发和每连接带宽的全局默认值；`SshConfig::sftp_transfer_policy` 可为单个服务器覆盖这些值，进程级同时上传上限仍为全局值。
 新 SFTP worker 启动时复制生效策略，因此修改设置不会改变进行中的连接。共享异步限速器在
@@ -1151,6 +1166,10 @@ handle 复核也必须成功，本地 writer 才能发布。进度最多每 100 
 分为活动、失败（包括已取消）和成功快照；Slint 只渲染这些 DTO，并发送勾选/批量暂停、继续或取消 intent。
 活动页的批量操作与 transfer 页签栏共用同一行并位于右侧；不会另占第二条工具栏，也不会引入新的 callback 路径。
 暂停/继续是 worker 生命周期内的契约：writer 保留部分文件，流只在该 worker 存活时从当前 offset 继续。
+SSH transport 断开时，application 会保留每个已接受且未完成的传输意图，只保存自有路径、大小、过滤规则和批次元数据。
+活动、排队、目录发现和等待冲突确认的行会进入等待重连状态；worker 准入保持有界，新的 SFTP attempt 报告 `Connected` 后，application 按顺序重放保留的意图。
+目录根会重新发现，子项 ID 由根 ID 与远端路径稳定派生，因此旧子项不会重复出现。旧 worker 的事件仍由 attempt ID 隔离。
+这属于重试恢复，不是字节级续传：失败时仍清理已有 `.part` 和远端临时文件，没有完整性证明就不会复用。用户主动断开或关闭 Tab 会清除意图，不会重放。
 
 每条有界 transfer 行只在应用状态中保留可选的本地路径和远端目标。终态记录可由 blocking 平台 opener 显示
 非符号链接的本地路径；Slint 只得到布尔能力和不透明 transfer ID。上传、远端写操作或下载成功时，只有
@@ -1168,7 +1187,7 @@ SFTP 会话重置保留本地目录和选择，同时使尚未完成的本地读
 本地 writer 会校验每个路径组件，拒绝符号链接穿越和已有目标；Unix 上创建该任务专属的 `0600` `.part`
 文件，随后 flush、fsync 并以不替换并发本地文件的方式原子发布最终名称。取消和失败会删除部分数据；若发布后才观察到取消，
 会在报告成功前删除最终目标。成功的本地下载会保留。关闭 Tab 会取消并 join 待发现、待打开 subsystem
-和活动 transfer。远端文件行右键菜单负责有界下载、单项重命名和删除 intent；远端工具栏保留系统关联程序的外部编辑。全部选中的本地文件和目录、内部拖动根及系统拖入根进入流式发现。本地递归发现在线程池中保留相对路径，通过有界通道发送文件并等待空位，不设文件数、目录数、目录深度或批次大小上限。链接、无效、无法读取和显式过滤的条目会记录结果并继续扫描。单文件按配置的大小策略校验（默认不限）。worker 使用自己的 SFTP session 创建缺失的远端目录，并拒绝链接等非预期类型；每 Tab 的上传和下载并发数可设置为 1-16（默认 2），其余已接受文件在有界队列等待。application 只传递经过校验的路径和大小；worker 会重新校验源文件，
+和活动 transfer。远端文件行右键菜单负责有界下载、单项重命名和删除 intent；远端工具栏保留系统关联程序的外部编辑。全部选中的本地文件和目录、内部拖动根及系统拖入根进入流式发现。本地递归发现在线程池中保留相对路径，通过有界通道发送文件并等待空位，不设文件数、目录数、目录深度或批次大小上限。链接、无效、无法读取和显式过滤的条目会记录结果并继续扫描。单文件按配置的大小策略校验（默认不限）。worker 使用自己的 SFTP session 创建缺失的远端目录，并拒绝链接等非预期类型；每 Tab 的上传和下载并发偏好可设置为 1-16（默认 2），有效并发仍受上述通道预算限制，其余已接受文件在有界队列等待。application 只传递经过校验的路径和大小；worker 会重新校验源文件，
 本地 blocking task 只打开源文件一次，每块复核路径与已打开文件的 identity，经两个 chunk 的队列交给 16 请求窗口；
 全部写入 ack 成功后才发布。所有 Tab 共享的同时上传数可设置为 1-32（默认 8），此边界每个活动上传
 的分块数据约 1.2 MiB，不随文件大小增长。关闭接收端会释放阻塞 reader，并按期限 join。
@@ -1179,7 +1198,7 @@ SFTP 会话重置保留本地目录和选择，同时使尚未完成的本地读
 关闭 Tab 会丢弃这些决策。
 拖放只接受有界路径 intent，随后复用 bridge 校验与 transfer queue。进程内拖动载荷带明确的本地/远端来源前缀：已选中的本地行携带当前选择，未选中行只携带自身；本地路径拖到 Remote files 会排队上传，远端文件或目录拖到 Local files 会排队下载。外部系统文件管理器上传遵循同一目标契约：macOS 每次收到 `DroppedFile` 都读取当前 AppKit 光标坐标；Windows 查询 Win32 屏幕光标并转换为客户区坐标；Linux X11 查询实时 Xlib 窗口指针；Wayland 和其他平台使用当前外部文件 hover 的最新 Winit `CursorMoved` 坐标。bridge 再询问声明式 SFTP 几何该坐标是否位于可见的 Remote files 目标。该几何只负责选择目标；在排队前，application bridge 会重新校验活动 SFTP Tab 的当前连接和稳定的远端目录。这样 Slint 的陈旧 presentation snapshot 不会静默拒绝有效的原生 drop，同时缺少原生/hover 坐标、落在其他目标或实时状态尚未就绪时仍会拒绝，绝不按活动目录猜测；Slint `DropArea` 仍负责进程内路径。连续送达的原生文件事件共用短生命周期上传批次，使同名冲突的本批次选择作用于该次拖动的文件。
 
-在 macOS 上，从可见远端普通文件开始拖动会改为创建 copy-only 的 AppKit `NSFilePromiseProvider`；目标接受拖放后，主线程 delegate 才取得目标最终 URL，并把这个 owned 路径交给常规的有界 SFTP 下载请求。delegate 不读取远端内容也不写本地文件；网络 stream 和安全本地 writer 仍由 SFTP worker 独占。该拖动存活期间，临时 AppKit destination 是裁剪到拖动开始时已启用 Local files 几何的子视图，并且只接受同一个发起原生 source。回拖到 AxSSH 窗口的其他位置会被拒绝；只在 Local files 区域释放才使用已捕获的 Local files 目录，因此焦点或导航变化不能重定向目标。该区域不可用时，拖到 Finder 仍可工作，但回到 AxSSH 会被拒绝。它作为普通的 `Downloaded` transfer 完成，不会自动打开结果文件。远端目录、链接、被过滤条目和全部非 macOS 平台仍走进程内拖动路径。请求成功排入 worker 后，临时 native destination 会立刻从窗口移除，因此下载进行时不会拦截 AxSSH 的普通输入；provider 和 delegate 只保留到该 terminal transfer 事件完成 promise。
+在 macOS 上，从可见远端普通文件或目录开始拖动会改为创建 copy-only 的 AppKit `NSFilePromiseProvider`（文件使用 `public.data`，目录使用 `public.directory`）；目标接受拖放后，主线程 delegate 才取得目标最终 URL，并把这个 owned 路径交给常规的有界 SFTP 下载请求。delegate 不读取远端内容也不写本地文件；网络 stream 和安全本地 writer 仍由 SFTP worker 独占。该拖动存活期间，临时 AppKit destination 是裁剪到拖动开始时已启用 Local files 几何的子视图，并且只接受同一个发起原生 source。回拖到 AxSSH 窗口的其他位置会被拒绝；只在 Local files 区域释放才使用已捕获的 Local files 目录，因此焦点或导航变化不能重定向目标。该区域不可用时，拖到 Finder 仍可工作，但回到 AxSSH 会被拒绝。它作为普通的 `Downloaded` transfer 完成，不会自动打开结果文件。目录 Promise 只有在递归发现和所有子传输完成后才完成；发现阶段会重新确认远端目标仍是目录，若它已经变成普通文件则 Promise 失败。远端目录成功打开后，worker 通过与文件下载共用的 canonical、拒绝符号链接和不覆盖本地目标的安全 helper 创建根目录及每个发现的子目录，因此空目录和嵌套空目录也会保留。首次传输拒绝已经存在的最终目录；重连重放只允许复用仍为真实目录的既有目录树，仍不会替换文件或链接。链接、被过滤条目和全部非 macOS 平台仍走进程内拖动路径。请求成功排入 worker 后，临时 native destination 会立刻从窗口移除，因此下载进行时不会拦截 AxSSH 的普通输入；provider 和 delegate 只保留到该 terminal transfer 事件完成 promise。
 
 原生输入 hook 在 Slint 分发前捕获并校验真实的左键按下事件。启动拖拽只消费该事件一次，并复核原生窗口和实际按键状态；松开、失焦和窗口关闭会先清理快照，防止合并后的 Slint moved 重用已结束的手势。moved 回调不再读取 AppKit 后来的 `currentEvent`。鼠标快照和待完成原生 promise 各限制为 64 项。
 

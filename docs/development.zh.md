@@ -20,9 +20,9 @@ Debian/Ubuntu 可执行
 
 ## 依赖基线
 
-锁文件使用 Tokio 1.53.3、arboard 3.7.0、serde_json 1.0.154、uuid 1.28.0、
-rubato 5.0.1 和 base64 0.23.1。CPAL 仍固定为 0.17.3，以保留 macOS 11 支持；
-Slint 及其本地补丁保持 1.18.1。
+锁文件使用 Tokio 1.54.1、arboard 3.7.0、serde_json 1.0.154、uuid 1.29.0、
+notify 8.2.1、russh 0.65.0、rubato 5.0.1 和 base64 0.23.1。CPAL 仍固定为
+0.17.3，以保留 macOS 11 支持；Slint 及其本地补丁保持 1.18.1。
 
 音频 worker 使用 rubato 的 `Fft`、`FixedSync::Both` 和借用的平面缓冲适配器，
 保留预分配处理缓冲、起始延迟移除、尾部排空和最终包补零。测试对照上游整段转换结果检查
@@ -168,7 +168,9 @@ Software presentation 选择器和 pane layout hint 仍只属于 macOS。
 - SFTP 必须使用已认证 SSH worker 的子 subsystem channel；不得把 russh handle 或
   `RawSftpSession` 暴露给应用状态或 Slint。SFTP-only Tab 不得申请 PTY 或交互 shell，但
   必须保留与终端 Tab 相同的主机密钥和凭据门禁。增加文件操作时必须保留入站 packet、路径/名称、
-  分页、目录预算、请求和 shutdown 上限。普通下载必须保持 512 MiB 文件上限、64 KiB 请求
+  分页、请求和 shutdown 上限。后台通道预算由 `src/ssh/sftp_stream.rs` 共享，保留 browser 和文件消费者容量，
+  通道/文件重试必须有界且可取消。loopback 回归覆盖服务端会话限制、发现队列满、单文件通道丢失、退避取消和存活 attempt 隔离。
+  普通下载不设人为文件大小上限；私有缓存打开保留 512 MiB 上限。必须保持 64 KiB 请求
   chunk、有界 writer/event queue、逐操作与总超时、逐 Tab 并发上限、取消、经过校验的不替换本地
   发布和 owned join。成功下载保留在 Local files；只有用户显式打开本地文件时，才可经私有缓存调用
   平台 opener。
@@ -350,6 +352,13 @@ runner 上执行 x86_64 测试。
 writer 按 UTC 日期滚动，最多保留 15 个文件，并在进程持有的 guard 释放时刷新。
 日志位于平台本地 AxSSH 应用数据目录的 `logs` 子目录。默认过滤规则为
 `ax_ssh=info,russh=warn`，可由 `RUST_LOG` 覆盖。
+启动日志记录可执行文件、进程 ID、revision 和 debug/release 模式。
+SSH worker span 将 Tab/worker ID、唯一 task ID 与 profile、进程关联；transport 日志区分服务器断开
+（reason code 和有界消息）与 transport 错误，并记录 channel 请求/打开被拒绝、远端进程
+非零退出和退出信号。SFTP 失败记录 transfer ID 和 recoverable 标志。
+应用记录 worker 失败/断开、事件流意外结束、局部 channel/文件重试，以及自动重连的等待时间/次数。
+存活 SSH 连接上的单个传输失败不得触发整连接退役；重连计划由 session 终态驱动。这些日志由默认过滤规则启用，不包含凭据或文件内容；技术错误可能包含
+受影响路径或有界的服务端消息。
 About 从进程边界接收已经创建的目录，并通过 bridge 打开；Slint 线程不执行文件系统操作。
 同一目录包含私有的追加写入 `ax_ssh-crash.log`，由进程 panic hook 同步写入。它记录 panic
 消息、源码位置、进程/线程/平台元数据、`SLINT_BACKEND` 和强制采集的 Rust backtrace。

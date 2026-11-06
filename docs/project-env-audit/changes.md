@@ -1,5 +1,15 @@
 # 项目环境变化记录
 
+## 2026-11-03 Cargo.lock 依赖刷新环境验证
+
+- 日期：2026-11-03
+- 目的：应用 Rust 1.92 兼容依赖刷新、移除可修复的 pulldown-cmark 公告，并升级 notify 与 russh 的安全/稳定版本。
+- 改动范围：`Cargo.toml`、`Cargo.lock`、`src/ssh/tests.rs`、双语架构/开发说明、本环境记录及实施 tracker；不改 Slint 补丁、SSH trust 策略或 CPAL macOS 部署下限。
+- 执行内容：Cargo 以 Rust 1.92 MSRV 约束更新 92 个锁定依赖；`pulldown-cmark 0.13.5 -> 0.13.6`、`tokio 1.53.3 -> 1.54.1`、`uuid 1.28.0 -> 1.29.0`，清除已 yanked 的 `async-executor 1.14.0` 与 `clipboard-win 5.4.1`，再升级 `notify 8.2.0 -> 8.2.1` 与 `russh 0.64.1 -> 0.65.0`。CPAL 继续固定 0.17.3；russh 仍精确固定 `rsa 0.10.0-rc.18` 与 `pkcs1 0.8.0-rc.4`。
+- 验证结果：fmt、locked check/offline check、严格 all-target Clippy、SSH focused 19 项、完整测试 920 项、Rust 1.92 ARM64 macOS offline check、ARM64 macOS build、`cargo audit --ignore RUSTSEC-2023-0071`、仓库入口、tracker 与 `git diff --check` 通过。`RUSTSEC-2026-0433` 已清除；审计仍有 5 项未维护依赖警告。
+- 风险/待办：RSA Marvin timing 风险暂无修复版本，继续由 CI 单项例外覆盖；CPAL 0.18.2 要求 macOS 14.2，故不升级以保留 macOS 11 支持。Windows/Linux/Intel macOS 原生 CI 尚待验证；Windows MSVC 交叉 check 在 `aws-lc-sys` C 编译处因缺少目标 C toolchain 失败，不替代原生 CI。
+- 开工判定：依赖刷新与本机验证完成；其它平台交原生 CI。
+
 ## 2026-10-08 russh 0.64.1 升级环境验证
 
 - 日期：2026-10-08

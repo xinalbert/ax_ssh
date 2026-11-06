@@ -1466,10 +1466,11 @@ terminal Meta input.
 ## SSH security contract
 
 `russh::client::Handler::check_server_key` is the trust boundary. The application
-pins `russh 0.64.1` with its optional RSA feature enabled for compatibility with
-existing servers. This intentionally accepts RUSTSEC-2023-0071 because the
-pinned RSA implementation has no patched release; deployments where an attacker
-can observe signing timing should prefer Ed25519 or ECDSA. The application
+locks `russh 0.65.0` with its optional RSA feature enabled for compatibility with
+existing servers. This release also fixes unbounded client `EXT_INFO` messages
+and channel stalls caused by a peer's zero maximum packet size. The pinned RSA
+implementation has no patched release for RUSTSEC-2023-0071, so deployments where
+an attacker can observe signing timing should prefer Ed25519 or ECDSA. The application
 handles the `PublicKeyOrCertificate` callback by
 accepting only the concrete `PublicKey` variant. Server certificates are
 rejected because this profile/known_hosts contract does not implement
@@ -1664,10 +1665,18 @@ Authenticated connections follow this lifecycle:
   Close/window actions keep their own pointer regions, and dragging disables
   summary tooltips, including the preview;
 - the SFTP-only worker observes a closed SSH transport, while the browser
-  observes SFTP subsystem channel closure, even without UI commands; either
-  enters the existing bounded reconnect path. Transport/protocol failure in a
-  directory request also ends the browser, while a path or permission status
-  remains a request-local error;
+  observes SFTP subsystem channel closure, even without UI commands. A browser
+  channel close on a live SSH transport is first recovered by reopening the
+  `sftp` subsystem on that same authenticated connection and restoring the
+  last successful directory without cancelling independent transfer channels.
+  Reopens allow two consecutive attempts with 1/2-second backoff; the budget
+  resets only after a directory page succeeds and that browser stays alive for
+  30 seconds. A transport close, reopen failure, or exhausted budget then enters
+  the existing bounded SSH reconnect path. Pending reopen tasks are cancelled
+  and joined on shutdown. Rejected browse commands during recovery remain
+  request-local errors. Transport or
+  protocol failure in a directory request ends that browser, while a path or
+  permission status remains a request-local error;
 - tab close requests cancellation/disconnect before invalidating the tab/attempt
   route, and transfers its cleanup to the application shutdown registry;
 - window shutdown requests disconnect for every remaining worker and joins them
@@ -1719,7 +1728,8 @@ reconnect, the SFTP Tab retains the last successfully displayed remote directory
 as its next initial path; before the first page succeeds, it retains any
 Tab-specific target path. Neither path is written to the profile by reconnect.
 Local navigation remains Tab-local, and pending transfers are cancelled rather
-than automatically replayed after reconnection.
+than restored as live worker tasks; recoverable transfer intents are replayed
+after reconnection as described in the transfer contract below.
 
 The first phase provides a dual-pane directory browser. Slint owns two bounded
 splitters: one changes the remote/local widths and one changes the files/transfer
@@ -1847,9 +1857,34 @@ client-imposed character-count cap; server and operating-system constraints
 remain authoritative and are reported for the affected entry.
 Invalid, unsupported, filtered, or unreadable entries are reported while eligible
 files continue. Each SFTP Tab permits a
-configurable number of simultaneous transfers (1-16, default 2), and each
+configurable transfer concurrency preference (1-16, default 2), and each
 transfer owns a separate SFTP subsystem stream. Concurrency controls throughput
-and queueing; it does not discard accepted files.
+and queueing; it does not discard accepted files. Worker admission is bounded:
+if its recursive-root queue is full, it reports an explicit non-recoverable
+failure instead of silently replacing an earlier root.
+
+The SSH owner shares six background SFTP admission permits across discovery,
+file transfers, and ordered writes; each permit lives with its stream, including
+library I/O shutdown. Only one discovery runs at a time, and the effective file
+concurrency is capped at four even when the preference is higher. This reserves
+capacity for the discovery producer and ordered writer and prevents full child
+queues from blocking all consumers. The browser has a separate reserved channel;
+the best-effort release probe can use one more. Server limits can be lower and
+are not negotiated by SFTP. Channel opening refusals (`AdministrativelyProhibited`
+or `ResourceShortage`) are retried twice on the same transport after 250/500 ms,
+including the brief interval while previous channels close.
+
+A file stream's transient I/O failure is retried at most twice after 1/2 seconds,
+with fresh metadata checks and private temporary data. Failure aborts the current
+local writer without cancelling the user's whole transfer intent. User cancellation
+still stops opening, backoff and active I/O. Upload retries use a fresh temporary
+execution ID; an unconfirmed publication is reported for review instead of replayed,
+as a lost rename reply cannot prove whether the remote target was published.
+Exhausted local failures are explicit terminal file/root failures and siblings
+continue. Only a closed transport marks a transfer failure as waiting for reconnect;
+the application waits for the worker's session terminal event and never retires a
+live SSH attempt merely because a transfer failed. The existing bounded browser
+recovery can still report a session failure after its own budget is exhausted.
 
 The process-wide upload limiter is also configurable from Settings > SFTP
 (1-32 simultaneous uploads, default 8). Lowering the setting does not cancel
@@ -1884,6 +1919,16 @@ The active-page batch actions share the right side of the transfer page bar;
 they do not reserve a second toolbar row or introduce another callback path.
 Pause/resume is a worker-lifetime contract: the writer retains its partial file
 and the stream resumes at its current offset only while that worker lives.
+When an SSH transport closes, the application retains each accepted, unfinished
+transfer intent as owned paths, sizes, filters, and batch metadata. Active,
+queued, directory-discovery, and conflict-waiting rows move to a waiting
+state; worker admission remains bounded while the application replays retained
+intents in order after a new SFTP attempt reports `Connected`. Directory roots are rediscovered and child IDs
+are stable for the root and remote path, so stale child rows cannot be duplicated.
+The old worker's events remain fenced by the attempt ID. This is retry recovery,
+not byte-level resume: existing `.part` and remote temporary files are still
+discarded on failure and are never reused without an integrity proof. User
+disconnect and Tab close clear the intents and do not schedule replay.
 
 Each transfer row retains its optional local path and remote target only
 inside application state. Terminal records can reveal a non-symlink local path
@@ -1929,8 +1974,8 @@ entries, and explicitly filtered names are reported while scanning continues.
 Normal SFTP upload and download have no client-imposed per-file size cap. The
 worker creates missing remote directories through its SFTP session, rejecting
 links or unexpected target types. The per-Tab concurrency setting (1-16, default
-2) applies to uploads and downloads; remaining accepted files wait in the bounded
-worker queue. The application passes only a validated path and size;
+2) applies to uploads and downloads within the channel budget described above;
+remaining accepted files wait in the bounded worker queue. The application passes only a validated path and size;
 the worker opens the source once on a blocking task, revalidates its path and
 open-file identity per chunk, and streams through a two-chunk local queue into
 the 16-request window. Every write acknowledgement is checked before publish.
@@ -1966,8 +2011,9 @@ is not ready rather than guessing from the active directory.
 Slint `DropArea` continues to handle the in-process paths. Consecutive native
 dropped-file events share one short-lived upload batch for conflict decisions.
 
-On macOS, beginning a drag on a visible remote regular file instead creates an
-AppKit `NSFilePromiseProvider` with copy-only semantics. Its main-thread
+On macOS, beginning a drag on a visible remote regular file or directory instead creates an
+AppKit `NSFilePromiseProvider` with copy-only semantics (`public.data` for files and
+`public.directory` for directories). Its main-thread
 delegate receives the selected final URL only after a drop target accepts it,
 then hands that owned path to the ordinary bounded SFTP transfer request. The
 delegate never reads remote content or writes files; the SFTP worker still owns
@@ -1978,9 +2024,17 @@ A return anywhere else in the AxSSH window is rejected; a drop in the Local
 files region uses the captured Local files directory, so focus or navigation
 changes cannot retarget it. If that region is unavailable, Finder destinations
 still work but a return to AxSSH is rejected. It completes as a normal
-`Downloaded` transfer and does not auto-open the resulting file. Remote
-directories, links, filtered entries, and every non-macOS platform retain the
-internal drag path. The temporary native destination detaches as soon as the
+`Downloaded` transfer and does not auto-open the resulting file. Symbolic links,
+filtered entries, and every non-macOS platform retain the internal drag path.
+A directory promise completes only after recursive SFTP discovery and every
+child transfer finish. Discovery first confirms the remote target is still a
+directory; if it changed to a regular file, the promise fails. After the remote
+directory opens, the worker creates the promised root and every discovered
+subdirectory through the same canonical, symlink-rejecting, no-overwrite local
+path helper used by file downloads, so empty directories and nested empty
+directories are preserved. A first attempt rejects an already existing final
+directory; reconnect replay may reuse only an existing real directory tree and
+still never replaces files or links. The temporary native destination detaches as soon as the
 request is queued, so it cannot intercept normal AxSSH input while the transfer
 runs; the provider and delegate stay retained only until that terminal transfer
 event completes the promise.

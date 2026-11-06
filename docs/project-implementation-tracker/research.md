@@ -1,6 +1,46 @@
 # 项目研究记录
 
+## 2026-11-05 通道拒绝与循环重连实证
+
+- 时间：2026-11-05 14:03 +0800
+- 检索问题：为何一批文件触发反复重连，主流客户端如何限制并发？
+- 检索原因：用户已运行诊断构建；13:51:56 同时拒绝多个新 channel，紧接 app 主动退役并在 1 秒后重连。
+- 来源列表：[OpenSSH MaxSessions](https://man.openbsd.org/sshd_config#MaxSessions)、[OpenSSH sftp](https://man.openbsd.org/sftp)、[WinSCP transfer queue](https://winscp.net/eng/docs/transfer_queue)；本机诊断日志及 worker/monitor 源码。
+- 关键结论：MaxSessions 限制同一网络连接上的并存 shell/subsystem，OpenSSH 默认 10；sftp 的请求流水线并发不是通道数。WinSCP 默认两项后台操作，其余排队，后台连接保留复用。AxSSH 原先最多 8 discovery 加可配置 16 transfer，另有 browser/write/probe，叠加无统一预算。实锤链为 AdministrativelyProhibited -> recoverable transfer -> app retire -> 1 秒重连，无先行心跳超时；服务端的实际 MaxSessions 尚未读取。
+- 对实施计划的影响：S6 限制同一连接的后台 subsystem 总量并只并行一个 discovery，保留 browser 容量；通道拒绝在原连接有限退避重试，文件流失败有限重试并重新验证文件；app 只由会话终态驱动 reconnect，持续局部失败明确上报。SSH owner 管预算与重试，app owner 仅映射状态，不改信任或凭据。
+- 未解决问题：实际 sshd 策略和初始握手超时需服务端日志才能确定；新行为仍需用户在真实服务器复现。
+
+## 2026-11-05 SSH 心跳与 SFTP channel 恢复边界
+
+- 时间：2026-11-05 12:17 +0800
+- 检索问题：已有 SSH keepalive 时，SFTP channel 关闭是否应直接断开整个 SSH 会话？
+- 检索原因：用户质疑反复断联处理，要求先核对标准再修改。
+- 来源列表：[RFC 4254 §5 与 §5.3](https://www.rfc-editor.org/rfc/rfc4254.html#section-5.3)、[OpenSSH ServerAliveInterval/ServerAliveCountMax](https://man.openbsd.org/ssh_config#ServerAliveInterval)；本机锁定 russh 0.65.0 channel/client 和 russh-sftp 3.0.1 reader/request 源码，以及 `src/ssh.rs`、`src/sftp.rs`。
+- 关键结论：SSH 在同一加密连接复用多个 channel，channel EOF/close 只结束对应数据流；ServerAlive 检测对端是否响应，不承诺 subsystem 进程永不退出。AxSSH 已配置 20 秒 keepalive、3 次未响应上限和 90 秒 transport inactivity；browser 另有 15 秒请求/握手超时与 EOF 观察。浏览器关闭后直接退出 SSH worker 会把局部故障放大为整条连接重建。RFC 不规定自动重开次数或退避时长。
+- 对实施计划的影响：S5 在 live transport 上优先重开 `sftp` subsystem，恢复最后成功目录且独立传输继续；最多连续两次、1/2 秒退避，首个目录页成功并持续存活 30 秒后恢复额度，参数属于本项目策略。任务仅返回 stream，由 worker 持有 browser 与取消/join；失败/额度耗尽再进入既有 SSH reconnect 和传输意图重放。
+- 未解决问题：客户端 EOF 不能证明服务端关闭的具体原因，须结合服务器 sshd/subsystem 日志判断进程退出、策略/资源限制或网络因素；真实服务器和非 macOS 平台仍需手工/原生 CI 验证。
+
+## 2026-11-04 SFTP 断连恢复公共实现检索
+
+- 时间：2026-11-04 09:00 +0800
+- 检索问题：SFTP transport 断开后，如何避免排队、活动和等待冲突确认的文件传输被静默丢弃？
+- 检索原因：用户反馈 SFTP 报错后传输被漏掉，需要先检索公共客户端的重试语义再确定修复边界。
+- 来源列表：[OpenSSH sftp manual](https://man.openbsd.org/sftp)、[OpenSSH sftp(1)](https://man7.org/linux/man-pages/man1/sftp.1.html)、[WinSCP resume](https://winscp.net/eng/docs/resume)、[lftp manual](https://lftp.yar.ru/lftp-man.html)。
+- 关键结论：OpenSSH 的 `reget`/`reput`、WinSCP 的 resume 和 lftp 的 `get -c`/`put -c` 都把中断工作保留为可重试意图；临时文件在成功发布前保留，并在续传时校验已有内容或指纹。当前 AxSSH 的 SFTP worker 在 transport 关闭时只清理 task，不为 `queued_requests`、`queued_uploads`、`pending_upload_conflicts`、未启动 discovery 和 deferred discovery 发送终态或保留提交意图；应用层随后 `SftpBrowserState::reset()` 清空传输行，因此会出现“报错就不传输”的漏传现象。
+- 对实施计划的影响：第一阶段只实现意图保留和新连接重新入队，继续使用现有私有临时文件、完整性检查和失败清理策略；不直接复用未经校验的旧 `.part` 或远端临时文件。真正的字节级断点续传另列为后续目标。
+- 未解决问题：连接断开时活动任务的精确进度不能安全转为续传偏移；重连后的远端目录/冲突状态可能已变化，必须重新发现并重新校验。用户主动断开或关闭 Tab 不应自动重试。
+
 历史时间字段说明：2026-10-20 整理时，缺失的精确时刻优先依据原始标题补齐；否则使用可追溯的 Git 入库时间并逐条标明依据。原始事件日期/时区保留，入库时间不等同事件发生时间，实施内容与结论未改写。允许缺少时间字段的旧月份条目保持原样。
+
+## 2026-11-03 依赖候选与 SSH 安全更新审查
+
+- 时间：2026-11-03 13:21 +0800
+- 检索问题：MSRV 兼容刷新后仍落后的 CPAL、PKCS#1、RSA 与 russh 候选中，哪些适合本轮更新？
+- 检索原因：`cargo update --dry-run -vv` 报告四项落后版本；需要核对平台下限、SSH 上游安全修复和精确传递依赖约束。
+- 来源列表：[notify 8.2.1 release](https://github.com/notify-rs/notify/releases)；[russh 0.65.0 release](https://github.com/Eugeny/russh/releases/tag/v0.65.0)；[russh 0.65.0 crate metadata](https://crates.io/crates/russh/0.65.0)；[CPAL README](https://github.com/RustAudio/cpal/blob/master/README.md)；[CPAL 0.18.2 metadata](https://crates.io/crates/cpal/0.18.2)；[RSA README](https://github.com/RustCrypto/RSA/blob/master/README.md)；[RSA Marvin advisory](https://rustsec.org/advisories/RUSTSEC-2023-0071.html)；[PKCS#1 0.8.0 metadata](https://crates.io/crates/pkcs1/0.8.0)。
+- 关键结论：notify 8.2.1 的 MSRV 为 1.85，修复空路径 `unwatch` 崩溃并将 macOS FSEvents 后端从 `fsevent-sys` 迁移至 objc2；russh 0.65.0 的 MSRV 为 1.89，修复 SSH 客户端未限制 EXT_INFO 消息数量和对端声明零最大包大小导致 channel 写入停滞等问题。CPAL 0.18.2 的官方平台表要求 macOS 14.2，不能满足 AxSSH 的 macOS 11 部署目标。虽有 `rsa 0.10.0-rc.20` 和 `pkcs1 0.8.0`，russh 0.65.0 的 crate manifest 仍精确依赖 `rsa 0.10.0-rc.18` 与 `pkcs1 0.8.0-rc.4`；RustSec 对 Marvin timing advisory 仍未列出修复版本。
+- 对实施计划的影响：升级 russh 到 0.65.0，并只适配本仓库 loopback 测试服务器的 `VerifiedPublicKey` 回调；保留 CPAL 0.17.3、russh 固定的 RSA/PKCS#1 prerelease 及现有单项审计例外，不用本地 override 绕过上游精确依赖。
+- 未解决问题：非 macOS 平台仍依赖原生 CI 验证；RSA timing 风险只有在上游发布可用修复并解除 russh 精确 pin 后才能关闭。
 
 ## 2026-10-30 RustSec 修复版本与撤回状态
 
@@ -770,3 +810,12 @@
 - 关键结论：静默等待需要硬期限；过早绘制可暴露部分更新。显式 2026 是独立语义，不能把光标显隐当作事务。未找到直接统一 benchmark，采用官方机制证据与本仓库确定性回归。
 - 对实施计划的影响：R2 在每轮聚焦 pending 输出加入 nominal 一帧静默/两帧硬期限，继续遵守配置 FPS；每次新准入刷新单槽 pending 并合并旧 damage。参数为工程选择，parser/输入/协议应答不等待。
 - 未解决问题：实际 TUI 和 transport 待用户补充；超过有限预算的非同步输出仍存在中间态边界，GUI 视觉由用户验收。
+
+## 2026-11-06 macOS SFTP 目录 Promise 与标准落地边界
+
+- 检索问题：系统文件管理器的目录拖放是否应由 AppKit promise 负责目标路径，而由应用的 SFTP worker 负责实际递归传输；空目录和目标冲突如何处理？
+- 检索原因：目录原生拖放已接入，但递归下载原先只在写入文件时创建父目录，会漏掉空目录；Promise 还需要防止远端类型变化与本地覆盖。
+- 来源列表：Apple `NSFilePromiseProvider`/`NSFilePromiseProviderDelegate` API（系统 SDK）、现有 AxSSH `src/app/macos_file_drag.rs`、`src/sftp/transfer/discovery.rs` 与 `src/sftp/transfer/local.rs`。
+- 关键结论：AppKit file promise 的 delegate 只应接收目标 URL 并异步完成 promise；网络传输和文件落盘必须由应用 worker 控制。目录目标应在 discovery 确认远端目录并成功打开后再创建；本地创建使用 `create_dir`/`symlink_metadata`/canonical 边界，首次传输拒绝同名最终目录，重连重放可复用已创建的真实目录；远端目录变成普通文件必须失败。
+- 对实施计划的影响：在 `local.rs` 增加可复用的目录目标创建 helper，discovery 为根和每个嵌套目录调用；为空目录、嵌套空目录、已有目标和类型变化增加回归；不让 AppKit delegate 直接访问文件系统，不引入第二套 SFTP 实现。
+- 未解决问题：Finder 实际拖放、取消、同名目录、断线重连和其它平台原生 CI 仍需目标平台人工验收。
