@@ -1277,3 +1277,20 @@
 - 环境事实：Rust 2024/MSRV 1.92.0、锁定 Slint 1.18.1/russh 0.64.1 和升级后的媒体依赖；本机 rustc/Cargo 1.99.0、Python 3.14.6，ARM64 macOS/Windows MSVC Rust targets；本轮未安装工具链/SDK/包或调整依赖。
 - 验证：布局移动后的 880 项 Rust 回归已通过；基线 fmt/check/严格 Clippy、665 × 11 翻译、生成图标和本地链接已通过，最终源码及新增校验脚本收尾见实施记录。
 - 剩余边界：无 Windows/Linux 原生环境，不执行非原生 Intel 程序；真实设备/keyring/GUI/远端仍由对应平台验收，不启动应用或自主截图。
+
+
+## 2026-11-07 SFTP 条件编译修复前环境复核
+
+- 日期：2026-11-07
+- 变化摘要：旧环境快照的本机 Rust/Python、安装 targets 和任务范围已过期；改为当前最小环境记录。
+- 受影响文件：`docs/project-env-audit/current.md`、`docs/project-env-audit/changes.md`。
+- 更新后的命令或环境：默认 Rust/Cargo 1.97.1、Python 3.10.20、ARM64/Intel macOS targets；保留 Rust 2024/MSRV 1.92、锁定依赖和 CI 命令，本轮不安装软件或切换 toolchain。
+- 验证结果：Cargo/lock/CI 与本机 CLI 已核对，允许开工；Rust 门禁待执行。Windows/Linux 无本机原生验证环境。
+
+## 2026-11-07 07:49 +0800 SFTP cfg 修复验证环境确认
+
+- 日期：2026-11-07
+- 变化摘要：离线缓存最初缺 notify 8.2.1，联网按现有 Cargo.lock 下载后，全部本机门禁通过。
+- 受影响文件：`docs/project-env-audit/current.md`、`docs/project-env-audit/changes.md` 和本机 Cargo 缓存。
+- 更新后的命令或环境：标准 locked/offline 命令与 ARM64 macOS CI target 命令；依赖锁文件、Rust toolchain 和 CI matrix 均未修改。
+- 验证结果：fmt/check/严格 all-target Clippy、945 项完整测试和14 项 focused 重连回归通过；Windows/Linux/Intel macOS 原生 CI 仍待执行。
