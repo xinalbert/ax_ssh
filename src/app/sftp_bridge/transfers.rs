@@ -457,8 +457,9 @@ pub(in crate::app) async fn requeue_transfer_intents(
         for intent in intents {
             let transfer_id = match &intent {
                 SftpTransferIntent::DownloadRoot { transfer_id, .. }
-                | SftpTransferIntent::DownloadFile { transfer_id, .. }
                 | SftpTransferIntent::Upload { transfer_id, .. } => *transfer_id,
+                #[cfg(target_os = "macos")]
+                SftpTransferIntent::DownloadFile { transfer_id, .. } => *transfer_id,
             };
             if submitted.contains(&transfer_id) {
                 continue;
@@ -496,6 +497,7 @@ pub(in crate::app) async fn requeue_transfer_intents(
                         )
                         .await
                 }
+                #[cfg(target_os = "macos")]
                 SftpTransferIntent::DownloadFile {
                     transfer_id,
                     remote_path,

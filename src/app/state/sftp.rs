@@ -198,6 +198,7 @@ impl SftpBrowserState {
         self.transfer_intent_revision = self.transfer_intent_revision.wrapping_add(1);
     }
 
+    #[cfg(target_os = "macos")]
     pub(in crate::app) fn register_download_file_intent(
         &mut self,
         transfer_id: Uuid,
@@ -294,8 +295,9 @@ impl SftpBrowserState {
     pub(in crate::app) fn has_transfer_intent(&self, intent: &SftpTransferIntent) -> bool {
         let transfer_id = match intent {
             SftpTransferIntent::DownloadRoot { transfer_id, .. }
-            | SftpTransferIntent::DownloadFile { transfer_id, .. }
             | SftpTransferIntent::Upload { transfer_id, .. } => *transfer_id,
+            #[cfg(target_os = "macos")]
+            SftpTransferIntent::DownloadFile { transfer_id, .. } => *transfer_id,
         };
         self.transfer_intents
             .get(&transfer_id)
@@ -321,20 +323,23 @@ impl SftpBrowserState {
         self.upload_conflicts.clear();
         self.selected_transfers.clear();
         self.reconnect_replay_pending = true;
-        let intent_count = self.transfer_intents.len();
-        self.transfer_intents.retain(|_, intent| {
-            !matches!(
-                intent,
-                SftpTransferIntent::DownloadFile {
-                    replay_on_reconnect: false,
-                    ..
-                }
-            )
-        });
-        self.transfer_intent_order
-            .retain(|id| self.transfer_intents.contains_key(id));
-        if self.transfer_intents.len() != intent_count {
-            self.transfer_intent_revision = self.transfer_intent_revision.wrapping_add(1);
+        #[cfg(target_os = "macos")]
+        {
+            let intent_count = self.transfer_intents.len();
+            self.transfer_intents.retain(|_, intent| {
+                !matches!(
+                    intent,
+                    SftpTransferIntent::DownloadFile {
+                        replay_on_reconnect: false,
+                        ..
+                    }
+                )
+            });
+            self.transfer_intent_order
+                .retain(|id| self.transfer_intents.contains_key(id));
+            if self.transfer_intents.len() != intent_count {
+                self.transfer_intent_revision = self.transfer_intent_revision.wrapping_add(1);
+            }
         }
         let intents = &self.transfer_intents;
         self.transfers

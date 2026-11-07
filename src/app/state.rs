@@ -341,6 +341,7 @@ pub(super) enum SftpTransferIntent {
         expected_directory: bool,
         completed_children: HashSet<String>,
     },
+    #[cfg(target_os = "macos")]
     DownloadFile {
         transfer_id: Uuid,
         remote_path: String,
