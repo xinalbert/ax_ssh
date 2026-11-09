@@ -107,12 +107,12 @@ jobs:
             target: aarch64-unknown-linux-gnu
             name: linux-aarch64
             binary: ax_ssh
-          - os: macos-14
+          - os: macos-15
             target: aarch64-apple-darwin
             name: macos-aarch64
             binary: ax_ssh
             macos_arch: arm64
-          - os: macos-14
+          - os: macos-15
             target: x86_64-apple-darwin
             name: macos-x86_64
             binary: ax_ssh
@@ -221,7 +221,7 @@ jobs:
   macos-universal:
     name: macos-universal
     needs: build
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
         with:

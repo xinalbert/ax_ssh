@@ -437,6 +437,11 @@ and macOS arm64/x86_64. Every matrix job runs `cargo check --target`, strict
 `cargo test --target` only when that target is native to its GitHub runner. The
 Intel macOS job therefore compiles but does not execute x86_64 tests on the
 Apple Silicon runner.
+CI and Release pin these macOS jobs, including universal bundle assembly, to
+the ARM64 `macos-15` runner. GitHub retired `macos-14` on November 2, 2026;
+jobs using that label can be cancelled with a runner configuration error before
+any build or cache step runs. This failure is separate from cache storage
+limits. See the [runner retirement announcement](https://github.blog/changelog/2026-10-01-github-actions-macos-14-runner-image-retirement/).
 Releases always compile a fresh `--release --locked` binary and never publish
 CI's check or debug artifacts.
 

@@ -332,6 +332,10 @@ CI 会分别检查、lint 并链接 Windows x86_64、Linux x86_64/aarch64 和 ma
 `cargo clippy --all-targets --target` 和 `cargo build --target`；只有 target 与 GitHub runner
 原生匹配时才执行 `cargo test --target`。因此 Intel macOS job 会编译，但不会在 Apple Silicon
 runner 上执行 x86_64 测试。
+CI 和 Release 的这些 macOS job（包括通用 bundle 组装）固定使用 ARM64 `macos-15` runner。
+GitHub 已于 2026 年 11 月 2 日退役 `macos-14`；继续使用该标签的 job 可能在构建或缓存步骤
+运行前就因 runner 配置不受支持而取消。该错误与缓存空间上限是不同问题，见
+[官方退役公告](https://github.blog/changelog/2026-10-01-github-actions-macos-14-runner-image-retirement/)。
 发布仍会重新执行 `--release --locked` 编译，绝不把 CI 的 check 或 debug 产物作为发行物。
 
 构建前会校验推送的 tag 确实是 annotated release tag，并确认 Cargo package、锁文件和 macOS bundle

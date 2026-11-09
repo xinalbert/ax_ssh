@@ -821,3 +821,13 @@
 - 关键结论：AppKit file promise 的 delegate 只应接收目标 URL 并异步完成 promise；网络传输和文件落盘必须由应用 worker 控制。目录目标应在 discovery 确认远端目录并成功打开后再创建；本地创建使用 `create_dir`/`symlink_metadata`/canonical 边界，首次传输拒绝同名最终目录，重连重放可复用已创建的真实目录；远端目录变成普通文件必须失败。
 - 对实施计划的影响：在 `local.rs` 增加可复用的目录目标创建 helper，discovery 为根和每个嵌套目录调用；为空目录、嵌套空目录、已有目标和类型变化增加回归；不让 AppKit delegate 直接访问文件系统，不引入第二套 SFTP 实现。
 - 未解决问题：Finder 实际拖放、取消、同名目录、断线重连和其它平台原生 CI 仍需目标平台人工验收。
+
+## 2026-11-09 10:04 +0800 macOS CI runner 退役诊断
+
+- 时间：2026-11-09 10:04 +0800
+- 检索问题：为何两个 macOS CI job 自动取消，是否与 10 GB 缓存配额有关？
+- 检索原因：用户澄清是运行时自动取消，需要依据真实运行错误定位。
+- 来源列表：[CI #153](https://github.com/xinalbert/ax_ssh/actions/runs/42431769062)、[Intel target job](https://github.com/xinalbert/ax_ssh/actions/runs/42431769062/job/128582031694)、[ARM64 target job](https://github.com/xinalbert/ax_ssh/actions/runs/42431769062/job/128582031758)、[GitHub macOS 14 退役公告](https://github.blog/changelog/2026-10-01-github-actions-macos-14-runner-image-retirement/)、[官方 runner 标签](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)、[缓存淘汰策略](https://docs.github.com/en/actions/how-tos/manage-workflow-runs/manage-caches)。
+- 关键结论：2026-11-08 的两个 job 都提示 macos-14-arm64-us-default 配置不受支持；macos-14 已在 11 月 2 日退役。官方 macos-15 是受支持的 ARM64 标签；此配置错误与缓存上限不同，缓存满时 GitHub 按淘汰策略删除旧条目。
+- 对实施计划的影响：仅将 CI/Release 五处 macos-14 更新为 macos-15，维持五 target、ARM64 原生测试、Intel 交叉编译、Universal 打包和原缓存。撤销此前误解导致的移除 macOS/cache 策略调整。
+- 未解决问题：完整日志需 GitHub 登录；缓存 API 限流未取得大小。真实新 runner、远端构建及发行打包需变更推送后验证，旧提交重跑不会使用本地修复。
