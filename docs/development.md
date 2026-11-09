@@ -12,6 +12,24 @@
 
 On Debian/Ubuntu, install the desktop and audio build dependencies with
 `sudo apt-get install pkg-config libfontconfig1-dev libxkbcommon-dev libasound2-dev`.
+Skia source builds also need a C++20 compiler and a matching libclang for
+bindgen. On Ubuntu 22.04, add the [LLVM 21 package repository](https://apt.llvm.org/)
+and install `clang-21 libclang-21-dev g++-12`. The shared
+[Linux setup action](../.github/actions/setup-linux-build/action.yml) contains
+the signed repository configuration used by CI and Release. Select these tools
+before running Cargo locally:
+
+```bash
+export CC=/usr/bin/clang-21 CXX=/usr/bin/clang++-21
+export CLANGCC="$CC" CLANGCXX="$CXX"
+export CLANG_PATH="$CC"
+export LIBCLANG_PATH=/usr/lib/llvm-21/lib
+```
+
+Ubuntu 22.04's default Clang can fail on Skia's C++20 PDF code when Cargo falls
+back to a source build. Selecting the software renderer at runtime still
+compiles the enabled Skia dependency.
+
 macOS microphone testing uses a packaged `.app` with the microphone usage
 description; device permissions and real audio behavior need native testing.
 
@@ -431,6 +449,11 @@ failed jobs and pull-request/tag runs cannot save it. Release jobs restore that
 cache but never save into it. The cache key includes the target triple, Rust
 version, and `Cargo.lock` fingerprint, so a changed lockfile or different
 architecture cannot reuse an incompatible cache.
+Linux jobs select Clang 21 before restoring caches and include the compiler and
+libclang selection in the cache fingerprint. The same setup covers both Linux
+architectures, coverage, MSRV, and release preflight/build. The runners remain
+Ubuntu 22.04, retaining its glibc baseline and system libstdc++ rather than
+raising the runtime baseline to fix a build-tool incompatibility.
 CI independently checks, lints, and links Windows x86_64, Linux x86_64/aarch64,
 and macOS arm64/x86_64. Every matrix job runs `cargo check --target`, strict
 `cargo clippy --all-targets --target`, and `cargo build --target`; tests use

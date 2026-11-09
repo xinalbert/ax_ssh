@@ -12,7 +12,22 @@
 
 Debian/Ubuntu 可执行
 `sudo apt-get install pkg-config libfontconfig1-dev libxkbcommon-dev libasound2-dev`
-安装桌面和音频构建依赖。macOS 麦克风测试应运行含麦克风用途声明的打包 `.app`；
+安装桌面和音频构建依赖。Skia 源码构建还需要 C++20 编译器及匹配的 libclang 供
+bindgen 使用。Ubuntu 22.04 需要添加 [LLVM 21 软件源](https://apt.llvm.org/)，
+安装 `clang-21 libclang-21-dev g++-12`。CI 和 Release 使用的签名软件源配置见
+[共用 Linux setup action](../.github/actions/setup-linux-build/action.yml)。本机构建前选择：
+
+```bash
+export CC=/usr/bin/clang-21 CXX=/usr/bin/clang++-21
+export CLANGCC="$CC" CLANGCXX="$CXX"
+export CLANG_PATH="$CC"
+export LIBCLANG_PATH=/usr/lib/llvm-21/lib
+```
+
+Cargo 回退到 Skia 源码编译时，Ubuntu 22.04 的默认 Clang 可能在 C++20 PDF 代码处失败。
+运行时选择 software renderer 仍会编译已启用的 Skia 依赖。
+
+macOS 麦克风测试应运行含麦克风用途声明的打包 `.app`；
 设备权限和真实音频行为需在目标平台验收。
 
 根 Cargo 隐式 workspace 只包含 `ax_ssh` package。`third_package/axshell` 是
@@ -327,6 +342,9 @@ git push origin 2026-08-12
 CI 只在默认分支成功后写入共享 Cargo cache，失败、PR 和 tag job 不会写入；发布 job 只恢复
 该 cache，不会写回。缓存键包含 target triple、Rust 版本和 `Cargo.lock` 指纹，所以锁文件变更
 或架构不同都不会复用不兼容的缓存。
+Linux job 在恢复缓存前选择 Clang 21，将编译器与 libclang 选择纳入缓存指纹；两个 Linux
+架构、coverage、MSRV 以及 Release preflight/正式构建共用该配置。runner 保持
+Ubuntu 22.04，沿用其 glibc 基线和系统 libstdc++，避免为构建工具兼容问题提高运行环境基线。
 CI 会分别检查、lint 并链接 Windows x86_64、Linux x86_64/aarch64 和 macOS arm64/x86_64。
 每个 matrix job 都执行 `cargo check --target`、严格的
 `cargo clippy --all-targets --target` 和 `cargo build --target`；只有 target 与 GitHub runner

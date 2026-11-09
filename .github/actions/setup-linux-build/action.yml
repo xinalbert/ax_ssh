@@ -1,0 +1,44 @@
+name: Set up Linux build dependencies
+description: Use Clang 21 for Skia C++20 builds on Ubuntu 22.04 without changing the runtime baseline.
+
+runs:
+  using: composite
+  steps:
+    - name: Install desktop dependencies and LLVM 21
+      shell: bash
+      run: |
+        set -euo pipefail
+        . /etc/os-release
+        if [[ "$ID" != ubuntu || "$VERSION_ID" != 22.04 ]]; then
+          echo "This action requires Ubuntu 22.04; review the LLVM repository before changing runners." >&2
+          exit 1
+        fi
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends ca-certificates curl gnupg
+        key_file="$(mktemp)"
+        trap 'rm -f "$key_file" "${key_file}.gpg"' EXIT
+        curl --fail --silent --show-error --location --retry 3 \
+          https://apt.llvm.org/llvm-snapshot.gpg.key --output "$key_file"
+        gpg --batch --yes --dearmor --output "${key_file}.gpg" "$key_file"
+        sudo install -m 644 "${key_file}.gpg" /usr/share/keyrings/axssh-llvm.gpg
+        rm -f "${key_file}.gpg"
+        echo 'deb [signed-by=/usr/share/keyrings/axssh-llvm.gpg] https://apt.llvm.org/jammy/ llvm-toolchain-jammy-21 main' \
+          | sudo tee /etc/apt/sources.list.d/axssh-llvm-21.list > /dev/null
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          clang-21 libclang-21-dev g++-12 \
+          pkg-config libfontconfig1-dev libxkbcommon-dev libasound2-dev
+
+    - name: Select the Skia compiler and bindgen library
+      shell: bash
+      run: |
+        set -euo pipefail
+        {
+          echo 'CC=/usr/bin/clang-21'
+          echo 'CXX=/usr/bin/clang++-21'
+          echo 'CLANGCC=/usr/bin/clang-21'
+          echo 'CLANGCXX=/usr/bin/clang++-21'
+          echo 'CLANG_PATH=/usr/bin/clang-21'
+          echo 'LIBCLANG_PATH=/usr/lib/llvm-21/lib'
+        } >> "$GITHUB_ENV"
+        /usr/bin/clang++-21 --version

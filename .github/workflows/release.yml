@@ -45,8 +45,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt
-      - name: Install Linux build dependencies
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libfontconfig1-dev libxkbcommon-dev libasound2-dev
+      - name: Set up Linux build dependencies
+        uses: ./.github/actions/setup-linux-build
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Validate repository boundaries and generated icons
@@ -133,11 +133,13 @@ jobs:
         shell: bash
         run: echo "AXSSH_BUILD_REVISION=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_ENV"
 
-      - name: Install Linux build dependencies
+      - name: Set up Linux build dependencies
         if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y --no-install-recommends pkg-config libfontconfig1-dev libxkbcommon-dev libasound2-dev dpkg-dev
+        uses: ./.github/actions/setup-linux-build
+
+      - name: Install Debian packaging dependencies
+        if: runner.os == 'Linux'
+        run: sudo apt-get install -y --no-install-recommends dpkg-dev
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -149,6 +151,7 @@ jobs:
         with:
           shared-key: release-${{ matrix.target }}
           save-if: false
+          env-vars: CC CXX CLANGCC CLANGCXX CLANG_PATH LIBCLANG_PATH
 
       - name: Build release binary
         run: cargo build --release --locked --target ${{ matrix.target }}

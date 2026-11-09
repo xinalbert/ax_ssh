@@ -36,6 +36,9 @@ jobs:
         with:
           components: rustfmt
           targets: ${{ matrix.target }}
+      - name: Set up Linux build dependencies
+        if: runner.os == 'Linux'
+        uses: ./.github/actions/setup-linux-build
       - name: Decide whether the default branch may refresh the release cache
         shell: bash
         run: |
@@ -51,12 +54,10 @@ jobs:
           shared-key: release-${{ matrix.target }}
           save-if: ${{ env.SAVE_RELEASE_CACHE == 'true' }}
           cache-on-failure: false
+          env-vars: CC CXX CLANGCC CLANGCXX CLANG_PATH LIBCLANG_PATH
       - name: Set build revision
         shell: bash
         run: echo "AXSSH_BUILD_REVISION=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_ENV"
-      - name: Install Linux build dependencies
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev libasound2-dev
       - name: Check formatting
         run: cargo fmt --all -- --check
       - name: Validate repository boundaries and generated icons
@@ -93,8 +94,8 @@ jobs:
         with:
           submodules: false
       - uses: dtolnay/rust-toolchain@stable
-      - name: Install Linux build dependencies
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends pkg-config libfontconfig1-dev libxkbcommon-dev libasound2-dev
+      - name: Set up Linux build dependencies
+        uses: ./.github/actions/setup-linux-build
       - name: Install cargo-llvm-cov
         uses: taiki-e/install-action@cargo-llvm-cov
       - name: Generate coverage report
@@ -117,8 +118,8 @@ jobs:
       - uses: dtolnay/rust-toolchain@1.92.0
         with:
           targets: x86_64-unknown-linux-gnu
-      - name: Install Linux build dependencies
-        run: sudo apt-get update && sudo apt-get install -y libfontconfig1-dev libxkbcommon-dev libasound2-dev
+      - name: Set up Linux build dependencies
+        uses: ./.github/actions/setup-linux-build
       - name: Check at the declared MSRV
         run: cargo check --locked --target x86_64-unknown-linux-gnu
 

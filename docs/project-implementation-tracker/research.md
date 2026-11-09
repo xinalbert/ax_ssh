@@ -831,3 +831,15 @@
 - 关键结论：2026-11-08 的两个 job 都提示 macos-14-arm64-us-default 配置不受支持；macos-14 已在 11 月 2 日退役。官方 macos-15 是受支持的 ARM64 标签；此配置错误与缓存上限不同，缓存满时 GitHub 按淘汰策略删除旧条目。
 - 对实施计划的影响：仅将 CI/Release 五处 macos-14 更新为 macos-15，维持五 target、ARM64 原生测试、Intel 交叉编译、Universal 打包和原缓存。撤销此前误解导致的移除 macOS/cache 策略调整。
 - 未解决问题：完整日志需 GitHub 登录；缓存 API 限流未取得大小。真实新 runner、远端构建及发行打包需变更推送后验证，旧提交重跑不会使用本地修复。
+
+
+## 2026-11-09 14:35 +0800 Linux Skia C++20 编译器边界
+
+- 时间：2026-11-09 14:35 +0800
+- 检索问题：Skia 0.153.3 的 PDF/ranges 编译错误如何修复，同时保留 Ubuntu 22.04 的运行环境基线？
+- 检索原因：Release 两个 Linux 架构构建失败，用户要求修复；不应从错误尾部推断为 GCC 12 标准库本身不支持 ranges。
+- 来源列表：[失败 Release](https://github.com/xinalbert/ax_ssh/actions/runs/42569322308)、[Skia 构建要求](https://skia.org/docs/user/build/)、[Clang C++ 支持表](https://clang.llvm.org/cxx_status.html)、[LLVM 官方软件源](https://apt.llvm.org/)、[Jammy LLVM 21 Release 索引](https://apt.llvm.org/jammy/dists/llvm-toolchain-jammy-21/Release)、[rust-cache 环境指纹](https://github.com/Swatinem/rust-cache/blob/v2/src/config.ts)；锁定 skia-bindings 0.153.3 的 build_support/skia/config.rs 与 skia/src/pdf/SkPDFTag.cpp；本机 Ubuntu 22.04 ARM64 容器。
+- 关键结论：Skia 文档要求 C++20 并给出 Clang 21；聚合圆括号初始化 P0960R3 从 Clang 16 支持。Clang 14 + GCC 12 头文件对实际 SkPDFTag.cpp 产生 6 个错误，首条为第 146 行 optional.emplace(ci, ci)，包括用户提供的第 488 行 ranges::reverse 错误；相同头文件、源码和 -std=c++20 -O3 -DNDEBUG -DSK_RELEASE -I. -c 参数换 Clang 21.1.8 后成功生成 AArch64 object。实际执行新 action 后工具链和 libclang 安装/选择正常，glibc 仍为 2.35；LLVM Jammy 21 索引提供 amd64/arm64。rust-cache 默认已识别 CC/CXX，额外纳入 CLANGCC/CLANGCXX/CLANG_PATH/LIBCLANG_PATH，并确保恢复前设置。
+- 对实施计划的影响：所有 Linux Cargo 入口共用显式 Clang 21/libclang 配置及系统 GCC 12 标准库，不升级 runner 或删除渲染器；覆盖普通 CI、coverage、MSRV、Release preflight 与正式构建。已有 2026-11-09 tag 不包含该修复，不能通过移动或复用来发布。
+- 补充源码核对：clang-sys 1.9.1 的 Clang::find 优先使用 CLANG_PATH；bindgen 0.72.1 通过它发现 include paths，因此额外显式指定 CLANG_PATH，避免 LLVM 14 的默认发现路径混入。
+- 未解决问题：完整远端 job 日志 API 要求认证，因此远端精确 Clang 版本与为何进入 source build 尚未取得；本次完整复现限 ARM64 的失败编译单元，并未声称整个 Linux Cargo/Skia、x86_64 或多平台发行打包通过。
