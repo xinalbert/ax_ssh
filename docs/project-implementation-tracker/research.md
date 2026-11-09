@@ -813,6 +813,8 @@
 
 ## 2026-11-06 macOS SFTP 目录 Promise 与标准落地边界
 
+- 时间：2026-11-06 10:30 +0800
+- 时间依据：Git commit d2e3be9 的入库时间；原检索事件具体时分未知，仅用于补齐历史格式。
 - 检索问题：系统文件管理器的目录拖放是否应由 AppKit promise 负责目标路径，而由应用的 SFTP worker 负责实际递归传输；空目录和目标冲突如何处理？
 - 检索原因：目录原生拖放已接入，但递归下载原先只在写入文件时创建父目录，会漏掉空目录；Promise 还需要防止远端类型变化与本地覆盖。
 - 来源列表：Apple `NSFilePromiseProvider`/`NSFilePromiseProviderDelegate` API（系统 SDK）、现有 AxSSH `src/app/macos_file_drag.rs`、`src/sftp/transfer/discovery.rs` 与 `src/sftp/transfer/local.rs`。
