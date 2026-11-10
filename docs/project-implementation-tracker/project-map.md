@@ -127,7 +127,7 @@
 | `src/app/local_directory_watch.rs` | SFTP 本地栏当前目录的文件系统事件监听 | `ensure_local_directory_watch`、`queue_local_change_refresh` | 每个已加载的 SFTP Tab 至多一条 Tokio 监听任务；只监听当前目录直接子项，单槽事件通道合并变化，延迟 150ms 后通过状态门禁与既有后台读取刷新；切换目录重新注册，关闭 Tab 退出；事件不可用时保留手动 Refresh |
 | `src/app/local_files.rs` | 本机目录 snapshot 与 regular file 打开重验边界 | `read_local_directory`、`validate_local_file_for_open`、`LocalFileFingerprint`、`ValidatedLocalFile` | 本地栏完整枚举可读取条目，不设客户端名称/路径/文本预算上限，独立记录 unavailable；non-following metadata、平台文件 identity 与可观察元数据 fingerprint、目录/symlink/替换拒绝；只把已验证 handle 交给缓存层，250 条分页由 AppState 持有 |
 | `src/app/terminal_render.rs` | 终端色表、亮度、语义 span 和行渲染缓存 | `TerminalRenderer`、`render_line`、`semantic_highlight_spans`、`SemanticColorOverrides`、`prepare_semantic_highlighting` | 有界默认 ASCII cell 的 span 着色；保留 ANSI/特殊样式、四类颜色及行缓存；呈现 DTO 扩展字体角色、连续符号间距与几何路径，不修改终端源模型 |
-| `src/app/terminal_render/typography.rs` | 终端文字/emoji 字体角色与安全批量排字 | `FontRole`、`prepare`、`fixed_symbol` | 显式 VS15/VS16、默认 emoji、同样式 ZWJ/肤色/旗帜保持组合；同列连续且四字形均与 M 等宽的符号才能合并，样式/链接/宽字/组合边界独立 |
+| `src/app/terminal_render/typography.rs` | 终端文字/emoji 字体角色与安全批量排字 | `FontRole`、`prepare`、`fixed_symbol` | U+2800–U+28FF 盲文 spinner（含空白帧）显式使用 Iosevka；显式 VS15/VS16、默认 emoji、同样式 ZWJ/肤色/旗帜保持组合；同列连续且四字形均与 M 等宽的符号才能合并，样式/链接/宽字/组合边界独立 |
 | `src/app/terminal_render/geometry.rs`、`ui/components/terminal-geometry-glyph.slint` | 字体无关的有界 cell 几何 | `GlyphPaths`、`TerminalGeometryGlyph` | 独立 128 单位路径，基本轻/重盒线、块字符和 E0B0–E0B7；其它形状走字体；按 cell 物理像素边界缩放，共用前景/行缓存，原文与复制不变 |
 | `src/app/terminal_render/highlighting.rs` | 标准等级词及 HTTP 上下文的 regex 识别 | `RULE_PATTERN`、`HighlightSpan`、`prepare`、`spans` | 启动预编译；OpenTelemetry/syslog 词和响应/访问日志/HTTP 属性码；无旧词表或裸数字回退 |
 | `docs/benchmark-grounded-method-research/sftp-icons-local-open/report.md` | SFTP 图标、临时副本和双击打开的公开实现对标 | 需求定义、候选方法、推荐结论、不可比项 | 规划阶段证据；不承载功能代码，不把 proxy evidence 当 benchmark 排名 |
@@ -243,9 +243,9 @@
 ## 刷新规则
 
 - 刷新触发：新增/删除模块、入口、跨层契约、构建/CI 或持久化事实时更新相应路径和定位；功能实现和验证历史追加到月度记录。
-- 最近依据：2026-11-09 新增共用 Linux setup action，为所有 Linux Cargo 构建入口显式选择 Clang 21 与 libclang，保留 Ubuntu 22.04 基线。
+- 最近依据：2026-11-10 终端 typography 将 U+2800–U+28FF 盲文图案明确路由到自带 Iosevka 符号字体，复用既有主/独立窗口与光标规则。
 - 地图只保留当前路由，不继续累积旧任务的“当前/最近”段落。此前地图逐字保存在[历史地图快照](project-map-before-2026-10-20.md)，实施状态见 [current.md](current.md)，历史见 [changes/2026/11.md](changes/2026/11.md)。
 
 ## 最后更新时间
 
-- 2026-11-09 14:35 +0800
+- 2026-11-10 10:47 +0800

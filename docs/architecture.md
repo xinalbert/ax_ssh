@@ -2314,8 +2314,10 @@ grid uses that Latin monospace advance as its logical cell width; registered
 Han fallback draws from the left edge of its allocated two-cell span instead
 of enlarging every column. `src/app/terminal_render/typography.rs` keeps source
 Unicode and protocol columns intact while assigning text symbols such as `⏺`
-to Iosevka Term. VS15 requests text presentation; VS16, keycap sequences,
-default emoji, and joined pictographs retain emoji presentation using the
+and Braille patterns U+2800–U+28FF to Iosevka Term. This includes spinner
+frames and the blank U+2800 frame, so they use the bundled glyphs even when the
+primary family lacks Braille coverage. VS15 requests text presentation; VS16,
+keycap sequences, default emoji, and joined pictographs retain emoji presentation using the
 platform's resolved Emoji generic family, cached once per UI thread. Adjacent
 same-style ZWJ, skin-tone, and flag components stay together, retaining their original total
 protocol cell span. The block cursor uses the same font role as its source glyph. Neither

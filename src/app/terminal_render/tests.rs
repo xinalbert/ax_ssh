@@ -46,6 +46,36 @@ fn terminal_symbols_choose_text_fonts_but_explicit_emoji_keeps_its_presentation(
 }
 
 #[test]
+fn braille_patterns_keep_their_source_cells_and_colors_with_the_symbol_font() {
+    let text = ('\u{2800}'..='\u{28ff}').collect::<String>();
+    let mut terminal = ax_ssh::terminal::TerminalModel::new(260, 3, 10);
+    terminal.process(format!("\x1b[38;2;30;210;80m{text}\x1b[0mA").as_bytes());
+    let source = terminal.snapshot();
+    let cursor = source.cursor_column;
+    let copied = terminal.selection_text(0, 0, 0, cursor);
+    let rendered = render_terminal(source, settings());
+    let runs = &rendered.lines[0].runs;
+    let mut column = 0;
+    let mut symbols = String::new();
+    for run in runs.iter().take_while(|run| run.column < 256) {
+        assert_eq!(run.font_role, FontRole::Symbol, "{:?}", run.text);
+        assert_eq!((run.column, run.cells), (column, run.text.chars().count()));
+        assert_eq!(run.foreground, RgbColor::new(30, 210, 80));
+        assert!(run.geometry.is_empty());
+        symbols.push_str(&run.text);
+        column += run.cells;
+    }
+    assert_eq!(symbols, text);
+    assert_eq!(column, 256);
+    let following = runs.iter().find(|run| run.column == column).unwrap();
+    assert_eq!(following.font_role, FontRole::Primary);
+    assert_eq!(cursor, 257);
+    assert_eq!(terminal.snapshot().cursor_column, cursor);
+    assert_eq!(copied, format!("{text}A"));
+    assert_eq!(terminal.selection_text(0, 0, 0, cursor), copied);
+}
+
+#[test]
 fn compatible_symbol_runs_batch_without_crossing_style_or_combining_boundaries() {
     let mut terminal = ax_ssh::terminal::TerminalModel::new(80, 3, 10);
     terminal.process("←↑→\x1b[31m↓\x1b[0me\u{301}中⏺\u{fe0f}".as_bytes());

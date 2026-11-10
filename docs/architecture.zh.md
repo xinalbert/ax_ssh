@@ -1299,8 +1299,10 @@ Slint 测量实际主字体的
 1000 个 Latin cell；其 `Text.preferred-width` 会向上取整到整数逻辑像素，用长样本取平均将单格
 取整误差限制在 0.001 逻辑像素以内，避免长盒线字形与独立竖线逐列累积错位。终端网格使用该主字体的
 Latin 等宽 advance 作为逻辑单元格宽度。Han fallback 从分配的两格 span 左边缘绘制，不扩大所有列。
-`src/app/terminal_render/typography.rs` 保留原始 Unicode 与协议列，把 `⏺` 等文字符号明确交给
-Iosevka Term。VS15 请求文字呈现；VS16、键帽序列、默认 emoji 及连接的象形字符保持 emoji 呈现，
+`src/app/terminal_render/typography.rs` 保留原始 Unicode 与协议列，把 `⏺` 等文字符号及
+U+2800–U+28FF 盲文图案明确交给 Iosevka Term。转圈动画的各帧（包括空白 U+2800 帧）
+因此使用自带字形，即使主字体缺少盲文覆盖也保持一致。VS15 请求文字呈现；
+VS16、键帽序列、默认 emoji 及连接的象形字符保持 emoji 呈现，
 字体取平台解析的 Emoji generic，每个 UI 线程只解析缓存一次。相邻同样式的 ZWJ、肤色和旗帜组成部分合并排字，
 保留原始协议总占格；块状光标也沿用源字形的字体角色。分类和几何绘制均不改写复制文本。
 

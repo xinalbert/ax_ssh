@@ -2,57 +2,54 @@
 
 ## 当前目标
 
-- 目标 ID：20261109-release-revision-1
-- 目标：按发布规则创建并推送 annotated tag 2026-11-09-1，包含 Linux Skia 工具链修复。
-- 交付物：同步并提交的 Cargo/macOS 元数据、远端 master 与不可变 annotated release tag。
+- 目标 ID：20261110-braille-spinner-font
+- 目标：修复终端盲文转圈字符使用非预期回退字体的问题。
+- 交付物：Braille 字体角色、真实字体排字及窗口回归、双语说明、验证记录和本地 Git 提交。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`Cargo.toml`、`Cargo.lock`、`packaging/macos/Info.plist`、实施记录及 Git 发布 refs。
-- 不在本轮范围内：应用源码、依赖升级、CI 矩阵或工具链的再次修改、SSH 安全边界、GUI 验收、移动/删除/复用旧 tag。
+- 当前范围：终端 presentation 字体分类、字体与主/独立窗口测试、双语架构说明、实施记录和本地提交。
+- 不在本轮范围内：SSH/凭据/终端协议模型、字体资源替换、CI、发布元数据、tag 和远端推送。
 
 ## 当前状态
 
 - 阶段：已完成
 - 开工判定：允许开工
-- 是否需要联网：是，已完成
+- 是否需要联网：否
 - 多 agent：未使用
 
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| T1 | completed | 核对本地/远端 tags，选择 2026-11-09-1 | 本地 refs、GitHub matching-refs API | 旧 tag 已消耗，下一修订未占用 |
-| T2 | completed | 同步、验证并提交发行元数据 | release helper tests、精确 verify、Cargo check 与静态检查 | 已含 716b84d 的 Clang 21 修复 |
-| T3 | completed | 先推 master，再创建并推 annotated tag | 远端 master/tag object/peeled commit、提交内元数据 | 已通过认证的 SSH 443 顺序推送并复核 |
+| B1 | completed | 确认字体缺口与 presentation 所有权 | 用户截图、现有分类和自带字体覆盖 | JetBrains Mono 缺少 Braille；Iosevka 覆盖 |
+| B2 | completed | Braille 显式符号字体与回归/双语说明 | 全字符角色、真实排字、主/独立窗口两种模式 | 保留源 Unicode、样式和单格坐标 |
+| B3 | completed | 编译/测试/静态门禁及最终差异复核 | 仓库规定 Cargo 和文档/skill/tracker 检查 | 本机门禁通过，视觉验收由用户完成 |
 
 ## 已完成
 
-- 初始工作树干净；本地 master 为 716b84d，包含 Linux CI/Release 的 Clang 21 共用配置。
-- 创建前已核对本地全部 tag、GitHub API 和 SSH ls-remote：2026-11-09 已消耗，2026-11-09-1 当时未使用。
-- 14 项 release version/highlights 辅助测试、actionlint 和项目 skill 校验通过。
-- 元数据已同步：Cargo/lock 2026.11.9+1、macOS short 2026.11.9、bundle 20261109.1；精确 verify、Cargo locked/offline check、fmt、plist 和文档门禁通过。
-- GitHub API 确认准备前远端 master 为 716b84d，与准备前本地相同。
-- 元数据提交 93aaa91bb1754d149a27703b0217320db123e309 已先推送 master；从提交内容独立 verify 后创建并推 annotated tag 2026-11-09-1。
-- 远端 tag object af6f93daf4173fa1ed441683b870f0ab967b2fa8、peeled commit 93aaa91bb1754d149a27703b0217320db123e309 均已复核。
-- [Release run 42582683130](https://github.com/xinalbert/ax_ssh/actions/runs/42582683130) 已触发，状态 in_progress，head_sha 与新 tag 相同。
-- 本轮仅发行元数据与 Git refs，不改变应用模块契约或 SSH 信任/凭据安全边界。
+- 工作树起点干净，HEAD 为 5123986；本轮只改变终端显示层字体选择，无 SSH 安全边界或跨层契约变动。
+- 修复前分类未覆盖 U+2800–U+28FF，JetBrains Mono 无此字符段，自带 Iosevka 有覆盖；复用显式符号字体消除非确定回退。
+- 不从静态截图推断动画残影或运行时实际系统回退族。
+- 修复前新增两项回归均失败，分别确认 Braille 被归为 Primary、真实窗口 Text item 使用 JetBrains Mono；现已把该段字符明确路由到 Symbol，未更改符号批量排字规则。
+- 补充全 256 个 Braille 字符的文本/颜色/列坐标回归、四种真实 Iosevka 字形覆盖，以及主/独立窗口两种模式的连续 spinner 帧与块状光标字体检查；同步双语架构说明和地图。
+- 修复后两项 Braille 回归和真实 Parley 排字测试通过；完整测试为 422 项 library + 525 项 binary，全部通过。最终差异仅含字体分类、回归、双语说明和实施记录。
+- 按用户要求将修复、回归和配套文档整理为一个独立提交；提交标识以 Git 历史为准。
 
 ## 验证
 
-- 已完成：本地/远端 tag/master 核对、14 项发布辅助测试、sync/verify、Cargo locked/offline check、fmt、plist、actionlint、Markdown/边界及 skill/tracker/diff 校验；master/tag 顺序推送、annotated 类型、精确目标及提交内元数据复核。
-- 未完成：完整多平台 Release 构建及发行附件；远端工作流仍在运行。
+- 已完成：本机 aarch64-apple-darwin 上的修复前失败/修复后通过对照、四种实际 Iosevka 字形排字、fmt、Cargo locked/offline check、严格 all-targets Clippy、全量 947 项测试、56 份 Markdown/源码边界及 skill/tracker/diff 检查。
+- 未完成：用户真实 GUI 视觉确认，以及其他平台的原生 CI；未把本机验证视作跨平台编译或视觉验收。
 
 ## 风险与阻塞
 
-- Git HTTPS 地址连接超时已通过 SSH 443 解决；临时 known-hosts 来自 GitHub 官方 HTTPS meta，保持严格主机密钥校验并使用现有 SSH 认证；未改仓库 remote 配置。
-- 旧 tag 不包含新工作流，不能靠重跑旧 tag 使用修复；新 tag 的发布结果仍以真实 Actions 为准。
+- 无实施阻塞；真实 GUI 动画观感仍需用户使用修复后程序确认，不自行截图作为视觉验收证据。
 
 ## 下一步
 
-- 跟进 Release run 42582683130 的多平台构建和附件结果；新 tag 已消耗，不移动、删除或复用。
+- 用户运行修复后的程序确认 spinner 观感；其他平台由其原生 CI 验证。
 
 ## 最后更新时间
 
-- 2026-11-09 16:04 +0800
+- 2026-11-10 11:06 +0800

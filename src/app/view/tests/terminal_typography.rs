@@ -206,6 +206,56 @@ fn main_and_detached_terminals_render_symbol_batches_on_the_fixed_grid() {
     }
 }
 
+#[test]
+fn braille_spinner_frames_keep_the_symbol_font_in_main_and_detached_terminals() {
+    for detached in [false, true] {
+        std::thread::spawn(move || {
+            let harness = LayoutTestHarness::new();
+            let ui = &harness.ui;
+            let mut terminal = TerminalModel::new(80, 24, 10);
+            terminal.process(b"\x1b[2 q");
+            setup(&harness, detached, &mut terminal);
+            for compact in [false, true] {
+                ui.set_terminal_compact_rendering(compact);
+                for frame in "⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏\u{2800}".chars() {
+                    terminal
+                        .process(format!("\r\x1b[38;2;30;210;80m{frame}\x1b[0m A\r").as_bytes());
+                    publish(ui, &mut terminal);
+                    harness.settle();
+                    let frame = frame.to_string();
+                    let mut count = 0;
+                    ItemRc::new_root(WindowInner::from_pub(ui.window()).component())
+                        .visit_descendants(|item| {
+                            if item.is_visible()
+                                && let Some(text) = item.downcast::<ComplexText>()
+                                && ComplexText::FIELD_OFFSETS
+                                    .text()
+                                    .apply_pin(text.as_pin_ref())
+                                    .get()
+                                    == frame
+                            {
+                                assert_eq!(text_family(item), "Iosevka Term");
+                                count += 1;
+                            }
+                            ControlFlow::<()>::Continue(())
+                        });
+                    assert_eq!(count, 2, "spinner and block cursor must share the font");
+                    let pane = ui.get_terminal_panes().row_data(0).unwrap();
+                    let runs = pane.terminal.render_lines.row_data(0).unwrap().runs;
+                    let spinner = runs.row_data(0).unwrap();
+                    assert_eq!(spinner.text, frame);
+                    assert_eq!((spinner.column, spinner.cells), (0, 1));
+                    assert_eq!(runs.row_data(1).unwrap().column, 1);
+                    assert_eq!(terminal.selection_text(0, 0, 0, 3), format!("{frame} A"));
+                }
+            }
+            ui.hide().unwrap();
+        })
+        .join()
+        .expect("braille spinner typography regression");
+    }
+}
+
 fn register_advance_fixture(family: &str, character: char, extra_advance: u16) {
     use slint::fontique_011::fontique;
     let mut collection = slint::fontique_011::shared_collection();

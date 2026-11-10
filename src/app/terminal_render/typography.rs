@@ -42,7 +42,10 @@ fn default_emoji(character: char) -> bool {
 }
 
 fn is_symbol(character: char) -> bool {
-    matches!(character as u32, 0x2190..=0x23ff | 0x2500..=0x27bf | 0x2b00..=0x2bff)
+    // Braille spinner frames need the bundled symbol face: the default primary
+    // font lacks this block, and system fallback glyph styles can differ.
+    matches!(character as u32,
+        0x2190..=0x23ff | 0x2500..=0x27bf | 0x2800..=0x28ff | 0x2b00..=0x2bff)
 }
 
 pub(super) fn prepare(runs: Vec<RenderedTerminalRun>) -> Vec<RenderedTerminalRun> {

@@ -17,35 +17,48 @@ fn real_parley_shaping_selects_the_explicit_symbol_face_before_emoji_fallback() 
         let font = resources.load_bundled_font(family).unwrap().unwrap();
         register_loaded_font_in_collection(&mut fonts.collection, font).unwrap();
     }
-    let symbol_bytes = std::fs::read(
-        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/fonts/IosevkaTerm-Regular.ttf"),
-    )
-    .unwrap();
+    let braille = ('\u{2800}'..='\u{28ff}').collect::<String>();
     let mut layouts = parley::LayoutContext::<()>::new();
-    for text in ["⏺", "⏺\u{fe0e}", "←↑→", "✔"] {
-        let mut builder = layouts.ranged_builder(&mut fonts, text, 1.0, false);
-        builder.push_default(parley::StyleProperty::FontFamily(
-            parley::FontFamily::Single(parley::FontFamilyName::named(
-                TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
-            )),
-        ));
-        builder.push_default(parley::StyleProperty::FontSize(14.0));
-        let mut layout = builder.build(text);
-        layout.break_all_lines(None);
-        let runs = layout
-            .lines()
-            .flat_map(|line| line.runs())
-            .collect::<Vec<_>>();
-        assert!(!runs.is_empty());
-        assert!(
-            runs.iter()
-                .all(|run| run.font().data.as_ref() == symbol_bytes.as_slice()),
-            "{text:?} must shape from Iosevka, not merely appear in a candidate list"
-        );
-        assert!(runs.iter().all(|run| {
-            run.clusters()
-                .all(|cluster| cluster.glyphs().all(|glyph| glyph.id != 0))
-        }));
+    for (face, weight, style) in [
+        ("Regular", 400.0, parley::FontStyle::Normal),
+        ("Bold", 700.0, parley::FontStyle::Normal),
+        ("Italic", 400.0, parley::FontStyle::Italic),
+        ("BoldItalic", 700.0, parley::FontStyle::Italic),
+    ] {
+        let symbol_bytes = std::fs::read(
+            PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+                .join(format!("assets/fonts/IosevkaTerm-{face}.ttf")),
+        )
+        .unwrap();
+        for text in ["⏺", "⏺\u{fe0e}", "←↑→", "✔", &braille] {
+            let mut builder = layouts.ranged_builder(&mut fonts, text, 1.0, false);
+            builder.push_default(parley::StyleProperty::FontFamily(
+                parley::FontFamily::Single(parley::FontFamilyName::named(
+                    TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+                )),
+            ));
+            builder.push_default(parley::StyleProperty::FontSize(14.0));
+            builder.push_default(parley::StyleProperty::FontWeight(parley::FontWeight::new(
+                weight,
+            )));
+            builder.push_default(parley::StyleProperty::FontStyle(style));
+            let mut layout = builder.build(text);
+            layout.break_all_lines(None);
+            let runs = layout
+                .lines()
+                .flat_map(|line| line.runs())
+                .collect::<Vec<_>>();
+            assert!(!runs.is_empty());
+            assert!(
+                runs.iter()
+                    .all(|run| run.font().data.as_ref() == symbol_bytes.as_slice()),
+                "{text:?} must shape from Iosevka {face}, not merely appear in a candidate list"
+            );
+            assert!(runs.iter().all(|run| {
+                run.clusters()
+                    .all(|cluster| cluster.glyphs().all(|glyph| glyph.id != 0))
+            }));
+        }
     }
 }
 
