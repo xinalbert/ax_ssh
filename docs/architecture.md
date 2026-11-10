@@ -2433,15 +2433,20 @@ matching the candidate `20*-*-*` pattern starts the single Release workflow. Tha
 verifies the ref is an annotated tag and checks all version representations
 before building; `scripts/release_version.py` remains the strict date and
 metadata validator. There is no Create or Retry workflow, tag CI dispatch, or
-polling chain. The release workflow builds Windows x86_64, Linux
+polling chain. The release workflow builds Windows x86_64/ARM64, Linux
 x86_64/aarch64, and arm64/x86_64 macOS binaries; it assembles a universal macOS
 bundle and retains `assets/fonts/`, icons, and the independent license notices
 in each applicable package. CI independently checks, lints, and links the
-Windows x86_64, Linux x86_64/aarch64, and macOS arm64/x86_64 targets. Each
+Windows x86_64/ARM64, Linux x86_64/aarch64, and macOS arm64/x86_64 targets. Each
 matrix job runs target-specific `cargo check`, strict all-target Clippy, and
 `cargo build`; tests run only when the target is native to its GitHub runner,
 so the Intel macOS job compiles but does not execute on an Apple Silicon
-runner. CI writes the shared target-specific Cargo cache only after a
+runner. Windows ARM64 uses the native `windows-11-arm` runner for both CI and
+release packaging (`windows-aarch64` ZIP). A shared setup action initializes the
+native Visual Studio developer environment and selects `clang-cl`, LLVM/libclang,
+and Visual Studio VC paths before cache restoration;
+these environment selections are included in the cache fingerprint.
+CI writes the shared target-specific Cargo cache only after a
 successful default-branch run; failed, pull-request, and tag jobs cannot save
 it, while release jobs restore but never write the cache. The workflow does not read or package
 `third_package/axshell`. Before publication, the workflow gives

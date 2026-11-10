@@ -54,7 +54,7 @@ cargo run --locked
 
 ## 发布
 
-GitHub Releases 会提供 Windows x86_64、Linux x86_64/aarch64，以及 macOS Apple Silicon、
+GitHub Releases 会提供 Windows x86_64/ARM64、Linux x86_64/aarch64，以及 macOS Apple Silicon、
 Intel 和通用应用包。Release tag 使用 `YYYY-MM-DD` 或 `YYYY-MM-DD-N`；在默认分支同步版本
 元数据后，推送 annotated tag 会直接启动发布 workflow。所需命令见[发布说明](docs/development.zh.md#github-发布)。
 

@@ -256,8 +256,14 @@ packaging/macos/build-app.sh
 
 ### 在 macOS 上交叉编译 Windows
 
-仓库的 Windows CI 和发布目标是 `x86_64-pc-windows-msvc`。依赖
-`aws-lc-sys` 在构建 Windows 汇编时还需要 NASM。MSVC 交叉链接还需要完整的
+Windows CI 和发布目标为 `x86_64-pc-windows-msvc` 与 `aarch64-pc-windows-msvc`，
+两者都在原生 runner 上执行 check、严格 all-target Clippy、build 和 tests。
+ARM64 使用 `windows-11-arm`；共用的 `setup-windows-arm64-build` action 初始化原生 ARM64
+Visual Studio 开发环境，为 AWS-LC 选择 LLVM `clang-cl`，并为 Skia 设置 LLVM/libclang 与
+Visual Studio VC 路径，兼容 VS 2026。
+已安装的 ARM64 C++ 工具见[官方 runner 清单](https://github.com/actions/runner-images/blob/main/images/windows/Windows11-VS2026-Arm64-Readme.md)。
+下面的交叉编译示例针对 x86_64；ARM64 发行验证由原生 CI job 执行。
+依赖 `aws-lc-sys` 在构建 x86_64 Windows 汇编时还需要 NASM。MSVC 交叉链接还需要完整的
 Homebrew LLVM 工具链：`llvm-lib` 由 LLVM 提供，`lld-link` 由独立的 `lld` formula
 提供。在 macOS 上先安装这些工具、Rust target 和 `cargo-xwin`（只需执行一次）：
 
@@ -334,7 +340,7 @@ git push origin 2026-08-12
 直接 push 有效的 annotated `YYYY-MM-DD[-N]` tag 会启动 Release workflow。它会先校验 tag
 和已提交的版本元数据，再构建并生成：
 
-- Windows x86_64 ZIP，包含可执行文件、自带字体和许可证声明
+- Windows x86_64 与 ARM64 ZIP（`windows-x86_64` 和 `windows-aarch64`），包含可执行文件、自带字体和许可证声明
 - Linux x86_64 与 aarch64 TAR.GZ，以及对应的 `.deb`
 - macOS Apple Silicon（`macos-aarch64`）、Intel（`macos-x86_64`）和从两个原生
   二进制合并的通用 `.app` ZIP；三种 bundle 都包含相同的图标、运行时字体和许可证声明
@@ -345,7 +351,7 @@ CI 只在默认分支成功后写入共享 Cargo cache，失败、PR 和 tag job
 Linux job 在恢复缓存前选择 Clang 21，将编译器与 libclang 选择纳入缓存指纹；两个 Linux
 架构、coverage、MSRV 以及 Release preflight/正式构建共用该配置。runner 保持
 Ubuntu 22.04，沿用其 glibc 基线和系统 libstdc++，避免为构建工具兼容问题提高运行环境基线。
-CI 会分别检查、lint 并链接 Windows x86_64、Linux x86_64/aarch64 和 macOS arm64/x86_64。
+CI 会分别检查、lint 并链接 Windows x86_64/ARM64、Linux x86_64/aarch64 和 macOS arm64/x86_64。
 每个 matrix job 都执行 `cargo check --target`、严格的
 `cargo clippy --all-targets --target` 和 `cargo build --target`；只有 target 与 GitHub runner
 原生匹配时才执行 `cargo test --target`。因此 Intel macOS job 会编译，但不会在 Apple Silicon

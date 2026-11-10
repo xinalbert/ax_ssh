@@ -843,3 +843,13 @@
 - 对实施计划的影响：所有 Linux Cargo 入口共用显式 Clang 21/libclang 配置及系统 GCC 12 标准库，不升级 runner 或删除渲染器；覆盖普通 CI、coverage、MSRV、Release preflight 与正式构建。已有 2026-11-09 tag 不包含该修复，不能通过移动或复用来发布。
 - 补充源码核对：clang-sys 1.9.1 的 Clang::find 优先使用 CLANG_PATH；bindgen 0.72.1 通过它发现 include paths，因此额外显式指定 CLANG_PATH，避免 LLVM 14 的默认发现路径混入。
 - 未解决问题：完整远端 job 日志 API 要求认证，因此远端精确 Clang 版本与为何进入 source build 尚未取得；本次完整复现限 ARM64 的失败编译单元，并未声称整个 Linux Cargo/Skia、x86_64 或多平台发行打包通过。
+
+## 2026-11-10 Windows ARM64 原生构建支持
+
+- 时间：2026-11-10 12:35 +0800
+- 检索问题：是否可以加入原生 Windows ARM64 CI/Release，锁定 SSH/图形依赖需要哪些工具？
+- 检索原因：用户要求增加 Windows ARM，同时已有 Windows 字体行为测试超时。
+- 来源列表：[GitHub ARM64 runner 正式可用公告](https://github.blog/changelog/2025-08-07-arm64-hosted-runners-for-public-repositories-are-now-generally-available/)、[当前 Windows 11 ARM64/VS 2026 软件清单](https://github.com/actions/runner-images/blob/main/images/windows/Windows11-VS2026-Arm64-Readme.md)、[Rust Windows MSVC 平台说明](https://doc.rust-lang.org/stable/rustc/platform-support/windows-msvc.html)、[rust-skia 支持目标](https://github.com/rust-skia/rust-skia)、[Microsoft 开发 Shell](https://learn.microsoft.com/en-us/visualstudio/ide/reference/command-prompt-powershell?view=visualstudio)；Cargo.lock 和本机锁定 aws-lc-sys 0.47.0 / skia-bindings 0.153.3 构建源码。
+- 关键结论：windows-11-arm 为原生 ARM64 runner，目标为 aarch64-pc-windows-msvc。AWS-LC 的 ARM64 MSVC 构建要求 clang-cl；Skia 支持该目标，但本版本自动 VC 路径只含 VS 2019/2022，需通过 VCINSTALLDIR 显式提供当前 VS 路径。runner 含原生 ARM64 LLVM 和 VC 组件；Skia 0.153.3 已有匹配 ARM64 D3D/GL 特性的预编译资源，无须改变应用依赖。共用 action 初始化开发 Shell 并保留 SDK/头文件/库/工具路径，避免仅设置 VCINSTALLDIR 后让 C/C++ 自动发现误判环境完整。字体现有流程把自带字体注册阻塞在全系统扫描之后；确定性阻塞扫描可在 macOS 复现相同超时，但不能据此断言 Windows 原始失败只有这一原因。
+- 对实施计划的影响：W2 增加原生 CI 四项门禁与 ARM64 ZIP，CI/Release 共用工具环境；自带字体 UI 注册成功后才继续扫描并应用系统回退。W3 保留原生 Windows CI/GUI 验证的限制。
+- 未解决问题：Windows ARM64 的实际构建、链接、全量测试与 GUI 尚需原生 CI 和 Windows 设备验证。

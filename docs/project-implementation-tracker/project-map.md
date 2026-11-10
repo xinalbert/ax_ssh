@@ -64,8 +64,9 @@
 | `LICENSE` | AxSSH 主许可证正文 | GNU GPL version 3 | 发布源码或二进制、核对 GPL 条款时 |
 | `THIRD_PARTY_NOTICES.md` | 第三方许可入口 | Slint、OFL 字体、平台文件图标 API/依赖、Cargo 依赖 | 修改依赖、字体、vendor 或发行声明时 |
 | `Cargo.toml` | 根包、许可证、依赖、构建 profile 和 Linux package 定义 | `[package]`、`license`、Slint/russh/终端模拟器、`profile.dev`、`profile.release`、`package.metadata.deb` | 工具链、版本、授权和构建/打包范围；Debian 的 binary/desktop/icons/fonts/licenses 为唯一安装清单，Release 直接调用固定 cargo-deb；dev 禁用 AxSSH 增量代码生成，release 保留 ThinLTO |
-| `.github/workflows/{ci,release}.yml` | 默认分支/PR CI、tag 触发的跨平台发行与 GitHub Release | `push.tags`、target matrix、native-test gate、coverage、annotated tag/metadata verify、release preflight/audit、release matrix、Highlights | CI 在 Windows x86_64、Linux x86_64/aarch64 和 macOS arm64/x86_64 上分别执行 target `check`、严格 all-target Clippy 和链接 `build`；只在 runner 原生 target 上测试，Intel macOS job 只编译；独立 Ubuntu coverage job 使用 `cargo-llvm-cov` 生成 `lcov.info` 并上传 Codecov。Release 直接监听 `20*-*-*`，校验 annotated tag 与版本元数据，先通过 Linux fmt/check/Clippy/test、Python helper 回归和 RustSec audit，再发布 Windows x86_64、Linux x86_64/aarch64 及 macOS arm64/x86_64 app bundles，再从两个原生 bundle 合成 Universal bundle，并以最近成功发布的日期 tag 作为 Highlights 基线；CI 另有 Rust 1.92 MSRV check；没有 Create、Retry 或 CI dispatch 链路 |
+| `.github/workflows/{ci,release}.yml` | 默认分支/PR CI、tag 触发的跨平台发行与 GitHub Release | `push.tags`、target matrix、native-test gate、coverage、annotated tag/metadata verify、release preflight/audit、release matrix、Highlights | CI 在 Windows x86_64/ARM64、Linux x86_64/aarch64 和 macOS arm64/x86_64 上分别执行 target `check`、严格 all-target Clippy 和链接 `build`；只在 runner 原生 target 上测试，Intel macOS job 只编译；独立 Ubuntu coverage job 使用 `cargo-llvm-cov` 生成 `lcov.info` 并上传 Codecov。Release 直接监听 `20*-*-*`，校验 annotated tag 与版本元数据，先通过 Linux fmt/check/Clippy/test、Python helper 回归和 RustSec audit，再发布 Windows x86_64/ARM64、Linux x86_64/aarch64 及 macOS arm64/x86_64 app bundles，再从两个原生 bundle 合成 Universal bundle，并以最近成功发布的日期 tag 作为 Highlights 基线；CI 另有 Rust 1.92 MSRV check；没有 Create、Retry 或 CI dispatch 链路 |
 | `.github/actions/setup-linux-build/action.yml` | Ubuntu 22.04 的共用 Linux 构建环境 | LLVM 21 签名软件源、Clang/标准库/libclang、Cargo cache 前的环境选择 | Linux x86_64/aarch64、coverage、MSRV、Release preflight/正式构建；保留 glibc 基线 |
+| `.github/actions/setup-windows-arm64-build/action.yml` | 原生 Windows ARM64 C/C++ 构建环境 | `clang-cl`、`LLVM_HOME`、`LIBCLANG_PATH`、`VCINSTALLDIR` | CI/Release 共用；用 vswhere 定位并初始化原生 ARM64 VC/SDK 环境，避免 Skia 固定 VS 2022 路径遗漏 VS 2026；环境选择在恢复缓存前完成 |
 | `scripts/generate_release_highlights.py` 与 `scripts/test_generate_release_highlights.py` | Git-backed Release Highlights 生成和回归 | `generate_release_body`、`render_release_body`、临时 annotated tags | 修改发布描述分类、比较/commit 链接、tag range 或跟踪提交排除时；只依赖 Python 标准库和已检出 Git 历史 |
 | `assets/ion/terminal_icon.svg` | AxSSH Terminal 图标的 canonical 矢量源副本 | 更换或重新生成各平台位图/容器时 | 所有 PNG、ICO、ICNS 从此 SVG 生成，保持 RGBA 透明背景 |
 | `assets/os-icons/{README.md,README.zh.md,manifest.json,search-coverage.json,preview.html,validation.json}` | 系统/平台图标目录、来源、检索覆盖/缺口和离线预览/检查 | kind、preferred_asset、source_class、variant、text_kind、SHA-256 | 选图时核对官方/社区来源、专用系统/通用品牌和许可；selfh.st 按图形明暗，Skill Icons 按徽章背景，官网原生变体另有说明 |
@@ -243,9 +244,9 @@
 ## 刷新规则
 
 - 刷新触发：新增/删除模块、入口、跨层契约、构建/CI 或持久化事实时更新相应路径和定位；功能实现和验证历史追加到月度记录。
-- 最近依据：2026-11-10 终端 typography 将 U+2800–U+28FF 盲文图案明确路由到自带 Iosevka 符号字体，复用既有主/独立窗口与光标规则。
+- 最近依据：2026-11-10 CI/Release 接入原生 Windows ARM64 与共用工具环境；Terminal 自带字体先注册，收到 UI 确认后再扫描系统字体并二次刷新。
 - 地图只保留当前路由，不继续累积旧任务的“当前/最近”段落。此前地图逐字保存在[历史地图快照](project-map-before-2026-10-20.md)，实施状态见 [current.md](current.md)，历史见 [changes/2026/11.md](changes/2026/11.md)。
 
 ## 最后更新时间
 
-- 2026-11-10 10:47 +0800
+- 2026-11-10 12:38 +0800

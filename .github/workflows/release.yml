@@ -99,6 +99,10 @@ jobs:
             target: x86_64-pc-windows-msvc
             name: windows-x86_64
             binary: ax_ssh.exe
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            name: windows-aarch64
+            binary: ax_ssh.exe
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             name: linux-x86_64
@@ -137,6 +141,10 @@ jobs:
         if: runner.os == 'Linux'
         uses: ./.github/actions/setup-linux-build
 
+      - name: Set up Windows ARM64 build dependencies
+        if: matrix.target == 'aarch64-pc-windows-msvc'
+        uses: ./.github/actions/setup-windows-arm64-build
+
       - name: Install Debian packaging dependencies
         if: runner.os == 'Linux'
         run: sudo apt-get install -y --no-install-recommends dpkg-dev
@@ -151,7 +159,7 @@ jobs:
         with:
           shared-key: release-${{ matrix.target }}
           save-if: false
-          env-vars: CC CXX CLANGCC CLANGCXX CLANG_PATH LIBCLANG_PATH
+          env-vars: CC CXX CLANGCC CLANGCXX CLANG_PATH LIBCLANG_PATH LLVM_HOME VCINSTALLDIR
 
       - name: Build release binary
         run: cargo build --release --locked --target ${{ matrix.target }}

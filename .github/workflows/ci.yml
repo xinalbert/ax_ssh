@@ -16,6 +16,9 @@ jobs:
           - os: windows-latest
             target: x86_64-pc-windows-msvc
             run_tests: true
+          - os: windows-11-arm
+            target: aarch64-pc-windows-msvc
+            run_tests: true
           - os: ubuntu-22.04
             target: x86_64-unknown-linux-gnu
             run_tests: true
@@ -39,6 +42,9 @@ jobs:
       - name: Set up Linux build dependencies
         if: runner.os == 'Linux'
         uses: ./.github/actions/setup-linux-build
+      - name: Set up Windows ARM64 build dependencies
+        if: matrix.target == 'aarch64-pc-windows-msvc'
+        uses: ./.github/actions/setup-windows-arm64-build
       - name: Decide whether the default branch may refresh the release cache
         shell: bash
         run: |
@@ -54,7 +60,7 @@ jobs:
           shared-key: release-${{ matrix.target }}
           save-if: ${{ env.SAVE_RELEASE_CACHE == 'true' }}
           cache-on-failure: false
-          env-vars: CC CXX CLANGCC CLANGCXX CLANG_PATH LIBCLANG_PATH
+          env-vars: CC CXX CLANGCC CLANGCXX CLANG_PATH LIBCLANG_PATH LLVM_HOME VCINSTALLDIR
       - name: Set build revision
         shell: bash
         run: echo "AXSSH_BUILD_REVISION=$(git rev-parse --short=12 HEAD)" >> "$GITHUB_ENV"

@@ -1368,11 +1368,14 @@ version 保持 `YYYY.M.D`。`scripts/release_version.py sync` 会在提交前更
 匹配候选模式 `20*-*-*` 的直接 tag push 会启动唯一的 Release workflow。它先校验 ref 是 annotated tag，
 再由 `scripts/release_version.py` 严格校验日期和所有版本表示后构建。不存在 Create 或 Retry workflow、tag CI
 dispatch 或轮询链路；失败时可在 GitHub Actions 中重跑同一 tag 的 Release run，tag 不会被移动。
-发布 workflow 构建 Windows x86_64、Linux x86_64/aarch64，以及 arm64/x86_64 macOS 二进制；随后合并
+发布 workflow 构建 Windows x86_64/ARM64、Linux x86_64/aarch64，以及 arm64/x86_64 macOS 二进制；随后合并
 macOS 通用 bundle，并在适用的发行包中保留 `assets/fonts/`、图标和独立许可证声明。CI 会分别检查、
-lint 并链接 Windows x86_64、Linux x86_64/aarch64 和 macOS arm64/x86_64 target。每个 matrix job
+lint 并链接 Windows x86_64/ARM64、Linux x86_64/aarch64 和 macOS arm64/x86_64 target。每个 matrix job
 执行 target 专属的 `cargo check`、严格的 all-target Clippy 与 `cargo build`；仅当 target 与 GitHub
 runner 原生匹配时运行测试，因此 Intel macOS job 会编译，但不会在 Apple Silicon runner 上执行。
+Windows ARM64 的 CI 和发布均使用原生 `windows-11-arm` runner，发行文件为 `windows-aarch64` ZIP。
+共用 setup action 在恢复缓存前初始化原生 Visual Studio 开发环境，并选择 `clang-cl`、LLVM/libclang 和 VC 路径，
+这些环境选择纳入缓存指纹。
 CI 只在默认分支成功后写入按 target 隔离的共享 Cargo cache，失败、PR 和 tag job 不会写入；发布 job
 只恢复该缓存，并重新构建锁定的 release 二进制。构建前会校验所有版本表示一致，且不会读取或打包
 `third_package/axshell`。

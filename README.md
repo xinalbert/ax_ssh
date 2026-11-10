@@ -63,7 +63,7 @@ see the [development guide](docs/development.md).
 
 ## Releases
 
-GitHub Releases provide Windows x86_64, Linux x86_64/aarch64, and macOS Apple
+GitHub Releases provide Windows x86_64/ARM64, Linux x86_64/aarch64, and macOS Apple
 Silicon, Intel, and universal application bundles. Release tags use
 `YYYY-MM-DD` or `YYYY-MM-DD-N`; the annotated tag starts the release workflow
 after version metadata is synchronized on the default branch. See the

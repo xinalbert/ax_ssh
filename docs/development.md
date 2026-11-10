@@ -347,8 +347,16 @@ packaging/macos/build-app.sh
 
 ### Cross-compile Windows on macOS
 
-The repository's Windows CI and release target is `x86_64-pc-windows-msvc`.
-The `aws-lc-sys` dependency also needs NASM when it builds its Windows
+Windows CI and releases target `x86_64-pc-windows-msvc` and
+`aarch64-pc-windows-msvc`. Both run check, strict all-target Clippy, build, and
+tests on native runners. ARM64 uses `windows-11-arm`; the shared
+`setup-windows-arm64-build` action initializes the native ARM64 Visual Studio
+developer environment, selects LLVM `clang-cl` for AWS-LC, and
+sets the LLVM/libclang and Visual Studio VC paths for Skia, including VS 2026.
+The [runner image manifest](https://github.com/actions/runner-images/blob/main/images/windows/Windows11-VS2026-Arm64-Readme.md)
+lists the installed ARM64 C++ tools. The cross-compilation example below targets
+x86_64; ARM64 release validation belongs to the native CI job.
+The `aws-lc-sys` dependency also needs NASM when it builds its x86_64 Windows
 assembly. The MSVC cross-link also needs the full Homebrew LLVM toolchain:
 `llvm-lib` is supplied by LLVM and `lld-link` by the separate `lld` formula.
 On macOS, install these tools, the Rust target, and `cargo-xwin` once:
@@ -437,7 +445,8 @@ Pushing a valid annotated `YYYY-MM-DD[-N]` tag directly starts the Release
 workflow. It verifies the tag and checked-in metadata before building and
 publishes these assets:
 
-- Windows x86_64 ZIP with the executable, bundled fonts, and license notices
+- Windows x86_64 and ARM64 ZIPs (`windows-x86_64` and `windows-aarch64`) with the
+  executable, bundled fonts, and license notices
 - Linux x86_64 and aarch64 TAR.GZ archives plus matching `.deb` packages
 - macOS Apple Silicon (`macos-aarch64`), Intel (`macos-x86_64`), and universal
   `.app` ZIPs; every bundle contains the same icon, runtime fonts, and license
@@ -454,7 +463,7 @@ libclang selection in the cache fingerprint. The same setup covers both Linux
 architectures, coverage, MSRV, and release preflight/build. The runners remain
 Ubuntu 22.04, retaining its glibc baseline and system libstdc++ rather than
 raising the runtime baseline to fix a build-tool incompatibility.
-CI independently checks, lints, and links Windows x86_64, Linux x86_64/aarch64,
+CI independently checks, lints, and links Windows x86_64/ARM64, Linux x86_64/aarch64,
 and macOS arm64/x86_64. Every matrix job runs `cargo check --target`, strict
 `cargo clippy --all-targets --target`, and `cargo build --target`; tests use
 `cargo test --target` only when that target is native to its GitHub runner. The
