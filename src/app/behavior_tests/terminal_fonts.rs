@@ -19,21 +19,61 @@ fn restored_ssh(harness: &Harness) -> (Uuid, Uuid) {
 fn wait_for_fonts(harness: &Harness) {
     let deadline = std::time::Instant::now() + Duration::from_secs(5);
     loop {
-        harness.status();
+        let status = harness.status();
         let fonts = harness.font_registry.lock().unwrap();
-        if fonts.is_registered("Maple Mono NF CN")
-            && fonts.is_registered("Iosevka Term")
-            && harness.ui.get_font_registry_generation() > 0
-        {
+        let maple = fonts.is_registered("Maple Mono NF CN");
+        let iosevka = fonts.is_registered("Iosevka Term");
+        let generation = harness.ui.get_font_registry_generation();
+        if maple && iosevka && generation > 0 {
             return;
         }
         drop(fonts);
         assert!(
             std::time::Instant::now() < deadline,
-            "terminal fonts were never initialized"
+            "terminal fonts were never initialized: Maple={maple}, Iosevka={iosevka}, generation={generation}, status={status}"
         );
         std::thread::yield_now();
     }
+}
+
+#[test]
+fn bundled_terminal_fonts_are_ready_while_system_font_discovery_is_blocked() {
+    isolated(
+        "terminal_fonts::bundled_terminal_fonts_are_ready_while_system_font_discovery_is_blocked",
+        || {
+            let harness = Harness::new();
+            let (scan_started, scanning) = std::sync::mpsc::sync_channel(1);
+            let (release_scan, released) = std::sync::mpsc::sync_channel(1);
+            crate::app::font_bridge::load_terminal_fonts_with_discovery(
+                harness._runtime.handle(),
+                harness.ui.as_weak(),
+                harness.state.clone(),
+                harness.font_registry.clone(),
+                Arc::new(AtomicBool::new(false)),
+                move || {
+                    scan_started.send(()).unwrap();
+                    // Dropping the sender also releases this worker if an
+                    // assertion fails, so runtime shutdown cannot hang.
+                    let _ = released.recv();
+                    Vec::new()
+                },
+            );
+            wait_for_fonts(&harness);
+            scanning.recv_timeout(Duration::from_secs(5)).unwrap();
+            assert_ui_font_context_shapes_text(&harness, "↳⠋⠙中");
+            let bundled_generation = harness.ui.get_font_registry_generation();
+            release_scan.send(()).unwrap();
+            let deadline = std::time::Instant::now() + Duration::from_secs(5);
+            while harness.ui.get_font_registry_generation() <= bundled_generation {
+                harness.status();
+                assert!(
+                    std::time::Instant::now() < deadline,
+                    "system fallbacks were not applied"
+                );
+                std::thread::yield_now();
+            }
+        },
+    );
 }
 
 #[test]
@@ -174,25 +214,44 @@ fn restoring_only_sftp_does_not_request_terminal_fonts() {
 
 #[cfg(target_os = "macos")]
 fn assert_ui_font_context_shapes_reported_symbols(harness: &Harness) {
+    assert_ui_font_context_shapes_text(harness, "↳✳✻·✻✽✻✶·");
+}
+
+fn assert_ui_font_context_shapes_text(harness: &Harness, text: &str) {
     use i_slint_core::textlayout::sharedparley::parley;
     use i_slint_core::window::WindowInner;
     let context = WindowInner::from_pub(harness.ui.window()).context().clone();
-    let mut fonts = context.font_context().borrow_mut();
-    let mut layouts = parley::LayoutContext::<()>::new();
-    let text = "↳✳✻·✻✽✻✶·";
-    let mut builder = layouts.ranged_builder(&mut fonts.inner, text, 1.0, false);
-    builder.push_default(parley::StyleProperty::FontFamily(
-        parley::FontFamily::Single(parley::FontFamilyName::named("Iosevka Term")),
-    ));
-    let mut layout = builder.build(text);
-    layout.break_all_lines(None);
-    let runs = layout
-        .lines()
-        .flat_map(|line| line.runs())
-        .collect::<Vec<_>>();
-    assert!(!runs.is_empty());
-    assert!(runs.iter().all(|run| {
-        run.clusters()
-            .all(|cluster| cluster.glyphs().all(|glyph| glyph.id != 0))
-    }));
+    let deadline = std::time::Instant::now() + Duration::from_secs(5);
+    loop {
+        harness.status();
+        let shaped = {
+            let mut fonts = context.font_context().borrow_mut();
+            let mut layouts = parley::LayoutContext::<()>::new();
+            let mut builder = layouts.ranged_builder(&mut fonts.inner, text, 1.0, false);
+            builder.push_default(parley::StyleProperty::FontFamily(
+                parley::FontFamily::Single(parley::FontFamilyName::named("Iosevka Term")),
+            ));
+            let mut layout = builder.build(text);
+            layout.break_all_lines(None);
+            let runs = layout
+                .lines()
+                .flat_map(|line| line.runs())
+                .collect::<Vec<_>>();
+            !runs.is_empty()
+                && runs.iter().all(|run| {
+                    run.clusters()
+                        .all(|cluster| cluster.glyphs().all(|glyph| glyph.id != 0))
+                })
+        };
+        if shaped {
+            return;
+        }
+        // Some reported symbols need installed system coverage, which is
+        // published separately after the bundled fonts are ready.
+        assert!(
+            std::time::Instant::now() < deadline,
+            "UI font context is missing glyphs for {text:?}"
+        );
+        std::thread::yield_now();
+    }
 }

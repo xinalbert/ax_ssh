@@ -94,6 +94,24 @@ pub(super) fn load_terminal_font_on_demand(
     font_registry: Arc<Mutex<FontRegistry>>,
     started: Arc<AtomicBool>,
 ) {
+    load_terminal_fonts_with_discovery(
+        runtime,
+        ui,
+        state,
+        font_registry,
+        started,
+        discover_system_monospace_families,
+    );
+}
+
+pub(super) fn load_terminal_fonts_with_discovery(
+    runtime: &tokio::runtime::Handle,
+    ui: slint::Weak<super::AppWindow>,
+    state: Arc<Mutex<super::AppState>>,
+    font_registry: Arc<Mutex<FontRegistry>>,
+    started: Arc<AtomicBool>,
+    discover: impl FnOnce() -> Vec<String> + Send + 'static,
+) {
     if started.load(Ordering::Acquire) {
         return;
     }
@@ -122,41 +140,73 @@ pub(super) fn load_terminal_font_on_demand(
         }
     };
     runtime.spawn(async move {
-        let loaded = tokio::task::spawn_blocking(move || {
-            let fonts = resources.load_bundled_fonts(&pending_families)?;
-            let system_families = discover_system_monospace_families()
-                .into_iter()
-                .take(MAX_FONT_OPTIONS)
-                .collect::<Vec<_>>();
-            Ok::<_, anyhow::Error>((fonts, system_families))
-        })
-        .await;
-        let (fonts, system_families) = match loaded {
+        let loaded =
+            tokio::task::spawn_blocking(move || resources.load_bundled_fonts(&pending_families))
+                .await;
+        let fonts = match loaded {
             Ok(Ok(loaded)) => loaded,
             Ok(Err(error)) => {
-                tracing::warn!(%error, "failed to read terminal font resources");
+                tracing::warn!(error = ?error, "failed to read terminal font resources");
                 started.store(false, Ordering::Release);
+                super::view::set_status(&ui, &format!("Cannot load terminal fonts: {error:#}"));
                 return;
             }
             Err(error) => {
                 tracing::warn!(%error, "terminal font task failed");
                 started.store(false, Ordering::Release);
+                super::view::set_status(&ui, &format!("Terminal font task failed: {error}"));
+                return;
+            }
+        };
+        // Make bundled coverage available before scanning every installed
+        // system font. The UI acknowledgement also stops discovery if the
+        // window has gone away or registration failed.
+        let registry_for_bundled = font_registry.clone();
+        let state_for_bundled = state.clone();
+        let (registered, registration) = tokio::sync::oneshot::channel();
+        if !super::view::dispatch_ui_result(&ui, move |ui| {
+            let generation = registry_for_bundled
+                .lock()
+                .map_err(|_| anyhow::anyhow!("font registry lock poisoned"))
+                .and_then(|mut registry| {
+                    for font in fonts {
+                        registry.register_loaded_font(font)?;
+                    }
+                    Ok(registry.generation_as_slint_int())
+                });
+            match generation {
+                Ok(generation) => {
+                    super::view::set_font_registry_generation(ui, generation);
+                    super::view::refresh_workspace(&ui.as_weak(), &state_for_bundled);
+                    let _ = registered.send(());
+                }
+                Err(error) => {
+                    tracing::warn!(%error, "failed to register terminal font resources");
+                    ui.set_status(format!("Cannot register terminal font: {error}").into());
+                }
+            }
+        }) || registration.await.is_err()
+        {
+            started.store(false, Ordering::Release);
+            return;
+        }
+
+        let system_families = match tokio::task::spawn_blocking(move || {
+            discover()
+                .into_iter()
+                .take(MAX_FONT_OPTIONS)
+                .collect::<Vec<_>>()
+        })
+        .await
+        {
+            Ok(families) => families,
+            Err(error) => {
+                tracing::warn!(%error, "system terminal font discovery task failed");
+                started.store(false, Ordering::Release);
                 return;
             }
         };
         super::view::dispatch_ui(&ui, move |ui| {
-            for font in fonts {
-                let registration = font_registry
-                    .lock()
-                    .map_err(|_| anyhow::anyhow!("font registry lock poisoned"))
-                    .and_then(|mut registry| registry.register_loaded_font(font));
-                if let Err(error) = registration {
-                    started.store(false, Ordering::Release);
-                    tracing::warn!(%error, "failed to register terminal font resources");
-                    ui.set_status(format!("Cannot register terminal font: {error}").into());
-                    return;
-                }
-            }
             let generation = font_registry
                 .lock()
                 .map_err(|_| anyhow::anyhow!("font registry lock poisoned"))

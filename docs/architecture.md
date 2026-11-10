@@ -2270,13 +2270,16 @@ opened ones. Startup and
 workspace-file restoration share `ConnectionContext::resume_restored_terminals`;
 existing profile-terminal resumes and local-terminal retries request the same
 font loader before starting workers. A workspace containing only SFTP tabs does
-not request terminal fonts. Registration completion advances the font generation
+not request terminal fonts. Bundled registration first advances the font generation
 and refreshes the workspace, invalidating existing text metrics and paint bounds.
+Only after the UI acknowledges this registration does the loading task scan
+system fonts on a separate blocking call. Slow system discovery cannot delay
+bundled coverage; its completion advances the generation and refreshes again.
 `FontRegistry::register_loaded_font` is the sole bundled registration boundary:
 it keeps Maple first in the shared
 Fontique `Hani` fallback list and Iosevka first for Common-script fallback, with
-the other bundled fallback next. The first Terminal loading task also discovers
-up to 256 system monospace family names on its blocking worker, even when all
+the other bundled fallback next. The first Terminal loading task also retains
+up to 256 system monospace family names from its blocking scan, even when all
 bundled faces are already registered. The UI merges these installed families
 after the bundled choices and before the original platform fallback families.
 It reads the platform defaults before replacing either list and deduplicates
