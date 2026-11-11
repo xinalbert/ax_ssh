@@ -240,6 +240,33 @@ development output with `cargo clean --profile dev --package ax_ssh`.
   and file-consumer capacity, and keep channel/file retries bounded and cancellable.
   Loopback tests cover server session limits, full discovery queues, per-file
   channel loss, retry cancellation, and preservation of the live attempt.
+  Transfer controls cover queued/opening files, uploads, downloads, and directory
+  roots. The transfer bar keeps selected-row actions and an All tasks menu scoped
+  to the current SFTP Tab. Keep control tokens worker-owned; UI callbacks submit
+  one atomic batch and retain pre-pause phases. A paused parent governs future
+  children; Cancel all must invalidate application producers as well as worker
+  tasks. Loopback control tests use pinned host keys and synthetic files, and
+  assert byte identity, publication/cleanup, bounded admission, and Tab isolation.
+  Manual acceptance should include row/selected/all Pause, Resume, and Cancel
+  during queueing, initialization, and active upload/download, directory children,
+  adding files while paused, cancelling a scanning batch, then creating a new one.
+  Wait for the subsystem confirmation before converting the channel into a
+  stream; queuing `request_subsystem` does not confirm acceptance. Close pending
+  channels on startup timeout/cancellation. Discovery may retry transient
+  initialization failures twice (1/2-second backoff), but must not replay after
+  metadata inspection begins. Regression tests cover explicit rejection,
+  confirmation timeout/cancellation and permit release, fresh-stream handshake
+  recovery, retry exhaustion, backoff cancellation and no replay after init.
+  Diagnose startup with phase/ID/elapsed/attempt logs, without server stderr or
+  secrets; a successful later connection does not establish a historical cause.
+  Reuse initialized download/discovery sessions only within their authenticated
+  transport, with at most two idle entries. Return only fully successful, cleaned-up
+  sessions; discard failed/cancelled/dead leases and clear on disconnect. Evict idle
+  entries under channel pressure, and never cache a return while admission is full.
+  Single-file selections skip discovery but still validate fresh metadata; discovered
+  and explicit-path files retain expected-size checks. Tests cover one-INIT reuse,
+  changed file sizes/capabilities, dead sessions, cancellation, cleanup failure,
+  cache bounds, disconnect and admission/server-limit pressure.
   SFTP-only Tabs must not allocate a PTY or interactive shell, while retaining
   the same host-key and credential gates as terminal Tabs. Preserve the inbound
   packet, path/name validation, page, request, and shutdown limits.

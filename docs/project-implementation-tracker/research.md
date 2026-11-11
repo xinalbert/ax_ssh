@@ -1,5 +1,25 @@
 # 项目研究记录
 
+## 2026-11-11 原生 OpenSSH 复现与会话复用边界
+
+- 时间：2026-11-11 10:53 +0800
+- 检索问题：握手等待是否只发生在 AxSSH，缓存服务器能力能否跳过后续初始化？
+- 检索原因：用户在重试构建中仍观察到约 15 秒启动等待，希望首次获取后保存并自动更新。
+- 来源列表：本轮前已完成的原生 OpenSSH INIT-only/只读命令诊断及应用阶段日志；锁定 `russh-sftp 3.0.1` 的 `RawSftpSession::init`、关闭和 server launcher 源码；当前 worker/discovery/download 源码。
+- 关键结论：原生 OpenSSH 一次认证约 78 ms、subsystem accepted 约 93 ms，随后 18 秒没有收到任何 VERSION 字节；后两次相同 INIT-only 约 1398/1001 ms 完成。另一只读命令曾 15 秒无输出，后续约 1.3 秒正常；这些现象支持继续检查服务端会话/进程及启动环境，但不能锁定某个初始化脚本或资源为根因。应用日志的 discovery initialization failed 显示单次约 15003 ms，现有 INFO 日志不能反推准确点击到首字节时间。缓存 VERSION 不能代替新通道必需的 INIT/VERSION；当前已认证 transport 内复用已初始化会话可以减少重复触发该阶段，重建时重新取得能力。
+- 对实施计划的影响：R1 缓存最多两个成功清理的 ready session，观察 EOF/错误并在额度压力下释放；R2 单文件绕过扫描，仍实时核验路径、类型、大小及 handle，增加请求/就绪/启动/首批数据 INFO 日志；所有缓存仅属本次 transport，不落盘或跨重连复用。测试 server launcher 会派生 detached I/O，新增 fixture bridge 才能可靠验证实际关闭和许可释放。
+- 未解决问题：具体服务端原因及用户业务场景优化后的实际启动耗时仍待验证；首个新会话或失效后重建仍可能遇到服务端启动延迟。诊断未查看私钥内容或下载业务文件。
+
+## 2026-11-11 SFTP 握手超时、子系统确认与初始化恢复
+
+- 时间：2026-11-11 09:05 +0800
+- 检索问题：递归下载的 handshake Timeout 是否包含服务端 subsystem 拒绝，何时能够安全重试？
+- 检索原因：用户日志在 2026-11-10 17:14、17:17、17:19 出现扫描握手超时；17:18 重连后的 browser 已就绪，下一次扫描仍超时。
+- 来源列表：[justsftp over russh](https://docs.rs/justsftp/latest/justsftp/#over-russh)、[russh-sftp 请求计时问题 #95](https://github.com/AspectUnk/russh-sftp/issues/95)、[OpenSSH MaxSessions](https://man.openbsd.org/sshd_config#MaxSessions)；锁定 russh 0.65.0 的 channel/stream 生命周期、russh-sftp 3.0.1 初始化/请求源码、本机历史日志与密钥认证诊断。
+- 关键结论：`request_subsystem` 只提交请求；必须显式等待 Success/Failure，否则拒绝可能表现为 SFTP 握手超时。Raw Channel 丢弃不关闭，ChannelStream 丢弃会请求关闭，因此待确认状态也需关闭 guard。#95 报告请求在真正写入 socket 前开始计时，只是并发排队的可能线索，不能证明此次根因。OpenSSH 默认 MaxSessions 为 10，当前客户端已限制后台通道。此前原生单次/六通道与实际 Rust 扫描正常；本轮修改后的同一密钥/固定主机指纹复测，browser 和两次扫描初始化通过（约 888/859 ms 到达预期不存在路径的 LSTAT），未下载业务文件、查看密钥内容或关闭主机验证。原生 OpenSSH 默认认证受旧 ssh-rsa 策略限制，逐命令兼容后成功；这是认证阶段的独立问题，不能解释已认证连接的 SFTP 握手超时。
+- 对实施计划的影响：H1 显式确认并记录阶段/ID/耗时，超时或取消关闭通道；H2 只对扫描初始化临时故障重试两次，退避 1/2 秒，新开同一连接的 subsystem。元数据检查开始后不重放，明确拒绝立即失败；不因推测提高全局超时或更换依赖。
+- 未解决问题：历史故障未在诊断时复现，无法区分当时的服务端进程/资源、网络或客户端写队列延迟；需再次发生时结合新增阶段日志及服务端 sshd/subsystem 日志判断。当前实机通过不等于历史根因已解决。
+
 ## 2026-11-05 通道拒绝与循环重连实证
 
 - 时间：2026-11-05 14:03 +0800

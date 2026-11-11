@@ -1844,8 +1844,9 @@ and SSH security prompts retain priority. The application revalidates the
 originating window's active Tab, stable directory, visible path, and sole
 selection before passing the existing rename operation to the worker. No
 network handles or filesystem operations enter Slint. Selecting remote files or directories for
-Download sends a small download-root intent to the worker. Worker-owned
-recursive discovery opens its own SFTP subsystem, rejects
+Download sends a small download-root intent to the worker. Directory intents
+lease an SFTP session for worker-owned recursive discovery; eligible single files
+enter transfer validation directly. Discovery rejects
 links and unsafe/non-regular entries, and produces owned file requests rooted
 in the current Local files directory. A directory retains its relative tree.
 Discovery walks directories iteratively and streams file requests through bounded
@@ -1858,7 +1859,7 @@ remain authoritative and are reported for the affected entry.
 Invalid, unsupported, filtered, or unreadable entries are reported while eligible
 files continue. Each SFTP Tab permits a
 configurable transfer concurrency preference (1-16, default 2), and each
-transfer owns a separate SFTP subsystem stream. Concurrency controls throughput
+active transfer exclusively leases an SFTP subsystem session. Concurrency controls throughput
 and queueing; it does not discard accepted files. Worker admission is bounded:
 if its recursive-root queue is full, it reports an explicit non-recoverable
 failure instead of silently replacing an earlier root.
@@ -1873,6 +1874,40 @@ the best-effort release probe can use one more. Server limits can be lower and
 are not negotiated by SFTP. Channel opening refusals (`AdministrativelyProhibited`
 or `ResourceShortage`) are retried twice on the same transport after 250/500 ms,
 including the brief interval while previous channels close.
+
+Before exposing an SFTP stream, the SSH owner waits for the server's subsystem
+success/failure reply within the existing 15-second startup deadline. Explicit
+refusal is reported immediately; timeout or cancellation closes the pending
+channel. Startup logs distinguish SSH channel opening, subsystem confirmation,
+and SFTP protocol initialization, with channel/transfer IDs, elapsed time and
+attempt counts; they do not include credentials or server stderr.
+
+Each authenticated transport owns a cache of at most two idle, initialized SFTP
+sessions, including their negotiated VERSION/extensions. Downloads and discovery
+lease these sessions exclusively and return them only after a successful operation
+and successful remote-handle cleanup. Errors, cancellation, EOF and failed cleanup
+discard the session. Idle sessions yield their channel permits under local admission
+pressure or server channel refusal; a returning session is closed if admission is
+full, so a waiting opener cannot be stranded. Disconnect clears the cache and prevents
+checked-out sessions from returning. New transports negotiate fresh capabilities;
+live protocol state is never persisted or reused across reconnects, accounts or trust
+decisions. Uploads and ordered writes retain their fresh-session path.
+
+An eligible single-file selection skips recursive discovery and enters the download
+queue directly. Its size is obtained from fresh LSTAT, while discovered files and
+explicit-path requests retain their expected-size check. Type, symlink, opened-handle,
+EOF and final metadata validation remain mandatory. Filters, exclusions and directory
+intents keep the discovery path. INFO logs identify request receipt, session readiness
+(including cache reuse), validated transfer start and first data; IDs and timestamps
+allow startup latency to be measured without logging paths or payloads. Reuse removes
+repeated initialization, but a newly opened channel still requires a real handshake.
+
+Recursive download discovery retries transient opening/handshake failures at most
+twice after 1/2 seconds, opening a fresh subsystem on the same SSH connection.
+Explicit subsystem refusal is not retried. This budget applies only before
+metadata inspection and enumeration begin; an initialized scan is never replayed
+locally, so emitted file requests and created directories cannot be duplicated.
+Cancellation interrupts initialization and backoff.
 
 A file stream's transient I/O failure is retried at most twice after 1/2 seconds,
 with fresh metadata checks and private temporary data. Failure aborts the current
@@ -1915,8 +1950,27 @@ is emitted at most once per 100 ms plus the final count; lifecycle events
 remain immediate. The directory root remains active until discovery and every child transfer have reached terminal states; cancellation propagates to discovery, queued opens, and active children before the root is finalized. The application state owns per-file rows split into active,
 failed (including cancelled), and successful snapshots; Slint only
 renders those DTOs and sends checkbox/batch pause, resume, or cancel intent.
-The active-page batch actions share the right side of the transfer page bar;
-they do not reserve a second toolbar row or introduce another callback path.
+The selected-row buttons share the right side of the transfer page bar with an
+**All tasks** menu containing **Pause all**, **Resume all**, and **Cancel all**.
+All means the current SFTP Tab, including rows not selected and application
+batches still being discovered; other Tabs and windows keep their own workers.
+A worker-owned, bounded control registry gives each task the same control from
+admission through channel initialization and upload/download. Directory children
+inherit their root's control; every root inherits the page control. Pausing the
+page also pauses later arrivals. A row cannot override an inherited pause;
+resume its directory or use Resume all. Resume all clears individual pauses too.
+Control acknowledgements preserve byte counters and the pre-pause phase, so a
+queued task resumes as queued and late progress cannot erase a pause.
+Pause takes effect at operation/chunk boundaries: already-sent requests remain
+bounded and may acknowledge, while subsequent operations and publication wait.
+It does not interrupt and replay a partially executed remote rename. Cancelling
+a paused task wakes it for cleanup. Selected and page-wide controls enter the
+bounded command queue as one atomic batch; rejected commands leave UI state
+unchanged. Cancel all invalidates the current application submission generation,
+stops and joins local upload discovery, and keeps bounded pre-start cancellation
+records for late accepted requests. New user batches receive a fresh page control.
+Page and individual pause intent is reapplied before automatic reconnect replay;
+explicit disconnect clears it and invalidates producers.
 Pause/resume is a worker-lifetime contract: the writer retains its partial file
 and the stream resumes at its current offset only while that worker lives.
 When an SSH transport closes, the application retains each accepted, unfinished

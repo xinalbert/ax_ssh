@@ -18,7 +18,7 @@
 | `LICENSE`、`THIRD_PARTY_NOTICES.md` | AxSSH GPL 主许可证与独立第三方许可边界 | 修改授权、分发或打包声明时 | 原创软件使用 GPL-3.0-only；Slint/OFL 字体/MIT vendor/平台文件图标依赖保留各自声明 |
 | `src/` | Rust 库边界、进程、UI bridge、配置、系统凭据、终端、日志和 transport | 修改行为、状态、存储、凭据、终端、日志或连接时 | `lib.rs` 导出 audio/media/config/credentials/logging/ssh/sftp/telnet/serial/terminal；生成的 Slint 类型只在 `app.rs` 使用 |
 | `ui/` | Slint 页面、共享 Settings 控件和集中式设计 token（含 icons 共用 SVG） | 修改布局、视觉状态、主题或 UI callback 时 | 页面不持有静态颜色/字号/间距字面量，不执行文件系统或网络操作 |
-| `translations/` | 构建时内嵌的 Slint 界面翻译目录与语言元数据 | 增加或修改静态文案、locale 或语言选择时 | PO 目录为 `de`/`en-GB`/`es`/`fr`/`ja`/`ko`/`pt-BR`/`ru`/`uk`/`zh-CN`/`zh-TW`，各 675 keys；`en` 仅保存源语言元数据；每个目录的 `language.json` 驱动 build 注册表与 Settings model；PO 为译文来源，维护脚本生成静态搜索数组并校验完整性，旧 build_zh 命令兼容；远端内容、用户值、日志与技术错误详情不进入翻译键 |
+| `translations/` | 构建时内嵌的 Slint 界面翻译目录与语言元数据 | 增加或修改静态文案、locale 或语言选择时 | PO 目录为 `de`/`en-GB`/`es`/`fr`/`ja`/`ko`/`pt-BR`/`ru`/`uk`/`zh-CN`/`zh-TW`，各 676 keys；`en` 仅保存源语言元数据；每个目录的 `language.json` 驱动 build 注册表与 Settings model；PO 为译文来源，维护脚本生成静态搜索数组并校验完整性，旧 build_zh 命令兼容；远端内容、用户值、日志与技术错误详情不进入翻译键 |
 | `assets/fonts/` | 项目自带应用/Terminal 字体、许可证和作者声明 | 修改字体选择或打包资源时 | JetBrains Mono 四个字重由 Rust 编译进可执行文件作为默认基线；Maple 和 Iosevka 分别为必需的 Han/缺失符号回退资源，其余 TTF 从运行时资源路径读取；均不经 Slint import，也不读取参考子模块 |
 | `assets/ion/` | 用户提供 Terminal 图标的跨平台资源集与说明 | 接入应用图标、打包或替换品牌图标时 | `terminal_icon.svg` 是唯一源；Slint/winit 使用 256px PNG，Windows 嵌入 ICO，macOS Dock/Bundle 使用 PNG/ICNS，Linux package 安装 hicolor PNG 集 |
 | `assets/os-icons/` | 官网/Iconify/社区系统与平台 SVG/PNG、原生变体和来源许可清单 | 为系统标识选图、核对身份或 light/dark 命名时 | 328 个系统图标、178 个系统/平台条目；`ui/folder/` 另存连接分组的 Iconify 文件夹 UI 资源，不计入系统图标清单 |
@@ -55,7 +55,9 @@
 | `src/app/connection/worker_start/tests.rs`、`src/app/terminal_media/tests.rs` | worker 启动和媒体生命周期回归 | phase/profile/target gate、paste/PNG/job owner | loopback listener/transport、私有临时文件；不访问真实凭据/录音设备 |
 | `docs/coverage.md`、`docs/coverage.zh.md` | 双语 coverage 复现与边界说明 | 测试边界、测量记录 | 同平台 LCOV、原生未覆盖项与 artifact 位置 |
 | `src/app/remote_edit.rs`、`src/sftp/edit.rs` 及各自 `tests.rs` | 外部编辑副本/监听和 guarded 字节回传；大小上限由 Settings > SFTP 的 remote_edit_max_file_mib 控制 | `RemoteEdit`、`read_edit_file`、`write_edit_file` | 系统关联程序、原子保存、迟到结果、冲突及副本保留 |
-| `src/ssh/sftp_stream.rs`、`src/ssh/worker/sftp.rs` | SFTP 通道预算与局部恢复 | `SftpStream`、`BACKGROUND_CHANNELS`、`channel_open_can_retry` | 六个后台许可随 stream 生命周期释放；一个 discovery、最多四个 transfer，browser 独立；有限重试不退役活连接 |
+| `src/ssh/sftp_stream.rs`、`src/ssh/worker/sftp.rs` | SFTP 通道预算、子系统确认与局部恢复 | `request_subsystem`、`SftpStream`、`BACKGROUND_CHANNELS`、`channel_open_can_retry` | 六个后台许可随 stream 生命周期释放；待确认通道超时/取消关闭；一个 discovery、最多四个 transfer，browser 独立；有限重试不退役活连接 |
+| `src/sftp/transfer/discovery.rs`、`src/sftp/transfer/tests/startup.rs` | 下载扫描初始化恢复与不重放边界 | `discover_download_requests` | 借用已初始化会话；临时初始化错误最多重试两次，退避 1/2 秒；元数据检查前结束重试边界，取消关闭 stream |
+| `src/sftp/transfer/session.rs`、`src/sftp/transfer/session/tests.rs`、`src/ssh/worker/behavior_tests/session_reuse.rs` | 逐 transport 初始化会话缓存、失效观测与下载启动回归 | `SftpSessionCache`、`SftpSession`、`single_file_request` | 最多两个闲置项；成功清理后归还，错误/取消/EOF 丢弃；额度压力释放、断开清空；单文件直传实时核验，日志记录复用与首批数据 |
 | `src/ssh/worker/sftp/operations.rs` | 有界串行后台写操作 | `SftpWriteWorker` | 编辑/元数据操作不阻塞主调度；取消和 join |
 | `src/sftp/transfer/pipeline.rs` 与 `src/sftp/transfer/tests/performance.rs` | 有序分块请求窗口及模拟协议回归 | `RequestWindow`、`REQUEST_WINDOW`、`delayed_peer` | 16 × 64 KiB、短读/乱序、完整性和有界取消 |
 | `src/app/view/sftp.rs` | SFTP 文件/传输稳定模型及图标 | `update_file_rows`、`update_sftp_rows`、`slint_icon` | 缓存源快照/图标代次，只更新变化行 |
@@ -198,8 +200,10 @@
 
 | Path | Role | Key Symbols / Sections | Read For |
 | --- | --- | --- | --- |
+| `src/ssh/worker/sftp/controls.rs`、`src/ssh/worker/sftp/controls/tests.rs`、`src/ssh/worker/behavior_tests/transfer_controls.rs` | 每 SFTP 页有界传输控制及真实 worker 回归 | `TransferControls`、`ControlSftpTransfers`、`ControlState` | 页/目录/文件控制继承、排队与初始化暂停、上传字节一致性/取消清理、迟到提交、容量和跨 worker 隔离 |
+| `src/app/sftp_bridge/transfers/tests.rs` | 应用批次取消代次回归 | `cancelled_upload_producer_cannot_register_a_late_file` | 取消全部后旧 producer 不可登记后续文件；不读取测试源文件 |
 | `src/sftp/transfer/{control,upload,download,discovery,local,tests}.rs` | 流式传输功能、安全本地发布与回归 | limiter、upload_initialized、stream_remote_file、`prepare_local_directory` | 修改传输控制、上传/下载协议、递归发现或本地落盘；目录发现仅在远端目录成功打开后创建本地根与子目录，拒绝链接、路径逃逸和首次同名目标，保留空目录；有界队列通过背压等待，不截断文件清单 |
-| `src/app/sftp_bridge/` | SFTP 功能 callback 与上下文 | drag/files/navigation/transfers | 修改对应 UI 意图；facade 只组合回调 |
+| `src/app/sftp_bridge/` | SFTP 功能 callback 与上下文 | drag/files/navigation/transfers | 单项/勾选/当前页全部控制；提交代次停止旧批次，窗口路由按活动 Tab；facade 只组合回调 |
 | `src/app/terminal_bridge/` | 终端输入/输出与 UI 编排 | input/native/geometry/output/clipboard/targets/panes/local_shell | 按功能修改桥接；parser 和 transport 保留原 owner |
 | `src/app/local_files/upload.rs` | 无 UI 的本地上传扫描 | discover_local_uploads_streaming、PreparedLocalUpload | 修改完整目录树发现、路径安全校验或逐文件上传入队 |
 | `src/app/workspace/startup.rs` | 启动工作区恢复 | load_startup_workspace | 修改 checkpoint 优先级与最近文件清理 |
@@ -244,9 +248,9 @@
 ## 刷新规则
 
 - 刷新触发：新增/删除模块、入口、跨层契约、构建/CI 或持久化事实时更新相应路径和定位；功能实现和验证历史追加到月度记录。
-- 最近依据：2026-11-10 CI/Release 接入原生 Windows ARM64 与共用工具环境；Terminal 自带字体先注册，收到 UI 确认后再扫描系统字体并二次刷新。
+- 最近依据：2026-11-11 当前页完整传输控制、应用批次取消代次和 loopback 回归，当前 transport 的 SFTP 初始化会话复用、单文件启动及额度/失效回归；子系统确认/初始化恢复。
 - 地图只保留当前路由，不继续累积旧任务的“当前/最近”段落。此前地图逐字保存在[历史地图快照](project-map-before-2026-10-20.md)，实施状态见 [current.md](current.md)，历史见 [changes/2026/11.md](changes/2026/11.md)。
 
 ## 最后更新时间
 
-- 2026-11-10 12:38 +0800
+- 2026-11-11 13:36 +0800

@@ -2,52 +2,59 @@
 
 ## 当前目标
 
-- 目标 ID：20261110-windows-arm64-font-loading
-- 目标：接入原生 Windows ARM64 CI/发行，并解除终端自带字体初始化对系统字体扫描的等待。
-- 交付物：Windows ARM64 构建矩阵和工具环境、分阶段字体加载、定向回归、双语说明与验证记录。
+- 目标 ID：20261111-sftp-transfer-controls
+- 目标：补齐当前 SFTP 页单项、勾选项和全部任务的暂停、继续及取消。
+- 交付物：贯穿排队/握手/上传/下载/目录的控制状态、全页入口、取消批次代次、隔离回归和双语说明。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：CI/Release、应用层字体 bridge 和行为测试、双语 README/开发/架构说明、实施记录。
-- 不在本轮范围内：SSH 信任与凭据、Slint 视图和 sidebar 状态、依赖升级、发布元数据、tag 和远端推送。
+- 当前范围：SFTP domain/worker、应用传输状态与回调、Slint 控件、翻译、测试、双语文档及 tracker。
+- 不在本轮范围内：其他服务器的跨 Tab 控制、跨进程字节续传、凭据/主机信任策略；保留已有会话复用、凭据、UI 和签名改动。
 
 ## 当前状态
 
 - 阶段：已完成
 - 开工判定：允许开工
-- 是否需要联网：是，已完成
+- 是否需要联网：否
 - 多 agent：未使用
 
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| W1 | completed | 核对 ARM64 runner、锁定依赖与字体等待链路 | GitHub 官方说明、锁定源码、本机定向测试 | windows-11-arm 原生 runner；Windows 失败底层原因尚无阶段日志 |
-| W2 | completed | ARM64 CI/Release 与分阶段字体初始化 | workflow 检查、确定性慢扫描回归 | 自带字体先注册，系统回退随后补充 |
-| W3 | completed | 双语说明和全部可用门禁 | Cargo、Markdown、skill/tracker、diff 检查 | 本机无法替代原生 Windows CI/GUI 验证 |
+| T1 | completed | 排队到活动任务的共享控制，上传/发现/目录级联 | 暂停、继续、取消、批量容量与清理回归 | worker 持有生命周期，UI 不持有 token |
+| T2 | completed | 单项/勾选/全页入口与批次取消代次 | 状态、实际回调、窗口隔离和新入队暂停回归 | 全部仅指当前 SFTP 页 |
+| T3 | completed | 双语文档、翻译、完整门禁及测试包 | Cargo、翻译、文档、skill/tracker/diff 和签名 | GUI 及其他原生平台由用户/CI 验收 |
 
 ## 已完成
 
-- 工作树起点干净，HEAD 为 f76f99f；没有改变 SSH 安全契约或跨层 DTO。
-- 官方 runner 文档确认 windows-11-arm 可用；锁定 aws-lc-sys 0.47.0 要求 Windows ARM64 使用 clang-cl，Skia 0.153.3 包含该目标支持。
-- 字体行为测试在本机 macOS 全部通过；代码确认自带字体的 UI 注册等待全系统字体扫描结束，测试统一使用 5 秒期限。
-- 按用户要求拆为字体修复与 Windows ARM64 配置两个本地提交；字体提交为 2e809f4，ARM64 提交标识以 Git 历史为准。
+- 只读核查确认：原实现仅活动下载可暂停/继续；上传、排队和目录整体未开放；顶部仅操作勾选项。
+- 用户明确全局范围为当前 SFTP 页，保留勾选批量能力。
+- 所有权：SFTP worker 管队列和共享控制，domain 在安全操作边界响应；应用层保存自有状态/批次代次，Slint 只发意图，不修改 trust 或秘密生命周期。
+
+- 实现页/目录/文件共享控制，排队/初始化/上传/下载/发现保持同一 token；恢复保留原阶段和计数，暂停父项覆盖新子项。
+- 接通单项、勾选原子批量及当前页“全部任务”菜单；取消全部推进提交代次、关闭并 join 本地发现，迟到请求保持取消，新任务可用。
+- 增加 loopback、注册表、状态、真实生成 callback 和 producer 代次回归；11 个翻译目录补齐 4 个键，双语架构/开发及地图同步。
 
 ## 验证
 
-- 已完成：字体行为测试 5 项（含阻塞系统扫描及真实 UI 字形检查）、旧流程失败/修复后通过对照；fmt、locked/offline check、严格 all-target Clippy、948 项 Rust 测试（422 library + 526 binary）；actionlint 1.7.12、三份 YAML 解析、18 项仓库/发布 helper 测试、Markdown/源码边界与 skill/tracker 检查。
-- 未完成：Windows x86_64/ARM64 原生 CI 与 GUI；本机结果不替代这些验证。
+- 已完成：按功能拆分的 SFTP 提交快照独立通过 fmt、locked/offline check、严格 all-target Clippy 和 982 项 Rust 测试（450 library + 532 binary）；该快照只包含 676 个翻译键，其他凭据/侧栏/签名改动保留工作区。功能提交为 `c1d7191`，未推送。
+- 已完成：此前包含其他未提交功能的完整工作区通过 fmt、locked/offline check、严格 all-target Clippy、994 项 Rust 测试（450 library + 544 binary）、dev build；56 份 Markdown/入口、11 目录各 681 翻译键、翻译生成一致性、12 项文档/翻译工具测试、skill/tracker/diff 校验通过。最终记录更新后复核文档/tracker/diff。
+- 已完成：`dist/sftp-transfer-controls/AxSSH.app` 构建及 codesign 严格校验；上传暂停/恢复字节一致、暂停取消清理、目录/排队/握手、原子批量容量、真实生成 callback、旧批次代次、上传冲突恢复竞争和当前页隔离均有回归。
+- 未完成：用户 GUI/键盘/布局与真实服务器业务验收，以及其他平台原生 CI；未启动或截图 GUI、读取用户私钥或访问业务文件。
 
 ## 风险与阻塞
 
-- 本机为 macOS ARM64，没有原生 Windows runner；ARM64 编译、链接、测试与 ConPTY/窗口行为须由原生 Windows 验证。
-- 用户日志只能证明初始化超时，尚不能完全排除 Windows 字体资源读取/注册错误；补充阶段诊断以便复核。
+- 暂停不得丢弃有副作用的进行中操作；在途请求有界推进，暂停保留临时数据，取消清理后再终态。
+- 目录和全页暂停必须覆盖新子项；全部取消使旧批次失效，但不取消用户之后新建的任务。
+- 批量操作通过单个有界命令提交，不能队列半满时只改一部分 UI。
+- 本机仅验证 macOS ARM64，其他原生 CI 和 GUI/真实 SSH 生命周期仍需验收。
 
 ## 下一步
 
-- 代码与配置可供审阅；后续在原生 Windows x86_64/ARM64 CI 和设备上确认构建、字体初始化及 ConPTY/窗口行为。
+- 用户用测试包验收单项/勾选/全部入口，以及上传/下载/目录和取消扫描后新建任务；视觉反馈仅使用用户确认或用户提供截图。
 
 ## 最后更新时间
 
-- 2026-11-10 13:08 +0800
+- 2026-11-11 13:36 +0800
