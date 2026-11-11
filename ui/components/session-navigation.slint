@@ -266,6 +266,7 @@ component SessionNavigationRow inherits FocusScope {
                     root.group-name,
                 );
                 if root.group {
+                    root.focus();
                     root.toggle-expanded();
                 } else {
                     root.connect-session(root.id);
@@ -356,11 +357,11 @@ component SessionNavigationRow inherits FocusScope {
     }
 }
 
-// Each group owns its disclosure state. The Rust model supplies only the
-// immutable group/profile snapshot, so expanding a group never crosses the UI
-// boundary or mutates application state.
+// A group stays mounted across sidebar modes and owns one disclosure state.
+// Only its inner layout changes; the Rust snapshot remains read-only.
 component SessionNavigationGroup inherits Rectangle {
     in property <SessionGroupRow> source;
+    in property <bool> compact;
     in property <string> search-query;
     in property <string> selected-kind;
     in property <string> selected-id;
@@ -389,206 +390,195 @@ component SessionNavigationGroup inherits Rectangle {
     height: group-layout.preferred-height;
 
     group-layout := VerticalLayout {
+        width: parent.width;
         spacing: 0px;
 
-        SessionNavigationRow {
-            width: parent.width;
-            id: "";
-            group-name: root.source.group-name;
-            name: root.source.name;
-            endpoint: "\{root.source.profiles.length}";
-            group: true;
-            expanded: root.group-expanded;
-            selected: root.selected-kind == "group"
-                && root.selected-group-name == root.source.group-name;
-            toggle-expanded => { root.group-expanded = !root.group-expanded; }
-            select-target(kind, id, group-name) => {
-                root.select-target(kind, id, group-name);
-            }
-            connect-session(id) => { root.connect-session(id); }
-            new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
-            rename-group(group-name) => { root.rename-group(group-name); }
-            delete-group(group-name) => { root.delete-group(group-name); }
-            edit-session(id) => { root.edit-session(id); }
-            delete-session(id, name) => { root.delete-session(id, name); }
-            session-transfer-action(action, target) => {
-                root.session-transfer-action(action, target);
-            }
-        }
+        if !root.compact : Rectangle {
+            height: expanded-layout.preferred-height;
 
-        if root.group-expanded : Rectangle {
-            height: profile-layout.preferred-height;
-            vertical-stretch: 0;
+            expanded-layout := VerticalLayout {
+                spacing: 0px;
 
-            profile-layout := VerticalLayout {
-                padding-top: Theme.sidebar-group-to-session-spacing;
-                spacing: Theme.sidebar-session-row-spacing;
-
-                for profile in root.source.profiles : SessionNavigationRow {
+                SessionNavigationRow {
                     width: parent.width;
-                    id: profile.id;
+                    id: "";
                     group-name: root.source.group-name;
-                    name: profile.name;
-                    details: profile.details;
-                    endpoint: profile.endpoint;
-                    system-platform: profile.system_platform;
-                    sftp-enabled: profile.sftp-enabled;
-                    group: false;
-                    expanded: false;
-                    selected: root.selected-kind == "server"
-                        && root.selected-id == profile.id;
+                    name: root.source.name;
+                    endpoint: "\{root.source.profiles.length}";
+                    group: true;
+                    expanded: root.group-expanded;
+                    selected: root.selected-kind == "group"
+                        && root.selected-group-name == root.source.group-name;
+                    toggle-expanded => { root.group-expanded = !root.group-expanded; }
                     select-target(kind, id, group-name) => {
                         root.select-target(kind, id, group-name);
                     }
                     connect-session(id) => { root.connect-session(id); }
-                    open-sftp(id) => { root.open-sftp(id); }
                     new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
                     rename-group(group-name) => { root.rename-group(group-name); }
                     delete-group(group-name) => { root.delete-group(group-name); }
                     edit-session(id) => { root.edit-session(id); }
                     delete-session(id, name) => { root.delete-session(id, name); }
-                    copy-session(id) => { root.copy-session(id); }
-                    duplicate-session(id) => { root.duplicate-session(id); }
                     session-transfer-action(action, target) => {
                         root.session-transfer-action(action, target);
                     }
                 }
+
+                if root.group-expanded : Rectangle {
+                    height: profile-layout.preferred-height;
+                    vertical-stretch: 0;
+
+                    profile-layout := VerticalLayout {
+                        padding-top: Theme.sidebar-group-to-session-spacing;
+                        spacing: Theme.sidebar-session-row-spacing;
+
+                        for profile in root.source.profiles : SessionNavigationRow {
+                            width: parent.width;
+                            id: profile.id;
+                            group-name: root.source.group-name;
+                            name: profile.name;
+                            details: profile.details;
+                            endpoint: profile.endpoint;
+                            system-platform: profile.system_platform;
+                            sftp-enabled: profile.sftp-enabled;
+                            group: false;
+                            expanded: false;
+                            selected: root.selected-kind == "server"
+                                && root.selected-id == profile.id;
+                            select-target(kind, id, group-name) => {
+                                root.select-target(kind, id, group-name);
+                            }
+                            connect-session(id) => { root.connect-session(id); }
+                            open-sftp(id) => { root.open-sftp(id); }
+                            new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+                            rename-group(group-name) => { root.rename-group(group-name); }
+                            delete-group(group-name) => { root.delete-group(group-name); }
+                            edit-session(id) => { root.edit-session(id); }
+                            delete-session(id, name) => { root.delete-session(id, name); }
+                            copy-session(id) => { root.copy-session(id); }
+                            duplicate-session(id) => { root.duplicate-session(id); }
+                            session-transfer-action(action, target) => {
+                                root.session-transfer-action(action, target);
+                            }
+                        }
+                    }
+                }
+
+                // The gap belongs to the preceding group, keeping its heading and
+                // servers visually together while separating the next group.
+                Rectangle {
+                    height: Theme.sidebar-group-spacing;
+                    vertical-stretch: 0;
+                }
             }
         }
+        if root.compact : Rectangle {
+            height: compact-layout.preferred-height;
 
-        // The gap belongs to the preceding group, keeping its heading and
-        // servers visually together while separating the next group.
-        Rectangle {
-            height: Theme.sidebar-group-spacing;
-            vertical-stretch: 0;
-        }
-    }
-}
-
-component CompactSessionNavigationGroup inherits Rectangle {
-    in property <SessionGroupRow> source;
-    in property <string> selected-kind;
-    in property <string> selected-id;
-    in property <string> selected-group-name;
-
-    callback connect-session(string);
-    callback open-sftp(string);
-    callback new-session-in-group(string);
-    callback rename-group(string);
-    callback delete-group(string);
-    callback edit-session(string);
-    callback delete-session(string, string);
-    callback copy-session(string);
-    callback duplicate-session(string);
-    callback session-transfer-action(string, string);
-    callback select-target(string, string, string);
-
-    private property <bool> group-expanded: true;
-
-    height: compact-layout.preferred-height;
-
-    compact-layout := VerticalLayout {
-        width: parent.width;
-        spacing: root.group-expanded && root.source.profiles.length > 0
-            ? Theme.sidebar-rail-group-to-session-spacing : 0px;
-
-        Rectangle {
-            width: parent.width;
-            height: group-item.height;
-
-            group-item := SidebarRailItem {
+            compact-layout := VerticalLayout {
                 width: parent.width;
-                context-requested(position) => { nav-menu2.show-at(position); }
-                label: root.source.name;
-                group: true;
-                expandable: true;
-                expanded: root.group-expanded;
-                icon-kind: "folder";
-                tooltip-text: root.source.name;
-                tooltip-enabled: true;
-                selected: root.selected-kind == "group"
-                    && root.selected-group-name == root.source.group-name;
-                accessible-name: root.group-expanded
-                    ? @tr("Collapse {0} group", root.source.name)
-                    : @tr("Expand {0} group", root.source.name);
-                activated => {
-                    root.select-target("group", "", root.source.group-name);
-                    root.group-expanded = !root.group-expanded;
-                }
-            }
-            nav-menu2 := SessionActionMenu {
-                group-name: root.source.group-name;
-                name: root.source.name;
-                kind: root.source.group-name.is-empty
-                    ? SessionActionMenuKind.ungrouped
-                    : SessionActionMenuKind.group;
-                connect-session(id) => { root.connect-session(id); }
-                new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
-                rename-group(group-name) => { root.rename-group(group-name); }
-                delete-group(group-name) => { root.delete-group(group-name); }
-                edit-session(id) => { root.edit-session(id); }
-                delete-session(id, name) => { root.delete-session(id, name); }
-                copy-session(id) => { root.copy-session(id); }
-                duplicate-session(id) => { root.duplicate-session(id); }
-                select-target(kind, id, group-name) => {
-                    root.select-target(kind, id, group-name);
-                }
-                session-transfer-action(action, target) => {
-                    root.session-transfer-action(action, target);
-                }
-            }
-        }
+                spacing: root.group-expanded && root.source.profiles.length > 0
+                    ? Theme.sidebar-rail-group-to-session-spacing : 0px;
 
-        if root.group-expanded : VerticalLayout {
-            spacing: Theme.sidebar-rail-session-spacing;
-
-            for profile in root.source.profiles : Rectangle {
-                width: parent.width;
-                height: profile-item.height;
-
-                profile-item := SidebarRailItem {
+                Rectangle {
                     width: parent.width;
-                    context-requested(position) => { nav-menu3.show-at(position); }
-                    label: profile.name;
-                    group: false;
-                    icon-kind: profile.system_platform.is-empty
-                        ? "server" : profile.system_platform;
-                    tooltip-text: profile.name;
-                    tooltip-enabled: profile.details.is-empty;
-                    selected: root.selected-kind == "server"
-                        && root.selected-id == profile.id;
-                    accessible-name: @tr("Connect to {0}", profile.name);
-                    activated => {
-                        root.select-target("server", profile.id, root.source.group-name);
-                        root.connect-session(profile.id);
+                    height: group-item.height;
+
+                    group-item := SidebarRailItem {
+                        width: parent.width;
+                        context-requested(position) => { nav-menu2.show-at(position); }
+                        label: root.source.name;
+                        group: true;
+                        expandable: true;
+                        expanded: root.group-expanded;
+                        icon-kind: "folder";
+                        tooltip-text: root.source.name;
+                        tooltip-enabled: true;
+                        selected: root.selected-kind == "group"
+                            && root.selected-group-name == root.source.group-name;
+                        accessible-name: root.group-expanded
+                            ? @tr("Collapse {0} group", root.source.name)
+                            : @tr("Expand {0} group", root.source.name);
+                        activated => {
+                            root.select-target("group", "", root.source.group-name);
+                            root.group-expanded = !root.group-expanded;
+                        }
+                    }
+                    nav-menu2 := SessionActionMenu {
+                        group-name: root.source.group-name;
+                        name: root.source.name;
+                        kind: root.source.group-name.is-empty
+                            ? SessionActionMenuKind.ungrouped
+                            : SessionActionMenuKind.group;
+                        connect-session(id) => { root.connect-session(id); }
+                        new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+                        rename-group(group-name) => { root.rename-group(group-name); }
+                        delete-group(group-name) => { root.delete-group(group-name); }
+                        edit-session(id) => { root.edit-session(id); }
+                        delete-session(id, name) => { root.delete-session(id, name); }
+                        copy-session(id) => { root.copy-session(id); }
+                        duplicate-session(id) => { root.duplicate-session(id); }
+                        select-target(kind, id, group-name) => {
+                            root.select-target(kind, id, group-name);
+                        }
+                        session-transfer-action(action, target) => {
+                            root.session-transfer-action(action, target);
+                        }
                     }
                 }
-                if !profile.details.is-empty : Tooltip {
-                    SessionProfileTooltipContent {
-                        name: profile.name;
-                        details: profile.details;
-                    }
-                }
-                nav-menu3 := SessionActionMenu {
-                    target-id: profile.id;
-                    group-name: root.source.group-name;
-                    name: profile.name;
-                    kind: SessionActionMenuKind.server;
-                    sftp-enabled: profile.sftp-enabled;
-                    connect-session(id) => { root.connect-session(id); }
-                    open-sftp(id) => { root.open-sftp(id); }
-                    new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
-                    rename-group(group-name) => { root.rename-group(group-name); }
-                    delete-group(group-name) => { root.delete-group(group-name); }
-                    edit-session(id) => { root.edit-session(id); }
-                    delete-session(id, name) => { root.delete-session(id, name); }
-                    copy-session(id) => { root.copy-session(id); }
-                    duplicate-session(id) => { root.duplicate-session(id); }
-                    select-target(kind, id, group-name) => {
-                        root.select-target(kind, id, group-name);
-                    }
-                    session-transfer-action(action, target) => {
-                        root.session-transfer-action(action, target);
+
+                if root.group-expanded : VerticalLayout {
+                    spacing: Theme.sidebar-rail-session-spacing;
+
+                    for profile in root.source.profiles : Rectangle {
+                        width: parent.width;
+                        height: profile-item.height;
+
+                        profile-item := SidebarRailItem {
+                            width: parent.width;
+                            context-requested(position) => { nav-menu3.show-at(position); }
+                            label: profile.name;
+                            group: false;
+                            icon-kind: profile.system_platform.is-empty
+                                ? "server" : profile.system_platform;
+                            tooltip-text: profile.name;
+                            tooltip-enabled: profile.details.is-empty;
+                            selected: root.selected-kind == "server"
+                                && root.selected-id == profile.id;
+                            accessible-name: @tr("Connect to {0}", profile.name);
+                            activated => {
+                                root.select-target("server", profile.id, root.source.group-name);
+                                root.connect-session(profile.id);
+                            }
+                        }
+                        if !profile.details.is-empty : Tooltip {
+                            SessionProfileTooltipContent {
+                                name: profile.name;
+                                details: profile.details;
+                            }
+                        }
+                        nav-menu3 := SessionActionMenu {
+                            target-id: profile.id;
+                            group-name: root.source.group-name;
+                            name: profile.name;
+                            kind: SessionActionMenuKind.server;
+                            sftp-enabled: profile.sftp-enabled;
+                            connect-session(id) => { root.connect-session(id); }
+                            open-sftp(id) => { root.open-sftp(id); }
+                            new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+                            rename-group(group-name) => { root.rename-group(group-name); }
+                            delete-group(group-name) => { root.delete-group(group-name); }
+                            edit-session(id) => { root.edit-session(id); }
+                            delete-session(id, name) => { root.delete-session(id, name); }
+                            copy-session(id) => { root.copy-session(id); }
+                            duplicate-session(id) => { root.duplicate-session(id); }
+                            select-target(kind, id, group-name) => {
+                                root.select-target(kind, id, group-name);
+                            }
+                            session-transfer-action(action, target) => {
+                                root.session-transfer-action(action, target);
+                            }
+                        }
                     }
                 }
             }
@@ -659,255 +649,164 @@ export component SessionNavigation inherits Rectangle {
 
     width: root.expanded ? root.sidebar-width * 1px : Theme.activity-bar-width;
 
-    if !root.expanded : Rectangle {
-        background: Theme.panel-alt;
-        VerticalLayout {
-            padding-top: 0px;
-            padding-bottom: Theme.space-xs;
-            spacing: 0px;
+    background: root.expanded ? Theme.panel : Theme.panel-alt;
 
-            SidebarRailToggle {
-                expanded: false;
-                full-width: false;
-                activated => { root.collapsed = false; }
+    VerticalLayout {
+        padding-left: root.expanded ? Theme.space-md : 0px;
+        padding-right: root.expanded ? Theme.space-md : 0px;
+        padding-top: 0px;
+        padding-bottom: Theme.space-xs;
+        spacing: 0px;
+
+        SidebarRailToggle {
+            width: parent.width;
+            expanded: root.expanded;
+            full-width: root.expanded;
+            activated => { root.collapsed = !root.collapsed; }
+        }
+
+        Rectangle { height: Theme.hairline; background: Theme.divider; }
+
+        if !root.expanded : SidebarRailItem {
+            local: true;
+            icon-kind: root.local-shell-platform;
+            label: root.local-shell-title;
+            tooltip-text: root.local-shell-description;
+            accessible-name: root.local-shell-accessible-name;
+            activated => { root.open-local-shell(); }
+        }
+        if root.expanded : Rectangle {
+            height: Theme.sidebar-local-card-height;
+            background: local-card-touch.has-hover ? Theme.hover : transparent;
+            border-radius: Theme.radius-small;
+
+            local-card-touch := TouchArea {
+                width: parent.width;
+                height: parent.height;
+                mouse-cursor: pointer;
+                accessible-role: button;
+                accessible-label: root.local-shell-accessible-name;
+                clicked => { root.open-local-shell(); }
             }
-            Rectangle { height: Theme.hairline; background: Theme.divider; }
 
-            SidebarRailItem {
-                local: true;
-                icon-kind: root.local-shell-platform;
-                label: root.local-shell-title;
-                tooltip-text: root.local-shell-description;
-                accessible-name: root.local-shell-accessible-name;
-                activated => { root.open-local-shell(); }
-            }
-            Rectangle { height: Theme.hairline; background: Theme.divider; }
-            Rectangle {
-                vertical-stretch: 1;
-                background: transparent;
+            HorizontalLayout {
+                padding-left: Theme.sidebar-card-padding;
+                padding-right: Theme.sidebar-card-padding;
+                spacing: Theme.space-md;
 
-                TouchArea {
-                    pointer-event(event) => {
-                        if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
-                            nav-menu4.show-at({ x: self.mouse-x, y: self.mouse-y });
-                        }
+                // The glyph stays centered within its own leading slot.
+                Rectangle {
+                    width: Theme.sidebar-leading-icon-slot-width;
+                    SidebarPlatformGlyph {
+                        x: (parent.width - self.width) / 2;
+                        y: (parent.height - self.height) / 2;
+                        platform: root.local-shell-platform.is-empty
+                            ? "terminal" : root.local-shell-platform;
+                        glyph-color: local-card-touch.has-hover ? Theme.accent : Theme.text;
                     }
                 }
-
-                nav-menu4 := SessionActionMenu {
-                    kind: SessionActionMenuKind.list;
-                    new-group => { root.new-group(); }
-                    new-session => { root.new-session(); }
-                    session-transfer-action(action, target) => {
-                        root.session-transfer-action(action, target);
+                VerticalLayout {
+                    horizontal-stretch: 1;
+                    padding-top: Theme.space-xs;
+                    padding-bottom: Theme.space-xs;
+                    spacing: 0px;
+                    ElidedLabel {
+                        text: root.local-shell-title;
+                        text-color: Theme.text;
+                        font-size: Theme.font-body;
+                        font-weight: 700;
                     }
-                }
-
-                if root.sessions.length > 0 : groups-flick := Flickable {
-                    width: parent.width;
-                    height: parent.height;
-                    content-width: self.width;
-                    content-height: max(self.height, groups-layout.preferred-height);
-
-                    groups-layout := VerticalLayout {
-                        width: parent.width;
-                        spacing: Theme.sidebar-rail-group-spacing;
-
-                        for group in root.sessions : CompactSessionNavigationGroup {
-                            width: parent.width;
-                            source: group;
-                            selected-kind: root.selected-kind;
-                            selected-id: root.selected-id;
-                            selected-group-name: root.selected-group-name;
-                            select-target(kind, id, group-name) => {
-                                root.select-target(kind, id, group-name);
-                            }
-                            connect-session(id) => { root.connect-session(id); }
-                            open-sftp(id) => { root.open-sftp(id); }
-                            new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
-                            rename-group(group-name) => { root.rename-group(group-name); }
-                            delete-group(group-name) => { root.delete-group(group-name); }
-                            edit-session(id) => { root.edit-session(id); }
-                            delete-session(id, name) => { root.delete-session(id, name); }
-                            copy-session(id) => { root.copy-session(id); }
-                            duplicate-session(id) => { root.duplicate-session(id); }
-                            session-transfer-action(action, target) => {
-                                root.session-transfer-action(action, target);
-                            }
-                        }
+                    ElidedLabel {
+                        text: root.local-shell-description;
+                        text-color: Theme.muted;
+                        font-size: Theme.font-caption;
                     }
-                }
-                if root.sessions.length == 0 : Text {
-                    text: @tr("No saved servers");
-                    color: Theme.muted;
-                    font-size: Theme.font-small;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    wrap: word-wrap;
                 }
             }
         }
-        // The application frame owns the outer edge; the sidebar contributes
-        // only one internal divider on its content side.
+
+        if root.expanded : FlatTextInput {
+            text <=> root.search-query;
+            placeholder-text: @tr("Search connections...");
+            accessible-label: @tr("Search connections");
+            edited(value) => { root.search-changed(value); }
+        }
+
+        Rectangle { height: Theme.hairline; background: Theme.divider; }
+
         Rectangle {
-            x: parent.width - Theme.hairline;
-            y: root.divider-top-offset;
-            width: Theme.hairline;
-            height: max(0px, parent.height - root.divider-top-offset);
-            background: Theme.sidebar-divider;
+            vertical-stretch: 1;
+            background: transparent;
+
+            TouchArea {
+                pointer-event(event) => {
+                    if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                        navigation-menu.show-at({ x: self.mouse-x, y: self.mouse-y });
+                    }
+                }
+            }
+
+            navigation-menu := SessionActionMenu {
+                kind: SessionActionMenuKind.list;
+                new-group => { root.new-group(); }
+                new-session => { root.new-session(); }
+                session-transfer-action(action, target) => {
+                    root.session-transfer-action(action, target);
+                }
+            }
+
+            if root.sessions.length > 0 : groups-flick := Flickable {
+                width: parent.width;
+                height: parent.height;
+                content-width: self.width;
+                content-height: max(self.height, groups-layout.preferred-height);
+
+                groups-layout := VerticalLayout {
+                    width: parent.width;
+                    spacing: root.expanded ? 0px : Theme.sidebar-rail-group-spacing;
+
+                    for group in root.sessions : SessionNavigationGroup {
+                        width: parent.width;
+                        source: group;
+                        compact: root.collapsed;
+                        search-query: root.search-query;
+                        selected-kind: root.selected-kind;
+                        selected-id: root.selected-id;
+                        selected-group-name: root.selected-group-name;
+                        select-target(kind, id, group-name) => {
+                            root.select-target(kind, id, group-name);
+                        }
+                        connect-session(id) => { root.connect-session(id); }
+                        open-sftp(id) => { root.open-sftp(id); }
+                        new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
+                        rename-group(group-name) => { root.rename-group(group-name); }
+                        delete-group(group-name) => { root.delete-group(group-name); }
+                        edit-session(id) => { root.edit-session(id); }
+                        delete-session(id, name) => { root.delete-session(id, name); }
+                        copy-session(id) => { root.copy-session(id); }
+                        duplicate-session(id) => { root.duplicate-session(id); }
+                        session-transfer-action(action, target) => {
+                            root.session-transfer-action(action, target);
+                        }
+                    }
+                }
+            }
+            if root.sessions.length == 0 : Text {
+                text: @tr("No saved servers");
+                color: Theme.muted;
+                font-size: Theme.font-small;
+                horizontal-alignment: center;
+                vertical-alignment: center;
+                wrap: word-wrap;
+            }
         }
     }
-
-    if root.expanded : Rectangle {
-        background: Theme.panel;
-        VerticalLayout {
-            padding-left: Theme.space-md;
-            padding-right: Theme.space-md;
-            padding-top: 0px;
-            padding-bottom: Theme.space-xs;
-            spacing: 0px;
-
-            SidebarRailToggle {
-                width: parent.width;
-                expanded: true;
-                full-width: true;
-                activated => { root.collapsed = true; }
-            }
-
-            Rectangle { height: Theme.hairline; background: Theme.divider; }
-
-            Rectangle {
-                height: Theme.sidebar-local-card-height;
-                background: local-card-touch.has-hover ? Theme.hover : transparent;
-                border-radius: Theme.radius-small;
-
-                local-card-touch := TouchArea {
-                    width: parent.width;
-                    height: parent.height;
-                    mouse-cursor: pointer;
-                    accessible-role: button;
-                    accessible-label: root.local-shell-accessible-name;
-                    clicked => { root.open-local-shell(); }
-                }
-
-                HorizontalLayout {
-                    padding-left: Theme.sidebar-card-padding;
-                    padding-right: Theme.sidebar-card-padding;
-                    spacing: Theme.space-md;
-
-                    // The glyph stays centered within its own leading slot.
-                    Rectangle {
-                        width: Theme.sidebar-leading-icon-slot-width;
-                        SidebarPlatformGlyph {
-                            x: (parent.width - self.width) / 2;
-                            y: (parent.height - self.height) / 2;
-                            platform: root.local-shell-platform.is-empty
-                                ? "terminal" : root.local-shell-platform;
-                            glyph-color: local-card-touch.has-hover ? Theme.accent : Theme.text;
-                        }
-                    }
-                    VerticalLayout {
-                        horizontal-stretch: 1;
-                        padding-top: Theme.space-xs;
-                        padding-bottom: Theme.space-xs;
-                        spacing: 0px;
-                        ElidedLabel {
-                            text: root.local-shell-title;
-                            text-color: Theme.text;
-                            font-size: Theme.font-body;
-                            font-weight: 700;
-                        }
-                        ElidedLabel {
-                            text: root.local-shell-description;
-                            text-color: Theme.muted;
-                            font-size: Theme.font-caption;
-                        }
-                    }
-                }
-            }
-
-            FlatTextInput {
-                text <=> root.search-query;
-                placeholder-text: @tr("Search connections...");
-                accessible-label: @tr("Search connections");
-                edited(value) => { root.search-changed(value); }
-            }
-
-            Rectangle { height: Theme.hairline; background: Theme.divider; }
-
-            Rectangle {
-                vertical-stretch: 1;
-                background: transparent;
-
-                TouchArea {
-                    pointer-event(event) => {
-                        if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
-                            nav-menu5.show-at({ x: self.mouse-x, y: self.mouse-y });
-                        }
-                    }
-                }
-
-                nav-menu5 := SessionActionMenu {
-                    kind: SessionActionMenuKind.list;
-                    new-group => { root.new-group(); }
-                    new-session => { root.new-session(); }
-                    session-transfer-action(action, target) => {
-                        root.session-transfer-action(action, target);
-                    }
-                }
-
-                if root.sessions.length > 0 : expanded-groups-flick := Flickable {
-                    width: parent.width;
-                    height: parent.height;
-                    content-width: self.width;
-                    content-height: max(self.height, expanded-groups-layout.preferred-height);
-
-                    expanded-groups-layout := VerticalLayout {
-                        width: parent.width;
-                        spacing: 0px;
-
-                        for group in root.sessions : SessionNavigationGroup {
-                            width: parent.width;
-                            source: group;
-                            search-query: root.search-query;
-                            selected-kind: root.selected-kind;
-                            selected-id: root.selected-id;
-                            selected-group-name: root.selected-group-name;
-                            select-target(kind, id, group-name) => {
-                                root.select-target(kind, id, group-name);
-                            }
-                            connect-session(id) => { root.connect-session(id); }
-                            open-sftp(id) => { root.open-sftp(id); }
-                            new-session-in-group(group-name) => { root.new-session-in-group(group-name); }
-                            rename-group(group-name) => { root.rename-group(group-name); }
-                            delete-group(group-name) => { root.delete-group(group-name); }
-                            edit-session(id) => { root.edit-session(id); }
-                            delete-session(id, name) => { root.delete-session(id, name); }
-                            copy-session(id) => { root.copy-session(id); }
-                            duplicate-session(id) => { root.duplicate-session(id); }
-                            session-transfer-action(action, target) => {
-                                root.session-transfer-action(action, target);
-                            }
-                        }
-                    }
-                }
-                if root.sessions.length == 0 : Text {
-                    text: @tr("No saved servers");
-                    color: Theme.muted;
-                    font-size: Theme.font-small;
-                    horizontal-alignment: center;
-                    vertical-alignment: center;
-                    wrap: word-wrap;
-                }
-            }
-        }
-        // Avoid a second top/left/bottom frame inside the application frame.
-        Rectangle {
-            x: parent.width - Theme.hairline;
-            y: root.divider-top-offset;
-            width: Theme.hairline;
-            height: max(0px, parent.height - root.divider-top-offset);
-            background: Theme.sidebar-divider;
-        }
+    // The application frame owns the outer edge; navigation draws one divider.
+    Rectangle {
+        x: parent.width - Theme.hairline;
+        y: root.divider-top-offset;
+        width: Theme.hairline;
+        height: max(0px, parent.height - root.divider-top-offset);
+        background: Theme.sidebar-divider;
     }
 }

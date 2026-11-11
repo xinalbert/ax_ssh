@@ -1231,8 +1231,14 @@ tab-local terminal connection notice deliberately remains non-blocking.
     `AppState`, logged with target values, or sent to any transport. Rust supplies a search-filtered, read-only
     `SessionGroupRow` snapshot with a nested bounded profile model; it does not
     retain an expanded-group set or receive a group-toggle callback.
-    `SessionNavigationGroup` and `CompactSessionNavigationGroup` independently
-    expand/collapse their Group rows through click or Enter/Space. When release
+    Both modes use one persistent `SessionNavigationGroup` per Group in a shared
+    list. Click or Enter/Space changes that Group's single disclosure state;
+    toggling the sidebar only replaces the Group's inner layout, so it preserves
+    expanded and collapsed Groups. Groups start collapsed in either mode; a
+    nonempty search opens matching Groups, and later sidebar toggles retain any
+    manual disclosure changes until the next search change. Clicking a Group
+    focuses its row before toggling, so Enter/Space continues to control it.
+    When release
     information arrives, the outer model reuses rows with matching group identities
     to preserve their disclosure state. Persisted group names belong to
     `SessionStore`, so empty groups survive restart. The expanded view renders

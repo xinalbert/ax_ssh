@@ -739,9 +739,12 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     选中高亮，hover 和焦点则是独立的瞬时状态。选择身份不序列化、不进入 `AppState`、不把目标值
     写入日志，也不发送到 transport。Rust
     提供按搜索过滤的只读 `SessionGroupRow` 快照及嵌套的有界 profile model，不保存
-    展开 Group 集合，也不接收 Group 切换 callback。`SessionNavigationGroup` 与
-    `CompactSessionNavigationGroup` 分别管理各自的 Group 展开/收起，因此点击或
-    Enter/Space 只改变当前组件的呈现状态。系统 release 返回时复用同身份的外层 Group
+    展开 Group 集合，也不接收 Group 切换 callback。两种模式共用一个列表，每个 Group
+    由持续存在的 `SessionNavigationGroup` 持有唯一展开状态；点击或 Enter/Space 改变这份状态，
+    侧栏切换只替换 Group 内部布局，保留已展开和已收起的组。两种模式默认都收起 Group；非空搜索
+    自动展开匹配组，随后手动调整的状态在侧栏切换时保留，直到下一次搜索内容变化。
+    点击 Group 会先让组行取得焦点，再切换展开状态，后续 Enter/Space 继续操作该组。
+    系统 release 返回时复用同身份的外层 Group
     model，以保留当前展开状态。持久化 Group 名称仍由 `SessionStore` 持有，空 Group
     也能跨重启保留。展开态依次渲染独立侧栏切换行、Local Shell 卡片、有界连接搜索输入、
     可折叠的 Group 父行和单行服务器子项；搜索匹配组名、服务器名称和连接详情。
