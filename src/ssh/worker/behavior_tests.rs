@@ -17,13 +17,23 @@ use tokio::task::JoinSet;
 
 const CONTENT: &[u8] = b"worker download preserves every byte\n";
 
+mod session_reuse;
+mod transfer_controls;
+
 struct RemoteFiles {
     files: Mutex<HashMap<String, Vec<u8>>>,
     read_started: Notify,
     read_gate: Semaphore,
+    write_started: Notify,
+    write_gate: Semaphore,
+    hold_writes: AtomicBool,
+    completed_writes: AtomicU64,
     authentications: AtomicU64,
+    initializations: AtomicU64,
     sftp_channels: Mutex<Vec<(server::Handle, ChannelId)>>,
     close_subsystems: AtomicBool,
+    hold_subsystems: AtomicBool,
+    subsystem_requested: Notify,
     channel_limit: AtomicU64,
     rejected_channels: AtomicU64,
     reject_next_channels: AtomicU64,
@@ -103,6 +113,10 @@ impl server::Handler for Peer {
         name: &str,
         session: &mut server::Session,
     ) -> Result<(), Self::Error> {
+        self.files.subsystem_requested.notify_one();
+        if self.files.hold_subsystems.load(Ordering::Acquire) {
+            return Ok(());
+        }
         if name != "sftp" || self.reject_subsystem {
             self.channels.remove(&id);
             self.files.active_channels.fetch_sub(1, Ordering::AcqRel);
@@ -125,13 +139,13 @@ impl server::Handler for Peer {
             let slot = FixtureSessionSlot(files.clone());
             let file_channel = (session.handle(), id);
             self.tasks.spawn(async move {
-                let _slot = slot;
                 russh_sftp::server::run(
                     channel.into_stream(),
                     FilePeer {
                         files,
                         listed: false,
                         channel: file_channel,
+                        _slot: slot,
                     },
                 )
                 .await;
@@ -167,6 +181,9 @@ struct FilePeer {
     files: Arc<RemoteFiles>,
     listed: bool,
     channel: (server::Handle, ChannelId),
+    // The library launcher returns immediately. Admission must follow the
+    // handler owned by its actual I/O task, not the launcher future.
+    _slot: FixtureSessionSlot,
 }
 
 fn attributes(path: &str, files: &RemoteFiles) -> Result<FileAttributes, StatusCode> {
@@ -203,6 +220,7 @@ impl russh_sftp::server::Handler for FilePeer {
         _: u32,
         _: HashMap<String, String>,
     ) -> Result<russh_sftp::protocol::Version, StatusCode> {
+        self.files.initializations.fetch_add(1, Ordering::AcqRel);
         let mut version = russh_sftp::protocol::Version::new();
         version
             .extensions
@@ -361,6 +379,16 @@ impl russh_sftp::server::Handler for FilePeer {
                 .expect("close failed upload channel");
             return Err(StatusCode::Failure);
         }
+        if self.files.hold_writes.load(Ordering::Acquire) {
+            self.files.write_started.notify_one();
+            self.files
+                .write_gate
+                .acquire()
+                .await
+                .expect("write gate")
+                .forget();
+        }
+        self.files.completed_writes.fetch_add(1, Ordering::AcqRel);
         let mut files = self.files.files.lock().expect("fixture files");
         let bytes = files.get_mut(&handle).ok_or(StatusCode::NoSuchFile)?;
         let start = offset as usize;
@@ -428,9 +456,16 @@ impl Fixture {
             ])),
             read_started: Notify::new(),
             read_gate: Semaphore::new(0),
+            write_started: Notify::new(),
+            write_gate: Semaphore::new(0),
+            hold_writes: AtomicBool::new(false),
+            completed_writes: AtomicU64::new(0),
             authentications: AtomicU64::new(0),
+            initializations: AtomicU64::new(0),
             sftp_channels: Mutex::new(Vec::new()),
             close_subsystems: AtomicBool::new(false),
+            hold_subsystems: AtomicBool::new(false),
+            subsystem_requested: Notify::new(),
             channel_limit: AtomicU64::new(u64::MAX),
             rejected_channels: AtomicU64::new(0),
             reject_next_channels: AtomicU64::new(0),
@@ -484,10 +519,7 @@ impl Fixture {
         self.worker_with_limit(2).await
     }
 
-    async fn worker_with_limit(
-        &self,
-        limit: i32,
-    ) -> (SshSessionHandle, mpsc::Receiver<SshSessionEvent>) {
+    async fn connection(&self) -> SshConnection {
         // Supply a known-hosts snapshot, preserving the real Handler trust check.
         let ssh = self.profile.ssh().expect("SSH profile");
         let socket = TcpStream::connect((ssh.host.as_str(), ssh.port))
@@ -511,10 +543,19 @@ impl Fixture {
                 .expect("fixture authentication")
                 .success()
         );
-        let connection = SshConnection {
+        let sftp_slots = Arc::new(Semaphore::new(crate::ssh::sftp_stream::BACKGROUND_CHANNELS));
+        SshConnection {
             handle: Arc::new(transport),
-            sftp_slots: Arc::new(Semaphore::new(crate::ssh::sftp_stream::BACKGROUND_CHANNELS)),
-        };
+            sftp_sessions: crate::sftp::SftpSessionCache::new(sftp_slots.clone()),
+            sftp_slots,
+        }
+    }
+
+    async fn worker_with_limit(
+        &self,
+        limit: i32,
+    ) -> (SshSessionHandle, mpsc::Receiver<SshSessionEvent>) {
+        let connection = self.connection().await;
         let (command_tx, command_rx) = mpsc::channel(COMMAND_CAPACITY);
         let (event_tx, event_rx) = mpsc::channel(EVENT_CAPACITY);
         let (latency_foreground_tx, latency_rx) = watch::channel(false);
@@ -767,7 +808,7 @@ async fn sftp_persistent_channel_refusal_finishes_only_the_failed_file() {
 }
 
 #[tokio::test]
-async fn sftp_file_channel_loss_retries_and_cancellation_stops_channel_backoff() {
+async fn sftp_file_channel_loss_retries_on_the_same_transport() {
     let fixture = Fixture::new(false).await;
     let (worker, mut events) = fixture.worker().await;
     until(&mut events, |event| {
@@ -808,6 +849,18 @@ async fn sftp_file_channel_loss_retries_and_cancellation_stops_channel_backoff()
         std::fs::read(fixture.directory.join("retried.txt")).expect("retried file"),
         CONTENT
     );
+    assert_eq!(fixture.files.authentications.load(Ordering::Acquire), 1);
+    worker.shutdown().await.expect("worker shutdown");
+}
+
+#[tokio::test]
+async fn sftp_file_cancellation_stops_channel_backoff() {
+    let fixture = Fixture::new(false).await;
+    let (worker, mut events) = fixture.worker().await;
+    until(&mut events, |event| {
+        matches!(event, SshSessionEvent::Connected)
+    })
+    .await;
     fixture
         .files
         .reject_next_channels
@@ -1438,7 +1491,12 @@ async fn sftp_worker_reports_subsystem_rejection_without_connected_event() {
         loop {
             let event = events.recv().await.expect("rejected subsystem event");
             assert!(!matches!(event, SshSessionEvent::Connected));
-            if matches!(event, SshSessionEvent::Failed(_)) {
+            if let SshSessionEvent::Failed(message) = event {
+                assert!(
+                    message.contains("server rejected the SFTP subsystem"),
+                    "{message}"
+                );
+                assert!(!message.contains("handshake"), "{message}");
                 break;
             }
         }
@@ -1446,6 +1504,85 @@ async fn sftp_worker_reports_subsystem_rejection_without_connected_event() {
     .await
     .expect("rejection reaches the worker");
     worker.shutdown().await.expect("failed worker joins");
+}
+
+async fn assert_no_active_sftp_channels(fixture: &Fixture) {
+    timeout(Duration::from_secs(5), async {
+        while fixture.files.active_channels.load(Ordering::Acquire) != 0 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("pending subsystem channel should close");
+}
+
+#[tokio::test]
+async fn sftp_subsystem_confirmation_timeout_closes_the_channel() {
+    let fixture = Fixture::new(false).await;
+    fixture.files.hold_subsystems.store(true, Ordering::Release);
+    let connection = fixture.connection().await;
+    let channel = connection
+        .handle
+        .channel_open_session()
+        .await
+        .expect("test channel");
+    let error = crate::ssh::sftp_stream::request_subsystem(channel, Duration::from_millis(250))
+        .await
+        .err()
+        .expect("unconfirmed subsystem should time out");
+    assert!(
+        error
+            .to_string()
+            .contains("waiting for SFTP subsystem confirmation")
+    );
+    assert!(
+        error
+            .downcast_ref::<tokio::time::error::Elapsed>()
+            .is_some()
+    );
+    assert_no_active_sftp_channels(&fixture).await;
+    assert!(!connection.is_closed());
+    connection
+        .disconnect()
+        .await
+        .expect("disconnect test connection");
+}
+
+#[tokio::test]
+async fn sftp_subsystem_confirmation_cancellation_closes_and_releases_admission() {
+    let fixture = Fixture::new(false).await;
+    fixture.files.hold_subsystems.store(true, Ordering::Release);
+    let connection = fixture.connection().await;
+    let opening_connection = connection.clone();
+    let opening = tokio::spawn(async move { opening_connection.open_sftp_stream().await });
+    timeout(
+        Duration::from_secs(5),
+        fixture.files.subsystem_requested.notified(),
+    )
+    .await
+    .expect("subsystem request should reach server");
+    assert_eq!(
+        connection.sftp_slots.available_permits(),
+        crate::ssh::sftp_stream::BACKGROUND_CHANNELS - 1
+    );
+    opening.abort();
+    assert!(
+        opening
+            .await
+            .err()
+            .expect("opening cancelled")
+            .is_cancelled()
+    );
+    assert_no_active_sftp_channels(&fixture).await;
+    assert_eq!(
+        connection.sftp_slots.available_permits(),
+        crate::ssh::sftp_stream::BACKGROUND_CHANNELS
+    );
+    assert!(!connection.is_closed());
+    connection
+        .disconnect()
+        .await
+        .expect("disconnect test connection");
 }
 
 #[tokio::test]

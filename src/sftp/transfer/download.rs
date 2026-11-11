@@ -2,53 +2,34 @@
 
 use super::*;
 
-pub(super) async fn download_to_local<S>(
-    stream: S,
+pub(super) async fn download_to_local(
+    session: SftpSession,
     request: &SftpDownloadRequest,
     cancellation: &TransferCancellation,
     event_tx: &mpsc::Sender<SftpTransferEvent>,
-) -> Result<(PathBuf, u64)>
-where
-    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
+) -> Result<(PathBuf, u64)> {
     let deadline = Instant::now() + DOWNLOAD_TIMEOUT;
-    let session = RawSftpSession::new_with_config(
-        PacketLimitedStream::new(stream),
-        Config {
-            max_packet_len: MAX_PACKET_BYTES,
-            max_concurrent_reads: 16,
-            max_concurrent_writes: 1,
-            max_write_packet_len: MAX_PACKET_BYTES,
-            request_timeout_secs: REQUEST_TIMEOUT.as_secs(),
-        },
-    );
-    await_step(
-        cancellation,
-        deadline,
-        REQUEST_TIMEOUT,
-        "SFTP transfer handshake",
-        session.init(),
-    )
-    .await?
-    .context("SFTP transfer handshake failed")?;
 
     let result =
         download_initialized_local(&session, request, cancellation, event_tx, deadline).await;
-    if let Err(error) = session.close_session() {
-        debug!(%error, "failed to close local SFTP download session");
+    if result.is_ok() && !cancellation.is_cancelled() {
+        session.recycle();
     }
     result
 }
 
 pub(super) async fn download_initialized_local(
-    session: &RawSftpSession,
+    session: &SftpSession,
     request: &SftpDownloadRequest,
     cancellation: &TransferCancellation,
     event_tx: &mpsc::Sender<SftpTransferEvent>,
     deadline: Instant,
 ) -> Result<(PathBuf, u64)> {
     let initial = lstat_regular_file(session, &request.remote_path, cancellation, deadline).await?;
-    if initial.size != request.total_bytes {
+    if request
+        .expected_size
+        .is_some_and(|size| initial.size != size)
+    {
         anyhow::bail!("remote file size changed since the download was queued");
     }
     let handle = await_step(
@@ -82,7 +63,7 @@ pub(super) async fn download_initialized_local(
 
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn download_open_local_handle(
-    session: &RawSftpSession,
+    session: &SftpSession,
     handle: &str,
     request: &SftpDownloadRequest,
     initial: RemoteFileMetadata,
@@ -103,6 +84,8 @@ pub(super) async fn download_open_local_handle(
     let reopened =
         lstat_regular_file(session, &request.remote_path, cancellation, deadline).await?;
     ensure_same_remote_file(initial, reopened)?;
+
+    tracing::info!(transfer_id = %request.transfer_id, total_bytes = initial.size, "SFTP download metadata validated; starting transfer");
 
     send_transfer_state(
         event_tx,
@@ -170,36 +153,14 @@ pub(super) async fn download_open_local_handle(
     }
 }
 
-pub(super) async fn download_to_cache<S>(
-    stream: S,
+pub(super) async fn download_to_cache(
+    session: SftpSession,
     request: &SftpDownloadRequest,
     cancellation: &TransferCancellation,
     event_tx: &mpsc::Sender<SftpTransferEvent>,
     cache_dir: &Path,
-) -> Result<(PathBuf, u64)>
-where
-    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
-{
+) -> Result<(PathBuf, u64)> {
     let deadline = Instant::now() + DOWNLOAD_TIMEOUT;
-    let session = RawSftpSession::new_with_config(
-        PacketLimitedStream::new(stream),
-        Config {
-            max_packet_len: MAX_PACKET_BYTES,
-            max_concurrent_reads: 16,
-            max_concurrent_writes: 1,
-            max_write_packet_len: MAX_PACKET_BYTES,
-            request_timeout_secs: REQUEST_TIMEOUT.as_secs(),
-        },
-    );
-    await_step(
-        cancellation,
-        deadline,
-        REQUEST_TIMEOUT,
-        "SFTP transfer handshake",
-        session.init(),
-    )
-    .await?
-    .context("SFTP transfer handshake failed")?;
 
     let result = download_initialized(
         &session,
@@ -210,14 +171,14 @@ where
         deadline,
     )
     .await;
-    if let Err(error) = session.close_session() {
-        debug!(%error, "failed to close SFTP transfer session");
+    if result.is_ok() && !cancellation.is_cancelled() {
+        session.recycle();
     }
     result
 }
 
 pub(super) async fn download_initialized(
-    session: &RawSftpSession,
+    session: &SftpSession,
     request: &SftpDownloadRequest,
     cancellation: &TransferCancellation,
     event_tx: &mpsc::Sender<SftpTransferEvent>,
@@ -262,7 +223,7 @@ pub(super) async fn download_initialized(
 
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn download_open_handle(
-    session: &RawSftpSession,
+    session: &SftpSession,
     handle: &str,
     request: &SftpDownloadRequest,
     initial: RemoteFileMetadata,
@@ -303,6 +264,8 @@ pub(super) async fn download_open_handle(
     )
     .await?
     .context("SFTP transfer event receiver dropped")?;
+
+    tracing::info!(transfer_id = %request.transfer_id, total_bytes = initial.size, "SFTP download metadata validated; starting transfer");
 
     let pending = prepare_cache_file(
         cache_dir.to_owned(),
@@ -361,7 +324,7 @@ pub(super) async fn download_open_handle(
 
 #[allow(clippy::too_many_arguments)]
 pub(super) async fn stream_remote_file(
-    session: &RawSftpSession,
+    session: &SftpSession,
     handle: &str,
     remote_path: &str,
     transfer_id: Uuid,
@@ -371,6 +334,7 @@ pub(super) async fn stream_remote_file(
     chunk_tx: &mpsc::Sender<Vec<u8>>,
     deadline: Instant,
 ) -> Result<()> {
+    let started = Instant::now();
     let mut downloaded_bytes = 0_u64;
     let mut next_offset = 0_u64;
     let mut requests = RequestWindow::new();
@@ -417,6 +381,9 @@ pub(super) async fn stream_remote_file(
             .await
             .context("SFTP read window ended unexpectedly")??;
         let chunk_bytes = data.len() as u64;
+        if downloaded_bytes == 0 {
+            tracing::info!(%transfer_id, elapsed_ms = started.elapsed().as_millis(), "SFTP download first data received");
+        }
         await_step(
             cancellation,
             deadline,
@@ -475,7 +442,7 @@ pub(super) async fn stream_remote_file(
 }
 
 pub(super) async fn read_remote_chunk(
-    session: &RawSftpSession,
+    session: &SftpSession,
     handle: &str,
     offset: u64,
     length: u32,
@@ -527,7 +494,7 @@ pub(super) async fn read_remote_chunk(
 }
 
 pub(super) async fn lstat_regular_file(
-    session: &RawSftpSession,
+    session: &SftpSession,
     path: &str,
     cancellation: &TransferCancellation,
     deadline: Instant,
@@ -544,10 +511,16 @@ pub(super) async fn lstat_regular_file(
     validate_regular_metadata(&attrs.attrs)
 }
 
-pub(super) async fn close_remote_handle(session: &RawSftpSession, handle: String) {
+pub(super) async fn close_remote_handle(session: &SftpSession, handle: String) {
     match timeout(REQUEST_TIMEOUT, session.close(handle)).await {
         Ok(Ok(_)) => {}
-        Ok(Err(error)) => debug!(%error, "failed to close SFTP download handle"),
-        Err(_) => debug!("timed out closing SFTP download handle"),
+        Ok(Err(error)) => {
+            session.invalidate();
+            debug!(%error, "failed to close SFTP download handle");
+        }
+        Err(_) => {
+            session.invalidate();
+            debug!("timed out closing SFTP download handle");
+        }
     }
 }

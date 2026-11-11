@@ -360,6 +360,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                     Some(SshCommand::CancelSftpTransfer { .. })
                     | Some(SshCommand::PauseSftpTransfer { .. })
                     | Some(SshCommand::ResumeSftpTransfer { .. })
+                    | Some(SshCommand::ControlSftpTransfers { .. })
                     | Some(SshCommand::ResolveSftpUploadConflict { .. })
                     | Some(SshCommand::SftpWrite { .. }) => {
                         continue;

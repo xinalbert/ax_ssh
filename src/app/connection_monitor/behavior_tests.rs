@@ -422,10 +422,10 @@ async fn sftp_monitor_routes_directory_transfer_and_write_events_to_the_current_
             downloaded_bytes: 40,
             total_bytes: 100,
         }),
-        SshSessionEvent::SftpTransfer(SftpTransferEvent::Paused {
+        SshSessionEvent::SftpTransfer(SftpTransferEvent::ControlState {
             transfer_id: id,
-            downloaded_bytes: 40,
-            total_bytes: 100,
+            paused: true,
+            inherited: false,
         }),
     ] {
         sender.send(event).await.expect("SFTP event");
@@ -447,10 +447,10 @@ async fn sftp_monitor_routes_directory_transfer_and_write_events_to_the_current_
         assert_eq!(sftp.transfers[0].downloaded_bytes, 40);
     }
     for event in [
-        SshSessionEvent::SftpTransfer(SftpTransferEvent::Resumed {
+        SshSessionEvent::SftpTransfer(SftpTransferEvent::ControlState {
             transfer_id: id,
-            downloaded_bytes: 40,
-            total_bytes: 100,
+            paused: false,
+            inherited: false,
         }),
         SshSessionEvent::SftpTransfer(SftpTransferEvent::Cancelled { transfer_id: id }),
         SshSessionEvent::SftpTransfer(SftpTransferEvent::DiscoveryFailed {

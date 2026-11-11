@@ -79,6 +79,9 @@ msgstr "Accent / focus"
 msgid "Add Server"
 msgstr "Ajouter un serveur"
 
+msgid "All tasks"
+msgstr "Toutes les tâches"
+
 msgid "Allow"
 msgstr "Autoriser"
 
@@ -186,6 +189,9 @@ msgstr "Mettre en cache les lignes de terminal inchangées"
 
 msgid "Cancel"
 msgstr "Annuler"
+
+msgid "Cancel all"
+msgstr "Tout annuler"
 
 msgid "Cancel selected"
 msgstr "Annuler la sélection"
@@ -922,6 +928,9 @@ msgstr "Chemin"
 msgid "Pause"
 msgstr "Suspendre"
 
+msgid "Pause all"
+msgstr "Tout suspendre"
+
 msgid "Pause selected"
 msgstr "Suspendre la sélection"
 
@@ -1065,6 +1074,9 @@ msgstr "Rétablir les filtres par défaut pour cette plateforme"
 
 msgid "Resume"
 msgstr "Reprendre"
+
+msgid "Resume all"
+msgstr "Tout reprendre"
 
 msgid "Resume selected"
 msgstr "Reprendre la sélection"

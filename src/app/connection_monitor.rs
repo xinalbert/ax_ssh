@@ -361,6 +361,9 @@ pub(super) fn spawn_session_monitor(
                         profile.id,
                         attempt_id,
                         |terminal| match event {
+                            SftpTransferEvent::ControlState { transfer_id, paused, inherited } => {
+                                terminal.sftp.apply_transfer_control(transfer_id, paused, inherited);
+                            }
                             SftpTransferEvent::Queued {
                                 transfer_id,
                                 root_transfer_id,
@@ -418,14 +421,14 @@ pub(super) fn spawn_session_monitor(
                                     downloaded_bytes,
                                     total_bytes,
                                 );
-                                terminal.sftp.pause_transfer(transfer_id);
+
                             }
                             SftpTransferEvent::Resumed {
                                 transfer_id,
                                 downloaded_bytes,
                                 total_bytes,
                             } => {
-                                terminal.sftp.resume_transfer(
+                                terminal.sftp.update_transfer_progress(
                                     transfer_id,
                                     downloaded_bytes,
                                     total_bytes,

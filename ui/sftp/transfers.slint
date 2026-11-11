@@ -339,6 +339,10 @@ export component SftpTransferQueue inherits Rectangle {
     callback pause-selected();
     callback resume-selected();
     callback cancel-selected();
+    callback pause-all();
+    callback resume-all();
+    callback cancel-all();
+    in property <bool> all-paused;
 
     private property <string> page: "active";
     private property <[SftpTransferRow]> visible-transfers: root.page == "active"
@@ -392,6 +396,25 @@ export component SftpTransferQueue inherits Rectangle {
                 }
                 Rectangle {
                     horizontal-stretch: 1;
+                }
+                SftpActionButton {
+                    width: 94px;
+                    height: parent.height;
+                    text: root.all-paused ? @tr("Resume all") : @tr("All tasks");
+                    accessible-name: @tr("All tasks");
+                    clicked => { all-actions.show-at({ x: 0px, y: self.height }); }
+                    all-actions := FlatActionMenu {
+                        actions: [
+                            { action-id: "pause", title: @tr("Pause all"), enabled: !root.all-paused },
+                            { action-id: "resume", title: @tr("Resume all"), enabled: root.all-paused || root.active-count > 0 },
+                            { action-id: "cancel", title: @tr("Cancel all"), enabled: true },
+                        ];
+                        triggered(action-id) => {
+                            if action-id == "pause" { root.pause-all(); }
+                            else if action-id == "resume" { root.resume-all(); }
+                            else if action-id == "cancel" { root.cancel-all(); }
+                        }
+                    }
                 }
                 if root.show-content && root.page == "active" : SftpActionButton {
                     width: Theme.sftp-refresh-button-width;

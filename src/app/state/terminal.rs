@@ -769,6 +769,18 @@ impl TerminalWorker {
         }
     }
 
+    pub(in crate::app) fn request_sftp_transfer_action(
+        &self,
+        action: ax_ssh::sftp::SftpTransferAction,
+        all: bool,
+        transfer_ids: Vec<Uuid>,
+    ) -> Result<()> {
+        match self {
+            Self::Ssh(worker) => worker.request_sftp_transfer_action(action, all, transfer_ids),
+            _ => anyhow::bail!("transfer controls require an SFTP worker"),
+        }
+    }
+
     pub(in crate::app) fn request_pause_sftp_transfer(&self, transfer_id: Uuid) -> Result<()> {
         match self {
             Self::Ssh(worker) => worker.request_pause_sftp_transfer(transfer_id),

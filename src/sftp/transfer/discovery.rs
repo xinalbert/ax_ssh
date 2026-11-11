@@ -12,31 +12,51 @@ pub(super) fn validate_download_path(path: &str) -> Result<&str> {
     Ok(name)
 }
 
-pub(crate) async fn discover_download_requests<S>(
-    stream: S,
+pub(crate) async fn discover_download_requests<F, Fut>(
+    mut opening: F,
     root: SftpDownloadRoot,
     discovered_tx: mpsc::Sender<SftpDiscoveredDownload>,
+    cancellation: TransferCancellation,
 ) -> Result<SftpDiscoverySummary>
 where
-    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    F: FnMut() -> Fut + Send,
+    Fut: Future<Output = Result<SftpSession>> + Send,
 {
-    let session = RawSftpSession::new_with_config(
-        PacketLimitedStream::new(stream),
-        Config {
-            max_packet_len: MAX_PACKET_BYTES,
-            max_concurrent_reads: 16,
-            max_concurrent_writes: 1,
-            max_write_packet_len: MAX_PACKET_BYTES,
-            request_timeout_secs: REQUEST_TIMEOUT.as_secs(),
-        },
-    );
-    timeout(REQUEST_TIMEOUT, session.init())
-        .await
-        .context("SFTP recursive-download handshake timed out")?
-        .context("SFTP recursive-download handshake failed")?;
-    let result = discover_initialized_download_requests(&session, &root, discovered_tx).await;
-    if let Err(error) = session.close_session() {
-        debug!(%error, "failed to close SFTP recursive-download session");
+    let mut retries = 0_u32;
+    let session = loop {
+        cancellation.wait_until_running().await?;
+        let started = Instant::now();
+        let result = async {
+            opening()
+                .await
+                .context("cannot initialize SFTP subsystem for recursive discovery")
+        }
+        .await;
+        match result {
+            Ok(session) => {
+                tracing::info!(transfer_id = %root.transfer_id, reused = session.was_reused(), attempt = retries + 1, elapsed_ms = started.elapsed().as_millis(), "SFTP recursive-download initialization completed");
+                break session;
+            }
+            Err(error) => {
+                let retry = transfer_error_is_recoverable(&error) && retries < 2;
+                warn!(transfer_id = %root.transfer_id, attempt = retries + 1, elapsed_ms = started.elapsed().as_millis(), retry, error = %bounded_error(&error), "SFTP recursive-download initialization failed");
+                if !retry {
+                    return Err(error);
+                }
+                retries += 1;
+                tokio::time::sleep(Duration::from_secs(u64::from(retries))).await;
+            }
+        }
+    };
+    // Never replay discovery after it may have created directories or emitted
+    // child requests. Only the initialization above is safe to retry locally.
+    let result =
+        discover_initialized_download_requests(&session, &root, discovered_tx, &cancellation).await;
+    if result
+        .as_ref()
+        .is_ok_and(|summary| summary.first_issue.is_none())
+    {
+        session.recycle();
     }
     result
 }
@@ -82,9 +102,10 @@ pub(super) fn wildcard_matches(pattern: &str, value: &str) -> bool {
 }
 
 pub(super) async fn discover_initialized_download_requests(
-    session: &RawSftpSession,
+    session: &SftpSession,
     root: &SftpDownloadRoot,
     discovered_tx: mpsc::Sender<SftpDiscoveredDownload>,
+    cancellation: &TransferCancellation,
 ) -> Result<SftpDiscoverySummary> {
     if transfer_name_matches_filter(&root.name, root.filter_patterns()) {
         return Ok(SftpDiscoverySummary {
@@ -94,6 +115,7 @@ pub(super) async fn discover_initialized_download_requests(
             is_directory: false,
         });
     }
+    cancellation.wait_until_running().await?;
     let attrs = timeout(REQUEST_TIMEOUT, session.lstat(root.remote_path.clone()))
         .await
         .context("inspecting recursive-download root timed out")?
@@ -113,6 +135,7 @@ pub(super) async fn discover_initialized_download_requests(
             total_bytes,
         )?;
         if !root.excludes_remote_path(root.remote_path()) {
+            cancellation.wait_until_running().await?;
             discovered_tx
                 .send(SftpDiscoveredDownload::Request {
                     root_transfer_id: root.transfer_id,
@@ -128,6 +151,7 @@ pub(super) async fn discover_initialized_download_requests(
             is_directory: root.expected_directory(),
         });
     }
+    cancellation.wait_until_running().await?;
     let handle = timeout(REQUEST_TIMEOUT, session.opendir(root.remote_path.clone()))
         .await
         .context("opening remote download directory timed out")?
@@ -154,6 +178,7 @@ pub(super) async fn discover_initialized_download_requests(
         ..SftpDiscoverySummary::default()
     };
     while !pending.is_empty() {
+        cancellation.wait_until_running().await?;
         let frame = pending
             .last_mut()
             .context("download directory stack is empty")?;
@@ -235,6 +260,7 @@ pub(super) async fn discover_initialized_download_requests(
             if root.excludes_remote_path(request.remote_path()) {
                 continue;
             }
+            cancellation.wait_until_running().await?;
             discovered_tx
                 .send(SftpDiscoveredDownload::Request {
                     root_transfer_id: root.transfer_id,

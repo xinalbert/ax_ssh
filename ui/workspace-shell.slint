@@ -408,6 +408,9 @@ component DetachedWorkspaceContent inherits Rectangle {
     callback pause-selected-sftp-transfers();
     callback resume-selected-sftp-transfers();
     callback cancel-selected-sftp-transfers();
+    callback pause-all-sftp-transfers();
+    callback resume-all-sftp-transfers();
+    callback cancel-all-sftp-transfers();
     callback reveal-sftp-transfer-local(string);
     callback remove-sftp-transfer(string);
     callback remove-selected-remote-sftp();
@@ -588,6 +591,9 @@ component DetachedWorkspaceContent inherits Rectangle {
             pause-selected-transfers => { root.pause-selected-sftp-transfers(); }
             resume-selected-transfers => { root.resume-selected-sftp-transfers(); }
             cancel-selected-transfers => { root.cancel-selected-sftp-transfers(); }
+            pause-all-transfers => { root.pause-all-sftp-transfers(); }
+            resume-all-transfers => { root.resume-all-sftp-transfers(); }
+            cancel-all-transfers => { root.cancel-all-sftp-transfers(); }
             reveal-transfer-local(id) => { root.reveal-sftp-transfer-local(id); }
             remove-transfer(id) => { root.remove-sftp-transfer(id); }
             remove-selected-remote => { root.remove-selected-remote-sftp(); }
@@ -705,6 +711,9 @@ export component WorkspaceShell inherits Rectangle {
     callback pause-selected-sftp-transfers();
     callback resume-selected-sftp-transfers();
     callback cancel-selected-sftp-transfers();
+    callback pause-all-sftp-transfers();
+    callback resume-all-sftp-transfers();
+    callback cancel-all-sftp-transfers();
     callback reveal-sftp-transfer-local(string);
     callback remove-sftp-transfer(string);
     callback remove-selected-remote-sftp();
@@ -897,6 +906,9 @@ export component WorkspaceShell inherits Rectangle {
         pause-selected-sftp-transfers => { root.pause-selected-sftp-transfers(); }
         resume-selected-sftp-transfers => { root.resume-selected-sftp-transfers(); }
         cancel-selected-sftp-transfers => { root.cancel-selected-sftp-transfers(); }
+        pause-all-sftp-transfers => { root.pause-all-sftp-transfers(); }
+        resume-all-sftp-transfers => { root.resume-all-sftp-transfers(); }
+        cancel-all-sftp-transfers => { root.cancel-all-sftp-transfers(); }
         reveal-sftp-transfer-local(id) => { root.reveal-sftp-transfer-local(id); }
         remove-sftp-transfer(id) => { root.remove-sftp-transfer(id); }
         remove-selected-remote-sftp => { root.remove-selected-remote-sftp(); }
@@ -1189,6 +1201,9 @@ export component WorkspaceShell inherits Rectangle {
                         pause-selected-transfers => { root.pause-selected-sftp-transfers(); }
                         resume-selected-transfers => { root.resume-selected-sftp-transfers(); }
                         cancel-selected-transfers => { root.cancel-selected-sftp-transfers(); }
+                        pause-all-transfers => { root.pause-all-sftp-transfers(); }
+                        resume-all-transfers => { root.resume-all-sftp-transfers(); }
+                        cancel-all-transfers => { root.cancel-all-sftp-transfers(); }
                         reveal-transfer-local(id) => { root.reveal-sftp-transfer-local(id); }
                         remove-transfer(id) => { root.remove-sftp-transfer(id); }
                         remove-selected-remote => { root.remove-selected-remote-sftp(); }

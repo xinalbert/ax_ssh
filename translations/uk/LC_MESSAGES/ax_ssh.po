@@ -79,6 +79,9 @@ msgstr "Акцент / фокус"
 msgid "Add Server"
 msgstr "Додати сервер"
 
+msgid "All tasks"
+msgstr "Усі завдання"
+
 msgid "Allow"
 msgstr "Дозволити"
 
@@ -186,6 +189,9 @@ msgstr "Кешувати незмінені рядки термінала"
 
 msgid "Cancel"
 msgstr "Скасувати"
+
+msgid "Cancel all"
+msgstr "Скасувати всі"
 
 msgid "Cancel selected"
 msgstr "Скасувати вибрані"
@@ -922,6 +928,9 @@ msgstr "Шлях"
 msgid "Pause"
 msgstr "Призупинити"
 
+msgid "Pause all"
+msgstr "Призупинити всі"
+
 msgid "Pause selected"
 msgstr "Призупинити вибрані"
 
@@ -1065,6 +1074,9 @@ msgstr "Відновити типові фільтри для цієї плат�
 
 msgid "Resume"
 msgstr "Продовжити"
+
+msgid "Resume all"
+msgstr "Продовжити всі"
 
 msgid "Resume selected"
 msgstr "Продовжити вибрані"

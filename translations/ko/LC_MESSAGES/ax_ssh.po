@@ -79,6 +79,9 @@ msgstr "강조 / 포커스"
 msgid "Add Server"
 msgstr "서버 추가"
 
+msgid "All tasks"
+msgstr "모든 작업"
+
 msgid "Allow"
 msgstr "허용"
 
@@ -186,6 +189,9 @@ msgstr "변경되지 않은 터미널 행 캐시"
 
 msgid "Cancel"
 msgstr "취소"
+
+msgid "Cancel all"
+msgstr "모두 취소"
 
 msgid "Cancel selected"
 msgstr "선택 항목 취소"
@@ -922,6 +928,9 @@ msgstr "경로"
 msgid "Pause"
 msgstr "일시 중지"
 
+msgid "Pause all"
+msgstr "모두 일시 중지"
+
 msgid "Pause selected"
 msgstr "선택 항목 일시 중지"
 
@@ -1065,6 +1074,9 @@ msgstr "이 플랫폼의 기본 필터 복원"
 
 msgid "Resume"
 msgstr "재개"
+
+msgid "Resume all"
+msgstr "모두 재개"
 
 msgid "Resume selected"
 msgstr "선택 항목 재개"

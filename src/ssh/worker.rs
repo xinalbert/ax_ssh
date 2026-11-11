@@ -161,6 +161,11 @@ pub(crate) enum SshCommand {
     CancelSftpTransfer {
         transfer_id: Uuid,
     },
+    ControlSftpTransfers {
+        action: crate::sftp::SftpTransferAction,
+        all: bool,
+        transfer_ids: Vec<Uuid>,
+    },
     PauseSftpTransfer {
         transfer_id: Uuid,
     },
@@ -745,6 +750,25 @@ impl SshSessionHandle {
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP transfer cancellation: {error}"))
     }
 
+    /// Submit a batch atomically to this SFTP worker's bounded command queue.
+    pub fn request_sftp_transfer_action(
+        &self,
+        action: crate::sftp::SftpTransferAction,
+        all: bool,
+        transfer_ids: Vec<Uuid>,
+    ) -> Result<()> {
+        if transfer_ids.len() > SFTP_TRANSFER_QUEUE_WINDOW * 4 {
+            anyhow::bail!("too many SFTP transfer controls in one request");
+        }
+        self.command_tx
+            .try_send(SshCommand::ControlSftpTransfers {
+                action,
+                all,
+                transfer_ids,
+            })
+            .map_err(|error| anyhow::anyhow!("cannot queue SFTP transfer controls: {error}"))
+    }
+
     pub fn request_resolve_sftp_upload_conflict(
         &self,
         transfer_id: Uuid,
@@ -885,6 +909,7 @@ async fn run_session(task: SshSessionTask) {
                     | Some(SshCommand::CancelSftpTransfer { .. })
                     | Some(SshCommand::PauseSftpTransfer { .. })
                     | Some(SshCommand::ResumeSftpTransfer { .. })
+                    | Some(SshCommand::ControlSftpTransfers { .. })
                     | Some(SshCommand::SftpWrite { .. }) => {
                         debug!(session_id = %session_id, "session command ignored before SSH authentication");
                     }
@@ -1122,6 +1147,54 @@ mod tests {
         tokio::task::yield_now().await;
         tokio::time::advance(WORKER_SHUTDOWN_TIMEOUT + Duration::from_millis(1)).await;
         assert!(shutdown.await.expect("shutdown task should join").is_ok());
+    }
+
+    #[tokio::test]
+    async fn transfer_batch_control_uses_one_queue_slot_and_rejects_full_queue_atomically() {
+        let (command_tx, mut commands) = mpsc::channel(1);
+        let handle = SshSessionHandle {
+            session_id: Uuid::new_v4(),
+            command_tx,
+            resize_tx: watch::channel(TerminalSize::backend(80, 24)).0,
+            latency_foreground_tx: watch::channel(false).0,
+            next_input_sequence: AtomicU64::new(0),
+            upload_queue_slots: Arc::new(Semaphore::new(SFTP_TRANSFER_QUEUE_WINDOW)),
+            task: tokio::spawn(std::future::pending::<()>()),
+        };
+        let ids = vec![Uuid::new_v4(), Uuid::new_v4()];
+        handle
+            .request_sftp_transfer_action(
+                crate::sftp::SftpTransferAction::Pause,
+                false,
+                ids.clone(),
+            )
+            .expect("batch occupies one slot");
+        assert!(
+            handle
+                .request_sftp_transfer_action(
+                    crate::sftp::SftpTransferAction::Cancel,
+                    true,
+                    ids.clone()
+                )
+                .is_err()
+        );
+        match commands.recv().await.expect("one batch") {
+            SshCommand::ControlSftpTransfers {
+                action,
+                all,
+                transfer_ids,
+            } => {
+                assert_eq!(action, crate::sftp::SftpTransferAction::Pause);
+                assert!(!all);
+                assert_eq!(transfer_ids, ids);
+            }
+            _ => panic!("one atomic control command"),
+        }
+        assert!(
+            commands.try_recv().is_err(),
+            "rejected action enqueues no partial commands"
+        );
+        handle.task.abort();
     }
 
     #[test]

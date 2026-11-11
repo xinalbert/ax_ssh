@@ -353,6 +353,7 @@ pub(super) fn release_window_resources(ui: &AppWindow) {
     ui.set_sftp_transfer_active_count(0);
     ui.set_sftp_transfer_failed_count(0);
     ui.set_sftp_transfer_completed_count(0);
+    ui.set_sftp_transfers_paused(false);
     ui.set_sftp_transfer_selected_active_count(0);
     ui.set_sftp_transfer_selected_pausable_count(0);
     ui.set_sftp_transfer_selected_resumable_count(0);

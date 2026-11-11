@@ -329,6 +329,8 @@ pub(super) struct SftpBrowserState {
     pub(super) transfer_intent_revision: u64,
     pub(super) directory_children: HashMap<Uuid, Uuid>,
     pub(super) reconnect_replay_pending: bool,
+    pub(super) transfers_paused: bool,
+    pub(super) submission_generation: u64,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -402,6 +404,7 @@ pub(super) struct SftpBrowserSnapshot {
     pub(super) local: LocalDirectorySnapshot,
     pub(super) transfers: Vec<SftpTransferSnapshot>,
     pub(super) upload_conflict: Option<PendingUploadConflict>,
+    pub(super) transfers_paused: bool,
     pub(super) transfer_selected_active_count: usize,
     pub(super) transfer_selected_pausable_count: usize,
     pub(super) transfer_selected_resumable_count: usize,
@@ -469,6 +472,8 @@ pub(super) struct SftpTransferState {
     pub(super) direction: SftpTransferDirection,
     pub(super) phase: SftpTransferPhase,
     pub(super) pausable: bool,
+    pause_previous: Option<(SftpTransferPhase, String)>,
+    pub(super) inherited_pause: bool,
     pub(super) downloaded_bytes: u64,
     pub(super) total_bytes: u64,
     pub(super) bytes_per_second: u64,
@@ -485,6 +490,7 @@ pub(super) struct SftpTransferSnapshot {
     pub(super) direction: SftpTransferDirection,
     pub(super) phase: SftpTransferPhase,
     pub(super) pausable: bool,
+    pub(super) inherited_pause: bool,
     pub(super) downloaded_bytes: u64,
     pub(super) total_bytes: u64,
     pub(super) bytes_per_second: u64,

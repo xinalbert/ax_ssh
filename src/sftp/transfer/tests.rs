@@ -5,6 +5,69 @@ use std::sync::Mutex;
 use russh_sftp::protocol::{Attrs, Data, Handle as RemoteHandle, Status, Version};
 
 mod performance;
+mod startup;
+
+// Standalone stream fixtures use the same initialized-session boundary as the
+// SSH owner, without a transport cache or system credentials.
+async fn download_to_local<S>(
+    stream: S,
+    request: &SftpDownloadRequest,
+    cancellation: &TransferCancellation,
+    events: &mpsc::Sender<SftpTransferEvent>,
+) -> Result<(PathBuf, u64)>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    super::download_to_local(
+        SftpSession::initialize(stream).await?,
+        request,
+        cancellation,
+        events,
+    )
+    .await
+}
+
+async fn download_to_cache<S>(
+    stream: S,
+    request: &SftpDownloadRequest,
+    cancellation: &TransferCancellation,
+    events: &mpsc::Sender<SftpTransferEvent>,
+    cache_dir: &Path,
+) -> Result<(PathBuf, u64)>
+where
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    super::download_to_cache(
+        SftpSession::initialize(stream).await?,
+        request,
+        cancellation,
+        events,
+        cache_dir,
+    )
+    .await
+}
+
+async fn discover_download_requests<F, Fut, S>(
+    mut opening: F,
+    root: SftpDownloadRoot,
+    discovered_tx: mpsc::Sender<SftpDiscoveredDownload>,
+) -> Result<SftpDiscoverySummary>
+where
+    F: FnMut() -> Fut + Send,
+    Fut: Future<Output = Result<S>> + Send,
+    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+{
+    super::discover_download_requests(
+        || {
+            let stream = opening();
+            async move { SftpSession::initialize(stream.await?).await }
+        },
+        root,
+        discovered_tx,
+        TransferCancellation::new(),
+    )
+    .await
+}
 
 #[test]
 fn uncertain_upload_publication_is_not_automatically_replayed() {
@@ -194,7 +257,7 @@ async fn cancelling_upload_while_opening_a_channel_releases_its_slot() {
         request,
         events,
         SftpUploadHandle::reserve_global_slot().expect("slot"),
-        Arc::new(TransferRateLimiter::new(None)),
+        TransferCancellation::new(),
     );
     worker.cancel();
     timeout(Duration::from_secs(1), worker.shutdown())
@@ -943,7 +1006,13 @@ async fn discover_directory_fixture(
         true,
     )?;
     let (discovered_tx, mut discovered_rx) = mpsc::channel(4);
-    let result = discover_download_requests(client_stream, root, discovered_tx).await;
+    let mut stream = Some(client_stream);
+    let result = discover_download_requests(
+        || std::future::ready(stream.take().context("fixture stream already opened")),
+        root,
+        discovered_tx,
+    )
+    .await;
     while discovered_rx.recv().await.is_some() {}
     result
 }
@@ -990,9 +1059,14 @@ async fn recursive_discovery_materializes_nested_empty_directories() {
     )
     .expect("root request should validate");
     let (discovered_tx, mut discovered_rx) = mpsc::channel(4);
-    let summary = discover_download_requests(client_stream, root, discovered_tx)
-        .await
-        .expect("nested empty directory should discover");
+    let mut stream = Some(client_stream);
+    let summary = discover_download_requests(
+        || std::future::ready(stream.take().context("fixture stream already opened")),
+        root,
+        discovered_tx,
+    )
+    .await
+    .expect("nested empty directory should discover");
     while discovered_rx.recv().await.is_some() {}
 
     assert!(summary.is_directory);

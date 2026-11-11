@@ -447,8 +447,10 @@ pub(super) fn sftp_transfer_rows(transfers: Vec<SftpTransferSnapshot>) -> Vec<Sf
                 source: source.into(),
                 destination: destination.into(),
                 selected: transfer.selected,
-                pausable: transfer.pausable && transfer.phase == SftpTransferPhase::Downloading,
-                resumable: transfer.pausable && transfer.phase == SftpTransferPhase::Paused,
+                pausable: transfer.pausable && transfer.phase.pausable(),
+                resumable: transfer.pausable
+                    && !transfer.inherited_pause
+                    && transfer.phase == SftpTransferPhase::Paused,
                 cancellable: transfer.phase.cancellable(),
                 has_local_path: transfer.has_local_path,
             }

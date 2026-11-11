@@ -79,6 +79,9 @@ msgstr "Akzent / Fokus"
 msgid "Add Server"
 msgstr "Server hinzufügen"
 
+msgid "All tasks"
+msgstr "Alle Aufgaben"
+
 msgid "Allow"
 msgstr "Erlauben"
 
@@ -186,6 +189,9 @@ msgstr "Unveränderte Terminalzeilen zwischenspeichern"
 
 msgid "Cancel"
 msgstr "Abbrechen"
+
+msgid "Cancel all"
+msgstr "Alle abbrechen"
 
 msgid "Cancel selected"
 msgstr "Ausgewählte abbrechen"
@@ -922,6 +928,9 @@ msgstr "Pfad"
 msgid "Pause"
 msgstr "Pausieren"
 
+msgid "Pause all"
+msgstr "Alle pausieren"
+
 msgid "Pause selected"
 msgstr "Ausgewählte pausieren"
 
@@ -1065,6 +1074,9 @@ msgstr "Standardfilter dieser Plattform wiederherstellen"
 
 msgid "Resume"
 msgstr "Fortsetzen"
+
+msgid "Resume all"
+msgstr "Alle fortsetzen"
 
 msgid "Resume selected"
 msgstr "Ausgewählte fortsetzen"

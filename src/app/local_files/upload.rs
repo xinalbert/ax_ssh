@@ -73,6 +73,9 @@ pub(in crate::app) fn discover_local_uploads_streaming(
         stack.push(UploadWalkFrame::Visit(path, None));
     }
     while let Some(frame) = stack.pop() {
+        if output.is_closed() {
+            anyhow::bail!("local upload discovery was cancelled");
+        }
         match frame {
             UploadWalkFrame::ReadDirectory(mut entries, parent) => match entries.next() {
                 Some(Ok(entry)) => {

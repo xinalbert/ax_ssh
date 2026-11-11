@@ -702,6 +702,7 @@ pub async fn probe_host_key(profile: &SessionProfile) -> Result<HostKeyProbe> {
 pub struct SshConnection {
     handle: Arc<client::Handle<ClientHandler>>,
     sftp_slots: Arc<tokio::sync::Semaphore>,
+    sftp_sessions: crate::sftp::SftpSessionCache,
 }
 
 impl SshConnection {
@@ -800,11 +801,13 @@ impl SshConnection {
         }
 
         info!(session_id = %profile.id, "SSH authentication succeeded");
+        let sftp_slots = Arc::new(tokio::sync::Semaphore::new(
+            sftp_stream::BACKGROUND_CHANNELS,
+        ));
         Ok(Self {
             handle: Arc::new(handle),
-            sftp_slots: Arc::new(tokio::sync::Semaphore::new(
-                sftp_stream::BACKGROUND_CHANNELS,
-            )),
+            sftp_sessions: crate::sftp::SftpSessionCache::new(sftp_slots.clone()),
+            sftp_slots,
         })
     }
 
@@ -813,6 +816,9 @@ impl SshConnection {
     }
 
     pub async fn disconnect(&self) -> Result<()> {
+        if let Err(error) = self.sftp_sessions.clear() {
+            warn!(%error, "failed to clear disconnected SFTP sessions");
+        }
         self.handle
             .disconnect(russh::Disconnect::ByApplication, "AxSSH session closed", "")
             .await
@@ -933,14 +939,32 @@ impl SshConnection {
     }
 
     async fn open_sftp_stream(&self) -> Result<sftp_stream::SftpStream> {
-        let permit = self
-            .sftp_slots
-            .clone()
-            .acquire_owned()
-            .await
-            .context("SFTP channel admission closed")?;
+        let permit = match self.sftp_slots.clone().try_acquire_owned() {
+            Ok(permit) => permit,
+            Err(tokio::sync::TryAcquireError::NoPermits) => {
+                self.sftp_sessions.evict_one()?;
+                self.sftp_slots
+                    .clone()
+                    .acquire_owned()
+                    .await
+                    .context("SFTP channel admission closed")?
+            }
+            Err(error) => return Err(error).context("SFTP channel admission closed"),
+        };
         let stream = self.open_browser_sftp_stream().await?;
         Ok(sftp_stream::SftpStream::new(stream, permit))
+    }
+
+    async fn open_sftp_session(&self) -> Result<crate::sftp::SftpSession> {
+        if self.is_closed() {
+            anyhow::bail!("SSH transport is disconnected");
+        }
+        if let Some(session) = self.sftp_sessions.take()? {
+            return Ok(session);
+        }
+        self.sftp_sessions
+            .initialize(self.open_sftp_stream().await?)
+            .await
     }
 
     // The browser has its own reserved channel; background work cannot starve it.
@@ -953,6 +977,7 @@ impl SshConnection {
                         && attempt < 2
                         && sftp_stream::channel_open_can_retry(&error) =>
                 {
+                    self.sftp_sessions.evict_one()?;
                     warn!(attempt = attempt + 1, %error, "SFTP channel refused; retrying on the existing SSH connection");
                     tokio::time::sleep(Duration::from_millis(250) * (1 << attempt)).await;
                     attempt += 1;
@@ -963,15 +988,13 @@ impl SshConnection {
     }
 
     async fn try_open_sftp_stream(&self) -> Result<ChannelStream<client::Msg>> {
+        let started = std::time::Instant::now();
         let channel = timeout(CONNECT_TIMEOUT, self.handle.channel_open_session())
             .await
             .context("timed out opening the SFTP SSH channel")?
             .context("failed to open SFTP SSH channel")?;
-        timeout(CONNECT_TIMEOUT, channel.request_subsystem(true, "sftp"))
-            .await
-            .context("timed out requesting the SFTP subsystem")?
-            .context("server rejected the SFTP subsystem")?;
-        Ok(channel.into_stream())
+        debug!(channel_id = %channel.id(), elapsed_ms = started.elapsed().as_millis(), "SFTP SSH channel opened");
+        sftp_stream::request_subsystem(channel, CONNECT_TIMEOUT).await
     }
 
     pub(crate) async fn open_auxiliary_channel(&self) -> Result<Channel<client::Msg>> {

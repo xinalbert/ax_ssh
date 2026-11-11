@@ -816,3 +816,62 @@ fn clipboard_consent_revalidates_identity_limits_and_permission_before_sending_b
         },
     );
 }
+
+#[test]
+fn sftp_all_task_callbacks_follow_the_current_page_and_cancel_unselected_rows() {
+    isolated(
+        "sftp_all_task_callbacks_follow_the_current_page_and_cancel_unselected_rows",
+        || {
+            let harness = Harness::new();
+            let (first, second) = {
+                let mut app = harness.state.lock().expect("state");
+                let first = app.open_sftp_tab(&harness.profile);
+                let second = app.open_sftp_tab(&harness.profile);
+                for id in [first, second] {
+                    app.terminal_mut(id)
+                        .expect("tab")
+                        .sftp
+                        .queue_transfer(Uuid::new_v4(), "file.bin".into(), 5)
+                        .expect("row");
+                }
+                assert!(harness.router.activate_tab(MAIN_WINDOW_ID, first, &mut app));
+                (first, second)
+            };
+            harness.ui.invoke_pause_all_sftp_transfers();
+            {
+                let mut app = harness.state.lock().expect("state");
+                assert!(app.terminal(first).expect("first").sftp.transfers_paused);
+                assert!(!app.terminal(second).expect("second").sftp.transfers_paused);
+                assert!(
+                    harness
+                        .router
+                        .activate_tab(MAIN_WINDOW_ID, second, &mut app)
+                );
+            }
+            harness.ui.invoke_cancel_all_sftp_transfers();
+            {
+                let mut app = harness.state.lock().expect("state");
+                let first_sftp = &app.terminal(first).expect("first").sftp;
+                assert!(first_sftp.transfers_paused);
+                assert_eq!(first_sftp.submission_generation, 0);
+                let second_sftp = &app.terminal(second).expect("second").sftp;
+                assert_eq!(second_sftp.transfers[0].phase, SftpTransferPhase::Cancelled);
+                assert_eq!(second_sftp.submission_generation, 1);
+                assert!(harness.router.activate_tab(MAIN_WINDOW_ID, first, &mut app));
+            }
+            harness.ui.invoke_resume_all_sftp_transfers();
+            assert_eq!(
+                harness
+                    .state
+                    .lock()
+                    .expect("state")
+                    .terminal(first)
+                    .expect("first")
+                    .sftp
+                    .transfers[0]
+                    .phase,
+                SftpTransferPhase::Queued
+            );
+        },
+    );
+}

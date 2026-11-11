@@ -79,6 +79,9 @@ msgstr "Accent / focus"
 msgid "Add Server"
 msgstr "Add Server"
 
+msgid "All tasks"
+msgstr "All tasks"
+
 msgid "Allow"
 msgstr "Allow"
 
@@ -186,6 +189,9 @@ msgstr "Cache unchanged terminal rows"
 
 msgid "Cancel"
 msgstr "Cancel"
+
+msgid "Cancel all"
+msgstr "Cancel all"
 
 msgid "Cancel selected"
 msgstr "Cancel selected"
@@ -922,6 +928,9 @@ msgstr "Path"
 msgid "Pause"
 msgstr "Pause"
 
+msgid "Pause all"
+msgstr "Pause all"
+
 msgid "Pause selected"
 msgstr "Pause selected"
 
@@ -1065,6 +1074,9 @@ msgstr "Restore the default filters for this platform"
 
 msgid "Resume"
 msgstr "Resume"
+
+msgid "Resume all"
+msgstr "Resume all"
 
 msgid "Resume selected"
 msgstr "Resume selected"

@@ -166,6 +166,7 @@ export component AppWindow inherits Window {
     in property <int> sftp-transfer-active-count: 0;
     in property <int> sftp-transfer-failed-count: 0;
     in property <int> sftp-transfer-completed-count: 0;
+    in property <bool> sftp-transfers-paused: false;
     in property <int> sftp-transfer-selected-active-count: 0;
     in property <int> sftp-transfer-selected-pausable-count: 0;
     in property <int> sftp-transfer-selected-resumable-count: 0;
@@ -367,6 +368,7 @@ export component AppWindow inherits Window {
             transfer_active_count: root.sftp-transfer-active-count,
             transfer_failed_count: root.sftp-transfer-failed-count,
             transfer_completed_count: root.sftp-transfer-completed-count,
+            transfers_paused: root.sftp-transfers-paused,
             transfer_selected_active_count: root.sftp-transfer-selected-active-count,
             transfer_selected_pausable_count: root.sftp-transfer-selected-pausable-count,
             transfer_selected_resumable_count: root.sftp-transfer-selected-resumable-count,
@@ -583,6 +585,9 @@ export component AppWindow inherits Window {
     callback pause-selected-sftp-transfers();
     callback resume-selected-sftp-transfers();
     callback cancel-selected-sftp-transfers();
+    callback pause-all-sftp-transfers();
+    callback resume-all-sftp-transfers();
+    callback cancel-all-sftp-transfers();
     callback reveal-sftp-transfer-local(string);
     callback remove-sftp-transfer(string);
     callback remove-selected-remote-sftp();
@@ -1087,6 +1092,9 @@ export component AppWindow inherits Window {
             pause-selected-sftp-transfers => { root.pause-selected-sftp-transfers(); }
             resume-selected-sftp-transfers => { root.resume-selected-sftp-transfers(); }
             cancel-selected-sftp-transfers => { root.cancel-selected-sftp-transfers(); }
+            pause-all-sftp-transfers => { root.pause-all-sftp-transfers(); }
+            resume-all-sftp-transfers => { root.resume-all-sftp-transfers(); }
+            cancel-all-sftp-transfers => { root.cancel-all-sftp-transfers(); }
             reveal-sftp-transfer-local(id) => { root.reveal-sftp-transfer-local(id); }
             remove-sftp-transfer(id) => { root.remove-sftp-transfer(id); }
             remove-selected-remote-sftp => { root.remove-selected-remote-sftp(); }

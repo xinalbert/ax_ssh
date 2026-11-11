@@ -319,3 +319,47 @@ fn local_drag_payload_contains_every_selected_root() {
         SftpDragPayload::Remote(_) => panic!("local roots must remain local"),
     }
 }
+
+#[test]
+fn global_transfer_actions_only_mutate_the_target_page_and_invalidate_old_batches() {
+    use ax_ssh::sftp::SftpTransferAction;
+    let mut app = test_state();
+    let profile = SessionProfile::new("remote", "remote.example", "alice");
+    let first = app.open_sftp_tab(&profile);
+    let other = app.open_sftp_tab(&profile);
+    let id = Uuid::new_v4();
+    app.terminal_mut(first)
+        .expect("first")
+        .sftp
+        .queue_transfer(id, "file".into(), 5)
+        .expect("row");
+    let terminal = app.terminal_mut(first).expect("first");
+    terminal.sftp.register_download_root_intent(
+        id,
+        "/file".into(),
+        std::env::temp_dir(),
+        Vec::new(),
+        false,
+    );
+    transfers::request_all_transfer_actions(terminal, SftpTransferAction::Pause)
+        .expect("pause page");
+    assert!(terminal.sftp.transfers_paused);
+    assert!(!app.terminal(other).expect("other").sftp.transfers_paused);
+    let terminal = app.terminal_mut(first).expect("first");
+    transfers::request_all_transfer_actions(terminal, SftpTransferAction::Cancel)
+        .expect("cancel page");
+    assert!(!terminal.sftp.transfers_paused);
+    assert_eq!(terminal.sftp.submission_generation, 1);
+    assert_eq!(
+        terminal.sftp.transfers[0].phase,
+        SftpTransferPhase::Cancelled
+    );
+    assert!(terminal.sftp.transfer_intents.is_empty());
+    assert_eq!(
+        app.terminal(other)
+            .expect("other")
+            .sftp
+            .submission_generation,
+        0
+    );
+}

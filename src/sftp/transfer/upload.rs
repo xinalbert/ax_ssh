@@ -42,11 +42,12 @@ where
         request.execution_id()
     );
     if let Err(error) =
-        ensure_remote_upload_directories(&session, &request.remote_directories).await
+        ensure_remote_upload_directories(&session, &request.remote_directories, cancellation).await
     {
         close_upload_session(&session);
         return Err(error);
     }
+    cancellation.wait_until_running().await?;
     let existing = match inspect_remote_upload_target(&session, &request.remote_path).await {
         Ok(existing) => existing,
         Err(error) => {
@@ -92,7 +93,7 @@ where
             }
         }
         (Some(_), Some(SftpUploadConflictChoice::KeepBoth)) => {
-            find_keep_both_path(&session, &request.remote_path)
+            find_keep_both_path(&session, &request.remote_path, cancellation)
                 .await
                 .map(|path| (path, false))
         }
@@ -209,10 +210,9 @@ where
     });
     if result.is_ok() {
         let published = async {
+            cancellation.wait_until_running().await?;
             let current = inspect_remote_upload_target(&session, &target_path).await?;
-            if cancellation.is_cancelled() {
-                return Err(cancelled_error());
-            }
+            cancellation.wait_until_running().await?;
             if overwrite {
                 if current != existing {
                     anyhow::bail!("remote upload target changed before publication");
@@ -382,8 +382,10 @@ pub(super) async fn inspect_remote_upload_target(
 pub(super) async fn ensure_remote_upload_directories(
     session: &RawSftpSession,
     directories: &[String],
+    cancellation: &TransferCancellation,
 ) -> Result<()> {
     for directory in directories {
+        cancellation.wait_until_running().await?;
         let check = timeout(REQUEST_TIMEOUT, session.lstat(directory.clone()))
             .await
             .context("SFTP upload directory check timed out")?;
@@ -394,6 +396,7 @@ pub(super) async fn ensure_remote_upload_directories(
                 if status.status_code == StatusCode::NoSuchFile => {}
             Err(error) => return Err(error).context("SFTP upload directory check failed"),
         }
+        cancellation.wait_until_running().await?;
         let created = timeout(
             REQUEST_TIMEOUT,
             session.mkdir(directory.clone(), FileAttributes::default()),
@@ -416,6 +419,7 @@ pub(super) async fn ensure_remote_upload_directories(
 pub(super) async fn find_keep_both_path(
     session: &RawSftpSession,
     original: &str,
+    cancellation: &TransferCancellation,
 ) -> Result<String> {
     let (parent, name) = original
         .rsplit_once('/')
@@ -426,6 +430,7 @@ pub(super) async fn find_keep_both_path(
         .map_or((name, ""), |(stem, extension)| (stem, extension));
     let mut number = 1_u64;
     loop {
+        cancellation.wait_until_running().await?;
         let candidate_name = if extension.is_empty() {
             format!("{stem} ({number})")
         } else {

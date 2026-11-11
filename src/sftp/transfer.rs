@@ -6,12 +6,15 @@ mod discovery;
 mod download;
 mod local;
 pub(super) mod pipeline;
+mod session;
 mod upload;
 
+pub(crate) use self::control::TransferCancellation;
 pub use self::control::configure_global_upload_limit;
 pub(crate) use self::control::{TransferRateLimiter, UploadPermit};
 pub(crate) use self::discovery::discover_download_requests;
 pub use self::discovery::transfer_name_matches_filter;
+pub(crate) use self::session::{SftpSession, SftpSessionCache};
 
 use self::cache::*;
 use self::control::*;
@@ -138,6 +141,11 @@ pub enum SftpUploadConflictChoice {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SftpTransferEvent {
+    ControlState {
+        transfer_id: Uuid,
+        paused: bool,
+        inherited: bool,
+    },
     Queued {
         transfer_id: Uuid,
         root_transfer_id: Option<Uuid>,
@@ -205,6 +213,13 @@ pub enum SftpTransferEvent {
         message: String,
         recoverable: bool,
     },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SftpTransferAction {
+    Pause,
+    Resume,
+    Cancel,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -336,6 +351,7 @@ pub(crate) struct SftpDownloadRequest {
     remote_path: String,
     name: String,
     total_bytes: u64,
+    expected_size: Option<u64>,
     local_target: Option<LocalDownloadTarget>,
 }
 
@@ -369,6 +385,7 @@ impl SftpDownloadRequest {
             remote_path,
             name,
             total_bytes: 0,
+            expected_size: None,
             local_target: None,
         })
     }
@@ -388,6 +405,7 @@ impl SftpDownloadRequest {
             remote_path,
             name,
             total_bytes,
+            expected_size: Some(total_bytes),
             local_target: Some(local_target),
         })
     }
@@ -463,6 +481,26 @@ pub(crate) struct SftpDownloadRoot {
 }
 
 impl SftpDownloadRoot {
+    /// A selected regular file needs no directory walk. Its size is obtained
+    /// from the fresh, validated LSTAT in the transfer, not a persisted listing.
+    pub(crate) fn single_file_request(&self) -> Result<Option<SftpDownloadRequest>> {
+        if self.expected_directory
+            || transfer_name_matches_filter(&self.name, &self.filter_patterns)
+            || self.excludes_remote_path(&self.remote_path)
+        {
+            return Ok(None);
+        }
+        let mut request = SftpDownloadRequest::for_local_download(
+            self.transfer_id,
+            self.remote_path.clone(),
+            self.local_directory.clone(),
+            vec![self.name.clone()],
+            0,
+        )?;
+        request.expected_size = None;
+        Ok(Some(request))
+    }
+
     pub(crate) fn new(
         transfer_id: Uuid,
         remote_path: String,
@@ -596,7 +634,7 @@ impl SftpUploadHandle {
         request: SftpUploadRequest,
         event_tx: mpsc::Sender<SftpTransferEvent>,
         global_slot: UploadPermit,
-        rate_limiter: Arc<TransferRateLimiter>,
+        cancellation: TransferCancellation,
     ) -> Self
     where
         F: FnMut() -> Fut + Send + 'static,
@@ -604,7 +642,6 @@ impl SftpUploadHandle {
         S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
     {
         let transfer_id = request.transfer_id;
-        let cancellation = TransferCancellation::with_limiter(rate_limiter);
         let task = runtime.spawn(run_upload(
             opening,
             request,
@@ -629,14 +666,6 @@ impl SftpUploadHandle {
 
     pub(crate) fn cancel(&self) {
         self.cancellation.cancel();
-    }
-
-    pub(crate) fn pause(&self) {
-        self.cancellation.pause();
-    }
-
-    pub(crate) fn resume(&self) {
-        self.cancellation.resume();
     }
 
     pub(crate) async fn shutdown(mut self) -> Result<()> {
@@ -667,24 +696,22 @@ impl Drop for SftpUploadHandle {
 }
 
 impl SftpDownloadHandle {
-    pub(crate) fn spawn<F, Fut, S>(
+    pub(crate) fn spawn<F, Fut>(
         runtime: &Handle,
-        stream: S,
+        session: SftpSession,
         reopening: F,
         request: SftpDownloadRequest,
         event_tx: mpsc::Sender<SftpTransferEvent>,
-        rate_limiter: Arc<TransferRateLimiter>,
+        cancellation: TransferCancellation,
     ) -> Self
     where
         F: FnMut() -> Fut + Send + 'static,
-        Fut: Future<Output = Result<S>> + Send + 'static,
-        S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+        Fut: Future<Output = Result<SftpSession>> + Send + 'static,
     {
         let transfer_id = request.transfer_id;
-        let cancellation = TransferCancellation::with_limiter(rate_limiter);
         let task_cancellation = cancellation.clone();
         let task = runtime.spawn(run_download(
-            stream,
+            session,
             reopening,
             request,
             task_cancellation,
@@ -707,14 +734,6 @@ impl SftpDownloadHandle {
 
     pub(crate) fn cancel(&self) {
         self.cancellation.cancel();
-    }
-
-    pub(crate) fn pause(&self) {
-        self.cancellation.pause();
-    }
-
-    pub(crate) fn resume(&self) {
-        self.cancellation.resume();
     }
 
     pub(crate) async fn shutdown(mut self) -> Result<()> {
@@ -850,35 +869,35 @@ fn snapshot_local_file_for_open_at(
     pending.finish()
 }
 
-async fn run_download<F, Fut, S>(
-    stream: S,
+async fn run_download<F, Fut>(
+    session: SftpSession,
     mut reopening: F,
     request: SftpDownloadRequest,
     cancellation: TransferCancellation,
     event_tx: mpsc::Sender<SftpTransferEvent>,
 ) where
     F: FnMut() -> Fut + Send,
-    Fut: Future<Output = Result<S>> + Send + 'static,
-    S: AsyncRead + AsyncWrite + Unpin + Send + 'static,
+    Fut: Future<Output = Result<SftpSession>> + Send + 'static,
 {
     let transfer_id = request.transfer_id;
     let writes_local_target = request.local_target.is_some();
-    let mut first_stream = Some(stream);
+    let mut first_session = Some(session);
     let mut retries = 0;
     let result = loop {
         let attempt = async {
-            let stream = match first_stream.take() {
-                Some(stream) => stream,
+            cancellation.wait_until_running().await?;
+            let session = match first_session.take() {
+                Some(session) => session,
                 None => tokio::select! {
                     _ = cancellation.cancelled() => return Err(cancelled_error()),
                     result = reopening() => result?,
                 },
             };
             if writes_local_target {
-                download_to_local(stream, &request, &cancellation, &event_tx).await
+                download_to_local(session, &request, &cancellation, &event_tx).await
             } else {
                 let cache_dir = cache_namespace()?;
-                download_to_cache(stream, &request, &cancellation, &event_tx, &cache_dir).await
+                download_to_cache(session, &request, &cancellation, &event_tx, &cache_dir).await
             }
         }
         .await;
@@ -962,6 +981,7 @@ async fn run_upload<F, Fut, S>(
     let mut retries = 0;
     let result = loop {
         let attempt = async {
+            cancellation.wait_until_running().await?;
             let stream = tokio::select! {
                 _ = cancellation.cancelled() => return Err(cancelled_error()),
                 result = opening() => result?,
@@ -1074,6 +1094,7 @@ where
     if cancellation.is_cancelled() {
         return Err(cancelled_error());
     }
+    cancellation.wait_until_running().await?;
     let now = Instant::now();
     if now >= overall_deadline {
         anyhow::bail!(

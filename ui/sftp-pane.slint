@@ -153,6 +153,9 @@ export component SftpPane inherits Rectangle {
     callback pause-selected-transfers();
     callback resume-selected-transfers();
     callback cancel-selected-transfers();
+    callback pause-all-transfers();
+    callback resume-all-transfers();
+    callback cancel-all-transfers();
     callback reveal-local-file(string);
     callback reveal-transfer-local(string);
     callback remove-transfer(string);
@@ -522,6 +525,7 @@ export component SftpPane inherits Rectangle {
             active-count: root.view.transfer_active_count;
             failed-count: root.view.transfer_failed_count;
             completed-count: root.view.transfer_completed_count;
+            all-paused: root.view.transfers_paused;
             selected-active-count: root.view.transfer_selected_active_count;
             selected-pausable-count: root.view.transfer_selected_pausable_count;
             selected-resumable-count: root.view.transfer_selected_resumable_count;
@@ -534,6 +538,9 @@ export component SftpPane inherits Rectangle {
             pause-selected => { root.pause-selected-transfers(); }
             resume-selected => { root.resume-selected-transfers(); }
             cancel-selected => { root.cancel-selected-transfers(); }
+            pause-all => { root.pause-all-transfers(); }
+            resume-all => { root.resume-all-transfers(); }
+            cancel-all => { root.cancel-all-transfers(); }
             toggle-collapse => {
                 root.transfers-collapsed = !root.transfers-collapsed;
             }

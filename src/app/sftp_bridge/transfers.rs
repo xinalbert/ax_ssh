@@ -239,6 +239,13 @@ pub(super) fn wire_transfers(
                     if !terminal.sftp.request_transfer_cancel(transfer_id) {
                         anyhow::bail!("SFTP transfer changed before cancellation was recorded");
                     }
+                    if !terminal.connected || terminal.sftp.reconnect_replay_pending {
+                        terminal.sftp.finish_transfer(
+                            transfer_id,
+                            SftpTransferPhase::Cancelled,
+                            "Cancelled".to_owned(),
+                        );
+                    }
                     Ok(())
                 },
             )
@@ -440,6 +447,40 @@ pub(in crate::app) async fn requeue_transfer_intents(
         let Ok(upload) = worker.sftp_upload_submitter() else {
             return;
         };
+        if terminal.sftp.transfers_paused
+            && worker
+                .request_sftp_transfer_action(
+                    ax_ssh::sftp::SftpTransferAction::Pause,
+                    true,
+                    Vec::new(),
+                )
+                .is_err()
+        {
+            return;
+        }
+        let paused_ids = terminal
+            .sftp
+            .transfers
+            .iter()
+            .filter(|transfer| {
+                matches!(
+                    transfer.phase,
+                    SftpTransferPhase::Paused | SftpTransferPhase::Pausing
+                ) && !transfer.inherited_pause
+            })
+            .map(|transfer| transfer.id)
+            .collect::<Vec<_>>();
+        if !paused_ids.is_empty()
+            && worker
+                .request_sftp_transfer_action(
+                    ax_ssh::sftp::SftpTransferAction::Pause,
+                    false,
+                    paused_ids,
+                )
+                .is_err()
+        {
+            return;
+        }
         (download, upload)
     };
     let mut submitted = std::collections::HashSet::new();
@@ -620,12 +661,18 @@ fn queue_selected_remote_downloads(
         local_directory,
         filters,
     } = prepared;
+    let Some(generation) = submission_generation(&state, tab_id) else {
+        return;
+    };
     runtime.spawn(async move {
         let mut queued = 0_usize;
         let mut failed = 0_usize;
         let mut skipped = 0_usize;
         let mut first_issue = None;
         for entry in entries {
+            if submission_generation(&state, tab_id) != Some(generation) {
+                return;
+            }
             let transfer_id = Uuid::new_v4();
             let name = entry.name.clone();
             let remote_path = entry.path.clone();
@@ -675,7 +722,13 @@ fn queue_selected_remote_downloads(
                 continue;
             }
             let (reserved, connected) = loop {
+                if submission_generation(&state, tab_id) != Some(generation) {
+                    return;
+                }
                 match with_sftp_transfer_intent_for_tab(&state, tab_id, |terminal| {
+                    if terminal.sftp.submission_generation != generation {
+                        anyhow::bail!("SFTP batch was cancelled");
+                    }
                     if !terminal.sftp.reserve_download_root(transfer_id) {
                         return Ok((false, terminal.connected));
                     }
@@ -749,6 +802,9 @@ fn queue_selected_remote_downloads(
                 continue;
             }
             let submitter = with_sftp_transfer_intent_for_tab(&state, tab_id, |terminal| {
+                if terminal.sftp.submission_generation != generation {
+                    anyhow::bail!("SFTP batch was cancelled");
+                }
                 if !terminal.connected || terminal.sftp.reconnect_replay_pending {
                     anyhow::bail!("SFTP session is no longer connected");
                 }
@@ -808,14 +864,20 @@ fn queue_selected_remote_downloads(
     });
 }
 
-async fn queue_upload_file_for_tab(
+async fn queue_upload_file_for_generation(
     state: &Arc<Mutex<AppState>>,
     tab_id: Uuid,
     batch_id: Uuid,
     file: PreparedLocalUpload,
+    generation: Option<u64>,
 ) -> Result<()> {
     let (submitter, file, waiting_for_replay) =
         with_sftp_transfer_intent_for_tab(state, tab_id, |terminal| {
+            if generation
+                .is_some_and(|generation| terminal.sftp.submission_generation != generation)
+            {
+                anyhow::bail!("SFTP batch was cancelled");
+            }
             let name = file
                 .remote_path
                 .rsplit('/')
@@ -906,6 +968,9 @@ pub(super) fn queue_local_upload_paths(
     remote_directory: String,
     paths: Vec<PathBuf>,
 ) {
+    let Some(generation) = submission_generation(&state, tab_id) else {
+        return;
+    };
     let state_for_task = state.clone();
     runtime.spawn(async move {
         let filters = match active_sftp_transfer_filter_patterns(&state_for_task) {
@@ -923,7 +988,18 @@ pub(super) fn queue_local_upload_paths(
         let mut failed_count = 0_usize;
         let mut first_failure = None;
         let mut total_bytes = 0_u64;
-        while let Some(file) = file_rx.recv().await {
+        let mut cancellation_check = tokio::time::interval(Duration::from_millis(100));
+        loop {
+            let file = tokio::select! {
+                file = file_rx.recv() => match file { Some(file) => file, None => break },
+                _ = cancellation_check.tick() => {
+                    if submission_generation(&state_for_task, tab_id) != Some(generation) { break; }
+                    continue;
+                }
+            };
+            if submission_generation(&state_for_task, tab_id) != Some(generation) {
+                break;
+            }
             total_bytes = total_bytes.saturating_add(file.size);
             file_count = file_count.saturating_add(1);
             if !sftp_tab_is_currently_connected(&state_for_task, tab_id)
@@ -934,15 +1010,26 @@ pub(super) fn queue_local_upload_paths(
                     .get_or_insert_with(|| "SFTP session is no longer connected".to_owned());
                 continue;
             }
-            if let Err(error) =
-                queue_upload_file_for_tab(&state_for_task, tab_id, batch_id, file).await
+            if let Err(error) = queue_upload_file_for_generation(
+                &state_for_task,
+                tab_id,
+                batch_id,
+                file,
+                Some(generation),
+            )
+            .await
             {
                 failed_count = failed_count.saturating_add(1);
                 first_failure.get_or_insert_with(|| error.to_string());
             }
             dispatch_active_snapshot(&ui, &state_for_task);
         }
-        match discovery.await {
+        drop(file_rx);
+        let discovery = discovery.await;
+        if submission_generation(&state_for_task, tab_id) != Some(generation) {
+            return;
+        }
+        match discovery {
             Ok(Ok(summary)) if file_count > 0 => {
                 log_sftp_drag_drop("upload-queued", Some(file_count), Some(total_bytes));
                 if summary.skipped_entries > 0 || failed_count > 0 {
@@ -996,6 +1083,31 @@ pub(super) fn wire_selected_transfer_actions(
     window_router: WindowRouter,
     window_id: Uuid,
 ) {
+    for action in [
+        ax_ssh::sftp::SftpTransferAction::Pause,
+        ax_ssh::sftp::SftpTransferAction::Resume,
+        ax_ssh::sftp::SftpTransferAction::Cancel,
+    ] {
+        let state = state.clone();
+        let router = window_router.clone();
+        let weak = ui.as_weak();
+        let callback = move || {
+            sync_window_active(&router, window_id, &state);
+            let result = with_window_sftp_transfer_intent(&state, &router, window_id, |terminal| {
+                request_all_transfer_actions(terminal, action)
+            });
+            match result {
+                Ok(()) => dispatch_active_snapshot(&weak, &state),
+                Err(error) => set_status(&weak, &format!("Cannot control SFTP transfers: {error}")),
+            }
+        };
+        match action {
+            ax_ssh::sftp::SftpTransferAction::Pause => ui.on_pause_all_sftp_transfers(callback),
+            ax_ssh::sftp::SftpTransferAction::Resume => ui.on_resume_all_sftp_transfers(callback),
+            ax_ssh::sftp::SftpTransferAction::Cancel => ui.on_cancel_all_sftp_transfers(callback),
+        }
+    }
+
     let ui_for_pause = ui.as_weak();
     let state_for_pause = state.clone();
     let router_for_pause = window_router.clone();
@@ -1107,6 +1219,11 @@ pub(super) fn request_selected_transfer_actions(
     {
         for transfer_id in transfer_ids {
             let _ = terminal.sftp.request_transfer_cancel(transfer_id);
+            terminal.sftp.finish_transfer(
+                transfer_id,
+                SftpTransferPhase::Cancelled,
+                "Cancelled".to_owned(),
+            );
         }
         return Ok(());
     }
@@ -1114,13 +1231,15 @@ pub(super) fn request_selected_transfer_actions(
         .worker
         .as_ref()
         .context("active SFTP tab has no worker")?;
-    for transfer_id in &transfer_ids {
+    worker.request_sftp_transfer_action(
         match action {
-            SelectedTransferAction::Pause => worker.request_pause_sftp_transfer(*transfer_id)?,
-            SelectedTransferAction::Resume => worker.request_resume_sftp_transfer(*transfer_id)?,
-            SelectedTransferAction::Cancel => worker.request_cancel_sftp_transfer(*transfer_id)?,
-        }
-    }
+            SelectedTransferAction::Pause => ax_ssh::sftp::SftpTransferAction::Pause,
+            SelectedTransferAction::Resume => ax_ssh::sftp::SftpTransferAction::Resume,
+            SelectedTransferAction::Cancel => ax_ssh::sftp::SftpTransferAction::Cancel,
+        },
+        false,
+        transfer_ids.clone(),
+    )?;
     for transfer_id in transfer_ids {
         match action {
             SelectedTransferAction::Pause => {
@@ -1206,3 +1325,66 @@ pub(super) fn queue_remote_downloads(
     }
     Ok(())
 }
+
+fn submission_generation(state: &Arc<Mutex<AppState>>, tab_id: Uuid) -> Option<u64> {
+    state
+        .lock()
+        .ok()?
+        .terminal(tab_id)
+        .map(|terminal| terminal.sftp.submission_generation)
+}
+
+pub(super) fn request_all_transfer_actions(
+    terminal: &mut TerminalTabState,
+    action: ax_ssh::sftp::SftpTransferAction,
+) -> Result<()> {
+    use ax_ssh::sftp::SftpTransferAction;
+    let ids = terminal
+        .sftp
+        .transfers
+        .iter()
+        .filter(|transfer| transfer.phase.cancellable())
+        .map(|transfer| transfer.id)
+        .collect::<Vec<_>>();
+    let connected = terminal.connected && !terminal.sftp.reconnect_replay_pending;
+    if connected {
+        terminal
+            .worker
+            .as_ref()
+            .context("active SFTP tab has no worker")?
+            .request_sftp_transfer_action(action, true, ids.clone())?;
+    }
+    match action {
+        SftpTransferAction::Pause => {
+            terminal.sftp.transfers_paused = true;
+            for id in ids {
+                terminal.sftp.apply_transfer_control(id, true, true);
+            }
+        }
+        SftpTransferAction::Resume => {
+            terminal.sftp.transfers_paused = false;
+            for id in ids {
+                terminal.sftp.apply_transfer_control(id, false, false);
+            }
+        }
+        SftpTransferAction::Cancel => {
+            terminal.sftp.transfers_paused = false;
+            terminal.sftp.submission_generation =
+                terminal.sftp.submission_generation.wrapping_add(1);
+            for id in ids {
+                terminal.sftp.request_transfer_cancel(id);
+                if !connected {
+                    terminal.sftp.finish_transfer(
+                        id,
+                        SftpTransferPhase::Cancelled,
+                        "Cancelled".to_owned(),
+                    );
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests;

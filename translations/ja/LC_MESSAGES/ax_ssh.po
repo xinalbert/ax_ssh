@@ -79,6 +79,9 @@ msgstr "アクセント／フォーカス"
 msgid "Add Server"
 msgstr "サーバーを追加"
 
+msgid "All tasks"
+msgstr "すべてのタスク"
+
 msgid "Allow"
 msgstr "許可"
 
@@ -186,6 +189,9 @@ msgstr "変更のない端末行をキャッシュ"
 
 msgid "Cancel"
 msgstr "キャンセル"
+
+msgid "Cancel all"
+msgstr "すべてキャンセル"
 
 msgid "Cancel selected"
 msgstr "選択した項目をキャンセル"
@@ -922,6 +928,9 @@ msgstr "パス"
 msgid "Pause"
 msgstr "一時停止"
 
+msgid "Pause all"
+msgstr "すべて一時停止"
+
 msgid "Pause selected"
 msgstr "選択した項目を一時停止"
 
@@ -1065,6 +1074,9 @@ msgstr "このプラットフォームの既定フィルターを復元"
 
 msgid "Resume"
 msgstr "再開"
+
+msgid "Resume all"
+msgstr "すべて再開"
 
 msgid "Resume selected"
 msgstr "選択した項目を再開"

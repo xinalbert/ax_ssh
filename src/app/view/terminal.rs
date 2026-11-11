@@ -1032,6 +1032,7 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
     ui.set_sftp_transfer_active_count(transfer_active_count);
     ui.set_sftp_transfer_failed_count(transfer_failed_count);
     ui.set_sftp_transfer_completed_count(transfer_completed_count);
+    ui.set_sftp_transfers_paused(snapshot.transfers_paused);
     ui.set_sftp_transfer_selected_active_count(snapshot.transfer_selected_active_count as i32);
     ui.set_sftp_transfer_selected_pausable_count(snapshot.transfer_selected_pausable_count as i32);
     ui.set_sftp_transfer_selected_resumable_count(

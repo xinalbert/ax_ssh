@@ -1421,7 +1421,7 @@ fn queued_upload_is_not_reclassified_by_worker_queue_event() {
 
     let transfer = &sftp.transfers[0];
     assert_eq!(transfer.direction, SftpTransferDirection::Upload);
-    assert!(!transfer.pausable);
+    assert!(transfer.pausable);
     assert_eq!(
         transfer.local_path.as_deref(),
         Some(std::path::Path::new("/tmp/upload.txt"))
@@ -1784,7 +1784,7 @@ fn upload_retry_acknowledgement_clears_a_late_conflict_event() {
 }
 
 #[test]
-fn sftp_upload_transfer_does_not_expose_pause_controls() {
+fn sftp_upload_transfer_exposes_pause_and_resume_controls() {
     let mut sftp = SftpBrowserState::default();
     let transfer_id = Uuid::new_v4();
 
@@ -1806,10 +1806,10 @@ fn sftp_upload_transfer_does_not_expose_pause_controls() {
     );
 
     assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Uploading);
-    assert!(!sftp.transfer_is_pausable(transfer_id));
-    assert!(!sftp.request_transfer_pause(transfer_id));
+    assert!(sftp.transfer_is_pausable(transfer_id));
+    assert!(sftp.request_transfer_pause(transfer_id));
     let snapshot = sftp.snapshot(true);
-    assert!(!snapshot.transfers[0].pausable);
+    assert!(snapshot.transfers[0].pausable);
     assert_eq!(
         snapshot.transfers[0].direction,
         SftpTransferDirection::Upload
@@ -3491,4 +3491,80 @@ fn osc52_settings_revocation_drops_application_confirmation() {
             .pending_clipboard_read
             .is_none()
     );
+}
+
+#[test]
+fn sftp_pause_preserves_queue_phase_and_progress_races_for_both_directions() {
+    for upload in [false, true] {
+        let mut sftp = SftpBrowserState::default();
+        let id = Uuid::new_v4();
+        sftp.queue_transfer_event(id, "file.bin".into(), 100, upload, None, None)
+            .expect("row");
+        assert!(sftp.request_transfer_pause(id));
+        sftp.apply_transfer_control(id, true, false);
+        sftp.apply_transfer_control(id, false, false);
+        assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Queued);
+        assert!(sftp.request_transfer_pause(id));
+        sftp.apply_transfer_control(id, true, false);
+        sftp.start_transfer(id, "/file.bin".into(), "file.bin".into(), 100);
+        sftp.update_transfer_progress(id, 25, 100);
+        assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Paused);
+        assert_eq!(sftp.transfers[0].downloaded_bytes, 25);
+        assert_eq!(sftp.transfers[0].bytes_per_second, 0);
+        sftp.apply_transfer_control(id, false, false);
+        assert_eq!(
+            sftp.transfers[0].phase,
+            if upload {
+                SftpTransferPhase::Uploading
+            } else {
+                SftpTransferPhase::Downloading
+            }
+        );
+        assert_eq!(sftp.transfers[0].downloaded_bytes, 25);
+    }
+}
+
+#[test]
+fn sftp_inherited_pause_prevents_per_row_resume_and_new_tasks_inherit_page_pause() {
+    let mut sftp = SftpBrowserState {
+        transfers_paused: true,
+        ..Default::default()
+    };
+    let id = Uuid::new_v4();
+    sftp.queue_transfer(id, "file.bin".into(), 100)
+        .expect("row");
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Paused);
+    assert!(!sftp.transfer_is_resumable(id));
+    assert!(!sftp.request_transfer_resume(id));
+    assert!(sftp.transfer_is_cancellable(id));
+    sftp.apply_transfer_control(id, false, false);
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Queued);
+}
+
+#[test]
+fn sftp_upload_conflict_arriving_during_resume_keeps_the_decision_visible() {
+    let mut sftp = SftpBrowserState::default();
+    let id = Uuid::new_v4();
+    sftp.queue_upload_transfer(
+        id,
+        "file.bin".into(),
+        10,
+        std::env::temp_dir().join("file.bin"),
+        "/file.bin".into(),
+    )
+    .expect("row");
+    sftp.start_transfer(id, "/file.bin".into(), "file.bin".into(), 10);
+    sftp.request_transfer_pause(id);
+    sftp.apply_transfer_control(id, true, false);
+    assert!(sftp.request_transfer_resume(id));
+    sftp.record_upload_conflict(PendingUploadConflict {
+        transfer_id: id,
+        batch_id: Uuid::new_v4(),
+        name: "file.bin".into(),
+        remote_size: Some(10),
+        remote_modified: Some(1),
+    });
+    sftp.apply_transfer_control(id, false, false);
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::AwaitingConflict);
+    assert_eq!(sftp.upload_conflicts[0].transfer_id, id);
 }

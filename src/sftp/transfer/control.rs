@@ -104,14 +104,15 @@ impl Drop for UploadPermit {
 }
 
 #[derive(Clone)]
-pub(super) struct TransferCancellation {
+pub(crate) struct TransferCancellation {
     inner: Arc<TransferCancellationInner>,
 }
 
 struct TransferCancellationInner {
     cancelled: AtomicBool,
     paused: AtomicBool,
-    notify: Notify,
+    notify: Arc<Notify>,
+    parent: Option<TransferCancellation>,
     rate_limiter: Arc<TransferRateLimiter>,
 }
 
@@ -120,12 +121,13 @@ impl TransferCancellation {
         Self::with_limiter(Arc::new(TransferRateLimiter::new(None)))
     }
 
-    pub(super) fn with_limiter(rate_limiter: Arc<TransferRateLimiter>) -> Self {
+    pub(crate) fn with_limiter(rate_limiter: Arc<TransferRateLimiter>) -> Self {
         Self {
             inner: Arc::new(TransferCancellationInner {
                 cancelled: AtomicBool::new(false),
                 paused: AtomicBool::new(false),
-                notify: Notify::new(),
+                notify: Arc::new(Notify::new()),
+                parent: None,
                 rate_limiter,
             }),
         }
@@ -135,33 +137,50 @@ impl TransferCancellation {
         self.inner.rate_limiter.reserve(bytes, self).await
     }
 
-    pub(super) fn cancel(&self) {
+    pub(crate) fn child(&self) -> Self {
+        Self {
+            inner: Arc::new(TransferCancellationInner {
+                cancelled: AtomicBool::new(false),
+                paused: AtomicBool::new(false),
+                notify: self.inner.notify.clone(),
+                parent: Some(self.clone()),
+                rate_limiter: self.inner.rate_limiter.clone(),
+            }),
+        }
+    }
+
+    pub(crate) fn inherits_pause(&self) -> bool {
+        self.inner.parent.as_ref().is_some_and(Self::is_paused)
+    }
+
+    pub(crate) fn cancel(&self) {
         if !self.inner.cancelled.swap(true, Ordering::AcqRel) {
             self.inner.notify.notify_waiters();
         }
     }
 
-    pub(super) fn pause(&self) {
+    pub(crate) fn pause(&self) {
         if !self.is_cancelled() && !self.inner.paused.swap(true, Ordering::AcqRel) {
             self.inner.notify.notify_waiters();
         }
     }
 
-    pub(super) fn resume(&self) {
+    pub(crate) fn resume(&self) {
         if self.inner.paused.swap(false, Ordering::AcqRel) {
             self.inner.notify.notify_waiters();
         }
     }
 
-    pub(super) fn is_cancelled(&self) -> bool {
+    pub(crate) fn is_cancelled(&self) -> bool {
         self.inner.cancelled.load(Ordering::Acquire)
+            || self.inner.parent.as_ref().is_some_and(Self::is_cancelled)
     }
 
-    pub(super) fn is_paused(&self) -> bool {
-        self.inner.paused.load(Ordering::Acquire)
+    pub(crate) fn is_paused(&self) -> bool {
+        self.inner.paused.load(Ordering::Acquire) || self.inherits_pause()
     }
 
-    pub(super) async fn wait_until_running(&self) -> Result<()> {
+    pub(crate) async fn wait_until_running(&self) -> Result<()> {
         loop {
             if self.is_cancelled() {
                 return Err(cancelled_error());
@@ -170,6 +189,8 @@ impl TransferCancellation {
                 return Ok(());
             }
             let notified = self.inner.notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
             if self.is_cancelled() {
                 return Err(cancelled_error());
             }
@@ -183,9 +204,11 @@ impl TransferCancellation {
         }
     }
 
-    pub(super) async fn cancelled(&self) {
+    pub(crate) async fn cancelled(&self) {
         loop {
             let notified = self.inner.notify.notified();
+            tokio::pin!(notified);
+            notified.as_mut().enable();
             if self.is_cancelled() {
                 return;
             }

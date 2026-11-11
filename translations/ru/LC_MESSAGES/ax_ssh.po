@@ -79,6 +79,9 @@ msgstr "Акцент / фокус"
 msgid "Add Server"
 msgstr "Добавить сервер"
 
+msgid "All tasks"
+msgstr "Все задачи"
+
 msgid "Allow"
 msgstr "Разрешить"
 
@@ -186,6 +189,9 @@ msgstr "Кэшировать неизменённые строки термин�
 
 msgid "Cancel"
 msgstr "Отмена"
+
+msgid "Cancel all"
+msgstr "Отменить все"
 
 msgid "Cancel selected"
 msgstr "Отменить выбранные"
@@ -922,6 +928,9 @@ msgstr "Путь"
 msgid "Pause"
 msgstr "Приостановить"
 
+msgid "Pause all"
+msgstr "Приостановить все"
+
 msgid "Pause selected"
 msgstr "Приостановить выбранные"
 
@@ -1065,6 +1074,9 @@ msgstr "Восстановить фильтры по умолчанию для �
 
 msgid "Resume"
 msgstr "Продолжить"
+
+msgid "Resume all"
+msgstr "Продолжить все"
 
 msgid "Resume selected"
 msgstr "Продолжить выбранные"

@@ -39,6 +39,7 @@ impl SftpBrowserState {
             .filter(|transfer| {
                 self.selected_transfers.contains(&transfer.id)
                     && transfer.pausable
+                    && !transfer.inherited_pause
                     && transfer.phase.resumable()
             })
             .count();
@@ -67,6 +68,7 @@ impl SftpBrowserState {
                 .map(|transfer| transfer.snapshot(self.selected_transfers.contains(&transfer.id)))
                 .collect(),
             upload_conflict: self.upload_conflicts.front().cloned(),
+            transfers_paused: self.transfers_paused,
             transfer_selected_active_count,
             transfer_selected_pausable_count,
             transfer_selected_resumable_count,
@@ -346,11 +348,30 @@ impl SftpBrowserState {
             .retain(|transfer| !transfer.phase.active() || intents.contains_key(&transfer.id));
         for transfer in &mut self.transfers {
             if transfer.phase.active() {
-                transfer.phase = SftpTransferPhase::Queued;
+                let paused = self.transfers_paused
+                    || matches!(
+                        transfer.phase,
+                        SftpTransferPhase::Paused | SftpTransferPhase::Pausing
+                    );
+                transfer.phase = if paused {
+                    SftpTransferPhase::Paused
+                } else {
+                    SftpTransferPhase::Queued
+                };
                 transfer.downloaded_bytes = 0;
                 transfer.bytes_per_second = 0;
                 transfer.started_at = None;
                 transfer.status = "Waiting for reconnection".to_owned();
+                transfer.pause_previous = paused.then(|| {
+                    (
+                        SftpTransferPhase::Queued,
+                        "Waiting for reconnection".to_owned(),
+                    )
+                });
+                transfer.inherited_pause = self.transfers_paused;
+                if paused {
+                    transfer.status = "Paused".to_owned();
+                }
             }
         }
         for intent in self.transfer_intents.values() {
@@ -370,6 +391,8 @@ impl SftpBrowserState {
     }
 
     pub(in crate::app) fn clear_transfer_intents(&mut self) {
+        self.submission_generation = self.submission_generation.wrapping_add(1);
+        self.transfers_paused = false;
         if !self.transfer_intents.is_empty() {
             self.transfer_intent_revision = self.transfer_intent_revision.wrapping_add(1);
         }
@@ -443,7 +466,11 @@ impl SftpBrowserState {
 
     pub(in crate::app) fn set_transfer_status(&mut self, id: Uuid, status: &str) {
         if let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) {
-            transfer.status = status.to_owned();
+            if let Some((_, previous_status)) = transfer.pause_previous.as_mut() {
+                *previous_status = status.to_owned();
+            } else {
+                transfer.status = status.to_owned();
+            }
         }
     }
 
@@ -483,13 +510,26 @@ impl SftpBrowserState {
             id,
             name,
             direction,
-            phase: SftpTransferPhase::Queued,
-            pausable: direction == SftpTransferDirection::Download,
+            phase: if self.transfers_paused {
+                SftpTransferPhase::Paused
+            } else {
+                SftpTransferPhase::Queued
+            },
+            pausable: true,
+            pause_previous: self
+                .transfers_paused
+                .then(|| (SftpTransferPhase::Queued, "Queued".to_owned())),
+            inherited_pause: self.transfers_paused,
             downloaded_bytes: 0,
             total_bytes,
             bytes_per_second: 0,
             started_at: None,
-            status: "Queued".to_owned(),
+            status: if self.transfers_paused {
+                "Paused"
+            } else {
+                "Queued"
+            }
+            .to_owned(),
             local_path,
             remote_path,
         });
@@ -526,6 +566,8 @@ impl SftpBrowserState {
             SftpTransferPhase::Queued
                 | SftpTransferPhase::AwaitingConflict
                 | SftpTransferPhase::Resuming
+                | SftpTransferPhase::Pausing
+                | SftpTransferPhase::Paused
         ) {
             return;
         }
@@ -533,10 +575,21 @@ impl SftpBrowserState {
         if !remote_path.is_empty() {
             transfer.remote_path = Some(remote_path);
         }
-        transfer.phase = transfer.direction.active_phase();
+        if matches!(
+            transfer.phase,
+            SftpTransferPhase::Paused | SftpTransferPhase::Pausing
+        ) {
+            transfer.pause_previous = Some((
+                transfer.direction.active_phase(),
+                transfer.direction.active_status().to_owned(),
+            ));
+        } else {
+            transfer.pause_previous = None;
+            transfer.phase = transfer.direction.active_phase();
+            transfer.status = transfer.direction.active_status().to_owned();
+        }
         transfer.total_bytes = total_bytes;
         transfer.started_at = Some(Instant::now());
-        transfer.status = transfer.direction.active_status().to_owned();
     }
 
     pub(in crate::app) fn record_upload_conflict(&mut self, conflict: PendingUploadConflict) {
@@ -550,13 +603,28 @@ impl SftpBrowserState {
         if transfer.direction != SftpTransferDirection::Upload
             || !matches!(
                 transfer.phase,
-                SftpTransferPhase::Queued | SftpTransferPhase::Uploading
+                SftpTransferPhase::Queued
+                    | SftpTransferPhase::Uploading
+                    | SftpTransferPhase::Paused
+                    | SftpTransferPhase::Pausing
+                    | SftpTransferPhase::Resuming
             )
         {
             return;
         }
-        transfer.phase = SftpTransferPhase::AwaitingConflict;
-        transfer.status = "Waiting for file conflict decision".to_owned();
+        if matches!(
+            transfer.phase,
+            SftpTransferPhase::Paused | SftpTransferPhase::Pausing
+        ) {
+            transfer.pause_previous = Some((
+                SftpTransferPhase::AwaitingConflict,
+                "Waiting for file conflict decision".to_owned(),
+            ));
+        } else {
+            transfer.pause_previous = None;
+            transfer.phase = SftpTransferPhase::AwaitingConflict;
+            transfer.status = "Waiting for file conflict decision".to_owned();
+        }
         self.upload_conflicts.push_back(conflict);
     }
 
@@ -577,11 +645,18 @@ impl SftpBrowserState {
         self.upload_conflicts
             .retain(|item| !resolved.contains(&item.transfer_id));
         for transfer in &mut self.transfers {
-            if resolved.contains(&transfer.id)
-                && transfer.phase == SftpTransferPhase::AwaitingConflict
-            {
-                transfer.phase = SftpTransferPhase::Queued;
-                transfer.status = "Queued".to_owned();
+            if resolved.contains(&transfer.id) {
+                if transfer.phase == SftpTransferPhase::AwaitingConflict {
+                    transfer.phase = SftpTransferPhase::Queued;
+                    transfer.status = "Queued".to_owned();
+                } else if transfer
+                    .pause_previous
+                    .as_ref()
+                    .is_some_and(|(phase, _)| *phase == SftpTransferPhase::AwaitingConflict)
+                {
+                    transfer.pause_previous =
+                        Some((SftpTransferPhase::Queued, "Queued".to_owned()));
+                }
             }
         }
     }
@@ -596,13 +671,25 @@ impl SftpBrowserState {
             return;
         };
         if transfer.phase != transfer.direction.active_phase()
-            && transfer.phase != SftpTransferPhase::Pausing
+            && !matches!(
+                transfer.phase,
+                SftpTransferPhase::Pausing
+                    | SftpTransferPhase::Paused
+                    | SftpTransferPhase::Resuming
+            )
         {
             return;
         }
-        transfer.phase = transfer.direction.active_phase();
+        let paused = matches!(
+            transfer.phase,
+            SftpTransferPhase::Pausing | SftpTransferPhase::Paused | SftpTransferPhase::Resuming
+        );
         transfer.downloaded_bytes = downloaded_bytes.min(total_bytes);
         transfer.total_bytes = total_bytes;
+        if paused {
+            transfer.bytes_per_second = 0;
+            return;
+        }
         if let Some(started_at) = transfer.started_at {
             let elapsed = started_at.elapsed().as_secs_f64();
             if elapsed > 0.0 {
@@ -634,6 +721,7 @@ impl SftpBrowserState {
                 transfer.phase,
                 SftpTransferPhase::Downloading
                     | SftpTransferPhase::Pausing
+                    | SftpTransferPhase::Paused
                     | SftpTransferPhase::Resuming
             )
         {
@@ -662,6 +750,7 @@ impl SftpBrowserState {
                         transfer.phase,
                         SftpTransferPhase::Uploading
                             | SftpTransferPhase::Pausing
+                            | SftpTransferPhase::Paused
                             | SftpTransferPhase::Resuming
                     )
             })
@@ -750,65 +839,96 @@ impl SftpBrowserState {
     }
 
     pub(in crate::app) fn request_transfer_pause(&mut self, id: Uuid) -> bool {
-        let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
-            return false;
-        };
-        if !transfer.pausable || transfer.phase != SftpTransferPhase::Downloading {
+        if !self.transfer_is_pausable(id) {
             return false;
         }
-        transfer.phase = SftpTransferPhase::Pausing;
-        transfer.status = "Pausing".to_owned();
+        if let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) {
+            transfer.pause_previous = Some((transfer.phase, transfer.status.clone()));
+            transfer.phase = SftpTransferPhase::Pausing;
+            transfer.status = "Pausing".to_owned();
+        }
         true
     }
 
-    pub(in crate::app) fn pause_transfer(&mut self, id: Uuid) -> bool {
+    pub(in crate::app) fn apply_transfer_control(
+        &mut self,
+        id: Uuid,
+        paused: bool,
+        inherited: bool,
+    ) -> bool {
         let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
             return false;
         };
-        if !transfer.pausable
-            || !matches!(
-                transfer.phase,
-                SftpTransferPhase::Downloading | SftpTransferPhase::Pausing
-            )
-        {
+        if !transfer.phase.cancellable() {
             return false;
         }
-        transfer.phase = SftpTransferPhase::Paused;
-        transfer.bytes_per_second = 0;
-        transfer.status = "Paused".to_owned();
+        transfer.inherited_pause = inherited;
+        if paused {
+            if !matches!(
+                transfer.phase,
+                SftpTransferPhase::Paused
+                    | SftpTransferPhase::Pausing
+                    | SftpTransferPhase::Resuming
+            ) {
+                transfer.pause_previous = Some((transfer.phase, transfer.status.clone()));
+            }
+            transfer.phase = SftpTransferPhase::Paused;
+            transfer.bytes_per_second = 0;
+            transfer.status = "Paused".to_owned();
+        } else if matches!(
+            transfer.phase,
+            SftpTransferPhase::Paused | SftpTransferPhase::Pausing | SftpTransferPhase::Resuming
+        ) {
+            let (phase, status) = transfer
+                .pause_previous
+                .take()
+                .unwrap_or((SftpTransferPhase::Queued, "Queued".to_owned()));
+            transfer.phase = phase;
+            transfer.status = status;
+            transfer.started_at = Some(Instant::now());
+        }
         true
+    }
+
+    #[cfg(test)]
+    pub(in crate::app) fn pause_transfer(&mut self, id: Uuid) -> bool {
+        let inherited = self
+            .transfers
+            .iter()
+            .find(|transfer| transfer.id == id)
+            .is_some_and(|transfer| transfer.inherited_pause);
+        self.apply_transfer_control(id, true, inherited)
     }
 
     pub(in crate::app) fn request_transfer_resume(&mut self, id: Uuid) -> bool {
-        let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
-            return false;
-        };
-        if !transfer.pausable || transfer.phase != SftpTransferPhase::Paused {
+        if !self.transfer_is_resumable(id) {
             return false;
         }
-        transfer.phase = SftpTransferPhase::Resuming;
-        transfer.status = "Resuming".to_owned();
+        if let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) {
+            transfer.phase = SftpTransferPhase::Resuming;
+            transfer.status = "Resuming".to_owned();
+        }
         true
     }
 
+    #[cfg(test)]
     pub(in crate::app) fn resume_transfer(
         &mut self,
         id: Uuid,
         downloaded_bytes: u64,
         total_bytes: u64,
     ) -> bool {
-        let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) else {
-            return false;
-        };
-        if transfer.phase != SftpTransferPhase::Resuming {
+        // Legacy stream acknowledgements may race a newer Pause command.
+        if !self
+            .transfers
+            .iter()
+            .any(|transfer| transfer.id == id && transfer.phase == SftpTransferPhase::Resuming)
+        {
             return false;
         }
-        transfer.phase = transfer.direction.active_phase();
-        transfer.downloaded_bytes = downloaded_bytes.min(total_bytes);
-        transfer.total_bytes = total_bytes;
-        transfer.started_at = Some(Instant::now());
-        transfer.status = transfer.direction.active_status().to_owned();
-        true
+        let changed = self.apply_transfer_control(id, false, false);
+        self.update_transfer_progress(id, downloaded_bytes, total_bytes);
+        changed
     }
 
     pub(in crate::app) fn request_transfer_cancel(&mut self, id: Uuid) -> bool {
@@ -838,9 +958,7 @@ impl SftpBrowserState {
         self.transfers
             .iter()
             .find(|transfer| transfer.id == id)
-            .is_some_and(|transfer| {
-                transfer.pausable && transfer.phase == SftpTransferPhase::Downloading
-            })
+            .is_some_and(|transfer| transfer.pausable && transfer.phase.pausable())
     }
 
     pub(in crate::app) fn transfer_is_resumable(&self, id: Uuid) -> bool {
@@ -848,7 +966,9 @@ impl SftpBrowserState {
             .iter()
             .find(|transfer| transfer.id == id)
             .is_some_and(|transfer| {
-                transfer.pausable && transfer.phase == SftpTransferPhase::Paused
+                transfer.pausable
+                    && !transfer.inherited_pause
+                    && transfer.phase == SftpTransferPhase::Paused
             })
     }
 
@@ -930,6 +1050,7 @@ impl SftpBrowserState {
                     | (SftpTransferPhase::Downloading, SftpTransferPhase::Completed)
                     | (SftpTransferPhase::Uploading, SftpTransferPhase::Completed)
                     | (SftpTransferPhase::Pausing, SftpTransferPhase::Completed)
+                    | (SftpTransferPhase::Paused, SftpTransferPhase::Completed)
                     | (SftpTransferPhase::Resuming, SftpTransferPhase::Completed)
             );
             if !allowed {
@@ -959,11 +1080,22 @@ impl SftpBrowserState {
         self.pending_download_roots.remove(&id);
         self.scanning_download_roots.remove(&id);
         if let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) {
-            transfer.phase = SftpTransferPhase::Queued;
+            let paused = self.transfers_paused
+                || matches!(
+                    transfer.phase,
+                    SftpTransferPhase::Paused | SftpTransferPhase::Pausing
+                );
+            transfer.phase = if paused {
+                SftpTransferPhase::Paused
+            } else {
+                SftpTransferPhase::Queued
+            };
             transfer.downloaded_bytes = 0;
             transfer.bytes_per_second = 0;
             transfer.started_at = None;
-            transfer.status = format!("Waiting for reconnection: {message}");
+            let status = format!("Waiting for reconnection: {message}");
+            transfer.pause_previous = paused.then(|| (SftpTransferPhase::Queued, status.clone()));
+            transfer.status = if paused { "Paused".to_owned() } else { status };
         }
     }
 
@@ -1125,7 +1257,9 @@ impl SftpBrowserState {
                 local.status = "Local directory not loaded".to_owned();
             }
         }
+        let generation = self.submission_generation.wrapping_add(1);
         *self = Self::default();
+        self.submission_generation = generation;
         self.local = local;
     }
 }
@@ -1547,7 +1681,7 @@ impl SftpTransferPhase {
     }
 
     pub(in crate::app) fn pausable(self) -> bool {
-        self == Self::Downloading
+        matches!(self, Self::Queued | Self::Downloading | Self::Uploading)
     }
 
     pub(in crate::app) fn resumable(self) -> bool {
@@ -1613,6 +1747,7 @@ impl SftpTransferState {
             direction: self.direction,
             phase: self.phase,
             pausable: self.pausable,
+            inherited_pause: self.inherited_pause,
             downloaded_bytes: self.downloaded_bytes,
             total_bytes: self.total_bytes,
             bytes_per_second: self.bytes_per_second,
