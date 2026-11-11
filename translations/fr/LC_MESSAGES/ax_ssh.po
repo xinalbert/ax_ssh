@@ -481,6 +481,9 @@ msgstr "Adresse de connexion"
 msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
 msgstr "Saisissez des valeurs #RRGGBB ou #RRGGBBAA. Un contraste insuffisant est remplacé par des couleurs lisibles lors de l’enregistrement."
 
+msgid "Enter SSH password"
+msgstr "Saisir le mot de passe SSH"
+
 msgid "Enter the Telnet server address."
 msgstr "Saisissez l’adresse du serveur Telnet."
 
@@ -609,6 +612,9 @@ msgstr "Importer depuis le presse-papiers"
 
 msgid "Import from Clipboard shortcut"
 msgstr "Raccourci Importer depuis le presse-papiers"
+
+msgid "In the macOS Keychain dialog, choose Always Allow to keep access after restarting this version of AxSSH."
+msgstr "Dans la fenêtre du Trousseau macOS, choisissez « Toujours autoriser » pour conserver l’accès après le redémarrage de cette version d’AxSSH."
 
 msgid "Information"
 msgstr "Information"
@@ -1087,6 +1093,9 @@ msgstr "Reprendre {0}"
 msgid "Retry"
 msgstr "Réessayer"
 
+msgid "Retry access or enter the server SSH password manually."
+msgstr "Réessayez ou saisissez manuellement le mot de passe SSH du serveur."
+
 msgid "Return Workspace to Main Window"
 msgstr "Renvoyer l’espace de travail à la fenêtre principale"
 
@@ -1206,6 +1215,12 @@ msgstr "Enregistré dans {0}."
 
 msgid "Saved password"
 msgstr "Mot de passe enregistré"
+
+msgid "Saved password unavailable"
+msgstr "Mot de passe enregistré indisponible"
+
+msgid "Saving may require system authorization. Enter your device password only in the system dialog."
+msgstr "L’enregistrement peut nécessiter une autorisation du système. Saisissez le mot de passe de votre appareil uniquement dans la boîte de dialogue système."
 
 msgid "Scrollback"
 msgstr "Historique du terminal"

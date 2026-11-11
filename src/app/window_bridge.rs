@@ -319,6 +319,7 @@ pub(super) fn release_window_resources(ui: &AppWindow) {
     ui.set_password_private_key(false);
     ui.set_password_vault_storage(false);
     ui.set_password_vault_unlock_only(false);
+    ui.set_password_credential_unavailable(false);
     ui.set_password_key_path("".into());
     ui.set_password_dialog_tab_id("".into());
 

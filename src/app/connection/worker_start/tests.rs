@@ -70,11 +70,10 @@ impl Fixture {
 async fn authentication_transitions_require_matching_tab_profile_and_phase() {
     for target in [ConnectionTarget::Terminal, ConnectionTarget::Sftp] {
         let fixture = Fixture::new(target);
-        assert!(!set_loading_stored_credential(
-            &fixture.state,
-            fixture.tab,
-            fixture.profile.id
-        ));
+        assert!(
+            set_loading_stored_credential(&fixture.state, fixture.tab, fixture.profile.id)
+                .is_none()
+        );
         assert!(!set_awaiting_authentication(
             &fixture.state,
             fixture.tab,
@@ -84,26 +83,21 @@ async fn authentication_transitions_require_matching_tab_profile_and_phase() {
         fixture.phase(SshConnectionPhase::AwaitingAuthentication {
             vault_unlock_only: false,
         });
-        assert!(!set_loading_stored_credential(
-            &fixture.state,
-            Uuid::new_v4(),
-            fixture.profile.id
-        ));
-        assert!(!set_loading_stored_credential(
-            &fixture.state,
-            fixture.tab,
-            Uuid::new_v4()
-        ));
-        assert!(set_loading_stored_credential(
-            &fixture.state,
-            fixture.tab,
-            fixture.profile.id
-        ));
-        assert!(!set_loading_stored_credential(
-            &fixture.state,
-            fixture.tab,
-            fixture.profile.id
-        ));
+        assert!(
+            set_loading_stored_credential(&fixture.state, Uuid::new_v4(), fixture.profile.id)
+                .is_none()
+        );
+        assert!(
+            set_loading_stored_credential(&fixture.state, fixture.tab, Uuid::new_v4()).is_none()
+        );
+        assert!(
+            set_loading_stored_credential(&fixture.state, fixture.tab, fixture.profile.id)
+                .is_some()
+        );
+        assert!(
+            set_loading_stored_credential(&fixture.state, fixture.tab, fixture.profile.id)
+                .is_none()
+        );
         assert!(set_awaiting_authentication(
             &fixture.state,
             fixture.tab,
@@ -157,7 +151,7 @@ async fn worker_start_rejects_wrong_phase_changed_profile_and_target_without_cre
             fixture
                 .start(
                     fixture.profile.clone(),
-                    AuthenticationStart::StoredCredential,
+                    AuthenticationStart::StoredCredential(Uuid::new_v4()),
                     target
                 )
                 .is_err()
@@ -218,14 +212,14 @@ async fn terminal_and_sftp_workers_start_once_and_shutdown_with_their_owner() {
         fixture.state.lock().unwrap().sessions.sessions = vec![fixture.profile.clone()];
         for source in [
             AuthenticationStart::Prompt,
-            AuthenticationStart::StoredCredential,
+            AuthenticationStart::StoredCredential(Uuid::new_v4()),
         ] {
             fixture.phase(match source {
                 AuthenticationStart::Prompt => SshConnectionPhase::AwaitingAuthentication {
                     vault_unlock_only: false,
                 },
-                AuthenticationStart::StoredCredential => {
-                    SshConnectionPhase::LoadingStoredCredential
+                AuthenticationStart::StoredCredential(id) => {
+                    SshConnectionPhase::LoadingStoredCredential(id)
                 }
             });
             fixture

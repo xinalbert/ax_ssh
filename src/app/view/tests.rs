@@ -1,6 +1,7 @@
 use super::*;
 use slint::Model;
 
+mod security_dialogs;
 mod sftp_navigation;
 mod shortcut_menus;
 mod terminal_connection;

@@ -481,6 +481,9 @@ msgstr "Адреса з’єднання"
 msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
 msgstr "Введіть #RRGGBB або #RRGGBBAA. Під час збереження недостатній контраст буде замінено читабельними кольорами."
 
+msgid "Enter SSH password"
+msgstr "Ввести SSH-пароль"
+
 msgid "Enter the Telnet server address."
 msgstr "Введіть адресу сервера Telnet."
 
@@ -609,6 +612,9 @@ msgstr "Імпортувати з буфера обміну"
 
 msgid "Import from Clipboard shortcut"
 msgstr "Сполучення клавіш для імпорту з буфера обміну"
+
+msgid "In the macOS Keychain dialog, choose Always Allow to keep access after restarting this version of AxSSH."
+msgstr "У діалоговому вікні В’язки ключів macOS виберіть «Дозволяти завжди», щоб зберегти доступ після перезапуску цієї версії AxSSH."
 
 msgid "Information"
 msgstr "Інформація"
@@ -1087,6 +1093,9 @@ msgstr "Продовжити {0}"
 msgid "Retry"
 msgstr "Повторити"
 
+msgid "Retry access or enter the server SSH password manually."
+msgstr "Повторіть спробу або введіть SSH-пароль сервера вручну."
+
 msgid "Return Workspace to Main Window"
 msgstr "Повернути робочу область до головного вікна"
 
@@ -1206,6 +1215,12 @@ msgstr "Збережено в {0}."
 
 msgid "Saved password"
 msgstr "Збережений пароль"
+
+msgid "Saved password unavailable"
+msgstr "Збережений пароль недоступний"
+
+msgid "Saving may require system authorization. Enter your device password only in the system dialog."
+msgstr "Збереження може потребувати дозволу системи. Вводьте пароль пристрою лише в системному діалозі."
 
 msgid "Scrollback"
 msgstr "Історія термінала"

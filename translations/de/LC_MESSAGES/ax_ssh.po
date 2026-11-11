@@ -481,6 +481,9 @@ msgstr "Verbindungsziel"
 msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
 msgstr "Geben Sie Werte als #RRGGBB oder #RRGGBBAA ein. Unzureichender Kontrast wird beim Speichern durch lesbare Farben ersetzt."
 
+msgid "Enter SSH password"
+msgstr "SSH-Passwort eingeben"
+
 msgid "Enter the Telnet server address."
 msgstr "Geben Sie die Adresse des Telnet-Servers ein."
 
@@ -609,6 +612,9 @@ msgstr "Aus Zwischenablage importieren"
 
 msgid "Import from Clipboard shortcut"
 msgstr "Tastenkürzel zum Importieren aus der Zwischenablage"
+
+msgid "In the macOS Keychain dialog, choose Always Allow to keep access after restarting this version of AxSSH."
+msgstr "Wählen Sie im macOS-Schlüsselbunddialog „Immer erlauben“, um den Zugriff auch nach einem Neustart dieser Version von AxSSH zu behalten."
 
 msgid "Information"
 msgstr "Information"
@@ -1087,6 +1093,9 @@ msgstr "{0} fortsetzen"
 msgid "Retry"
 msgstr "Erneut versuchen"
 
+msgid "Retry access or enter the server SSH password manually."
+msgstr "Zugriff erneut versuchen oder das SSH-Passwort des Servers manuell eingeben."
+
 msgid "Return Workspace to Main Window"
 msgstr "Arbeitsbereich ins Hauptfenster zurückführen"
 
@@ -1206,6 +1215,12 @@ msgstr "In {0} gespeichert."
 
 msgid "Saved password"
 msgstr "Gespeichertes Passwort"
+
+msgid "Saved password unavailable"
+msgstr "Gespeichertes Passwort nicht verfügbar"
+
+msgid "Saving may require system authorization. Enter your device password only in the system dialog."
+msgstr "Das Speichern kann eine Systemautorisierung erfordern. Geben Sie Ihr Gerätepasswort nur im Systemdialog ein."
 
 msgid "Scrollback"
 msgstr "Terminalverlauf"

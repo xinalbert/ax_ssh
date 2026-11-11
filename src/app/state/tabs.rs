@@ -600,11 +600,16 @@ impl AppState {
             {
                 ActiveSecurityPrompt::HostKey(prompt.clone())
             }
-            Some(SshConnectionPhase::AwaitingAuthentication { vault_unlock_only }) => {
+            Some(SshConnectionPhase::AwaitingAuthentication { vault_unlock_only })
+            | Some(SshConnectionPhase::StoredCredentialUnavailable { vault_unlock_only }) => {
                 ActiveSecurityPrompt::Authentication {
                     tab_id,
                     profile,
                     vault_unlock_only: *vault_unlock_only,
+                    credential_unavailable: matches!(
+                        terminal.ssh_phase(),
+                        Some(SshConnectionPhase::StoredCredentialUnavailable { .. })
+                    ),
                 }
             }
             Some(
@@ -612,7 +617,7 @@ impl AppState {
                 | SshConnectionPhase::Probing(_)
                 | SshConnectionPhase::AwaitingHostKey(_)
                 | SshConnectionPhase::ConfirmingHostKey(_)
-                | SshConnectionPhase::LoadingStoredCredential,
+                | SshConnectionPhase::LoadingStoredCredential(_),
             )
             | None => ActiveSecurityPrompt::None,
         }

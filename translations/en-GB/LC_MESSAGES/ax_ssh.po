@@ -481,6 +481,9 @@ msgstr "Endpoint"
 msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
 msgstr "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colours when saved."
 
+msgid "Enter SSH password"
+msgstr "Enter SSH password"
+
 msgid "Enter the Telnet server address."
 msgstr "Enter the Telnet server address."
 
@@ -609,6 +612,9 @@ msgstr "Import from Clipboard"
 
 msgid "Import from Clipboard shortcut"
 msgstr "Import from Clipboard shortcut"
+
+msgid "In the macOS Keychain dialog, choose Always Allow to keep access after restarting this version of AxSSH."
+msgstr "In the macOS Keychain dialog, choose Always Allow to keep access after restarting this version of AxSSH."
 
 msgid "Information"
 msgstr "Information"
@@ -1087,6 +1093,9 @@ msgstr "Resume {0}"
 msgid "Retry"
 msgstr "Retry"
 
+msgid "Retry access or enter the server SSH password manually."
+msgstr "Retry access or enter the server SSH password manually."
+
 msgid "Return Workspace to Main Window"
 msgstr "Return Workspace to Main Window"
 
@@ -1206,6 +1215,12 @@ msgstr "Saved in {0}."
 
 msgid "Saved password"
 msgstr "Saved password"
+
+msgid "Saved password unavailable"
+msgstr "Saved password unavailable"
+
+msgid "Saving may require system authorization. Enter your device password only in the system dialog."
+msgstr "Saving may require system authorization. Enter your device password only in the system dialog."
 
 msgid "Scrollback"
 msgstr "Scrollback"

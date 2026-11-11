@@ -1291,6 +1291,7 @@ export component WorkspaceShell inherits Rectangle {
 
                     if root.view.active_tab_kind == "session-editor" : SessionEditorPane {
                         source: root.view.session_editor;
+                        apple-platform: root.apple-platform;
                         system-icon-choices(query) => { return root.system-icon-choices(query); }
                         system-icon-choice(id) => { return root.system-icon-choice(id); }
                         save(name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, sftp-override-limits, sftp-per-tab-transfers, sftp-rate-limit-mib-per-second, password, remember-password, credential-storage, vault-password, x11-forwarding,

@@ -481,6 +481,9 @@ msgstr "接続先"
 msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
 msgstr "#RRGGBBまたは#RRGGBBAAを入力。保存時にコントラストが不十分な色は読みやすい色に戻します。"
 
+msgid "Enter SSH password"
+msgstr "SSH パスワードを入力"
+
 msgid "Enter the Telnet server address."
 msgstr "Telnetサーバーのアドレスを入力。"
 
@@ -609,6 +612,9 @@ msgstr "クリップボードからインポート"
 
 msgid "Import from Clipboard shortcut"
 msgstr "クリップボードからインポートするショートカット"
+
+msgid "In the macOS Keychain dialog, choose Always Allow to keep access after restarting this version of AxSSH."
+msgstr "macOSのキーチェーンダイアログで「常に許可」を選ぶと、このバージョンのAxSSHを再起動した後もアクセスを維持できます。"
 
 msgid "Information"
 msgstr "情報"
@@ -1087,6 +1093,9 @@ msgstr "{0}を再開"
 msgid "Retry"
 msgstr "再試行"
 
+msgid "Retry access or enter the server SSH password manually."
+msgstr "再試行するか、サーバーの SSH パスワードを手動で入力してください。"
+
 msgid "Return Workspace to Main Window"
 msgstr "ワークスペースをメインウィンドウに戻す"
 
@@ -1206,6 +1215,12 @@ msgstr "{0}に保存済み。"
 
 msgid "Saved password"
 msgstr "保存したパスワード"
+
+msgid "Saved password unavailable"
+msgstr "保存済みパスワードを取得できません"
+
+msgid "Saving may require system authorization. Enter your device password only in the system dialog."
+msgstr "保存時にシステムの認証が必要になる場合があります。デバイスのログインパスワードはシステムの認証画面でのみ入力してください。"
 
 msgid "Scrollback"
 msgstr "スクロールバック"

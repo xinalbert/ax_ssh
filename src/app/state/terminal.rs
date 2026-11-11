@@ -475,7 +475,8 @@ impl TerminalTabState {
                 | SshConnectionPhase::AwaitingHostKey(_)
                 | SshConnectionPhase::ConfirmingHostKey(_)
                 | SshConnectionPhase::AwaitingAuthentication { .. }
-                | SshConnectionPhase::LoadingStoredCredential
+                | SshConnectionPhase::StoredCredentialUnavailable { .. }
+                | SshConnectionPhase::LoadingStoredCredential(_)
         )
     }
 

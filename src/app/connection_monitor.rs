@@ -825,20 +825,22 @@ pub(super) fn spawn_session_monitor(
                     }
                     let retry = if used_stored_credential {
                         prepare_stored_credential_retry(&state, tab_id, profile.id, attempt_id)
+                            .map(|lookup_id| (lookup_id.is_some(), lookup_id))
                     } else {
                         prepare_authentication_retry(&state, tab_id, profile.id, attempt_id)
+                            .map(|current| (current, None))
                     };
-                    let retry_current = match retry {
+                    let (retry_current, cleanup_id) = match retry {
                         Ok(current) => current,
                         Err(error) => {
                             error!(tab_id = %tab_id, %attempt_id, %error, "failed to prepare authentication retry");
-                            false
+                            (false, None)
                         }
                     };
                     if !retry_current {
                         continue;
                     }
-                    if used_stored_credential {
+                    if let Some(cleanup_id) = cleanup_id {
                         let persistence = match state.lock() {
                             Ok(app) => app.persistence_coordinator.clone(),
                             Err(_) => {
@@ -847,6 +849,9 @@ pub(super) fn spawn_session_monitor(
                             }
                         };
                         let _persistence_guard = persistence.gate.lock().await;
+                        if !session_is_loading_stored_credential(&state, tab_id, profile.id, cleanup_id) {
+                            continue;
+                        }
                         if let Some(storage) = ssh.credential_storage {
                             match delete_password(
                                 profile.id,
@@ -860,6 +865,7 @@ pub(super) fn spawn_session_monitor(
                                         &state,
                                         tab_id,
                                         profile.id,
+                                        cleanup_id,
                                     ) {
                                         if let Err(error) = rollback.restore().await {
                                             warn!(session_id = %profile.id, %error, "failed to restore stale rejected credential");
@@ -872,6 +878,7 @@ pub(super) fn spawn_session_monitor(
                                         profile.id,
                                         None,
                                         Some(&profile),
+                                        cleanup_id,
                                     ) {
                                         Ok(true) => {}
                                         Ok(false) => {
@@ -893,7 +900,7 @@ pub(super) fn spawn_session_monitor(
                                 }
                             }
                         }
-                        if !finish_stored_credential_retry(&state, tab_id, profile.id) {
+                        if !finish_stored_credential_retry(&state, tab_id, profile.id, cleanup_id) {
                             debug!(tab_id = %tab_id, %attempt_id, "stale saved-credential cleanup ignored");
                             continue;
                         }
@@ -1199,6 +1206,7 @@ fn session_is_loading_stored_credential(
     state: &Arc<Mutex<AppState>>,
     tab_id: Uuid,
     profile_id: Uuid,
+    lookup_id: Uuid,
 ) -> bool {
     state.lock().is_ok_and(|app| {
         app.terminal(tab_id).is_some_and(|terminal| {
@@ -1207,7 +1215,7 @@ fn session_is_loading_stored_credential(
                 .is_some_and(|route| route.0 == profile_id)
                 && matches!(
                     terminal.ssh_phase(),
-                    Some(SshConnectionPhase::LoadingStoredCredential)
+                    Some(SshConnectionPhase::LoadingStoredCredential(current)) if *current == lookup_id
                 )
         })
     })

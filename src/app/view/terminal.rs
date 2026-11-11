@@ -1066,6 +1066,7 @@ pub(super) fn apply_security_prompt(ui: &AppWindow, prompt: ActiveSecurityPrompt
             tab_id,
             profile,
             vault_unlock_only,
+            credential_unavailable,
         } => {
             let Some(ssh) = profile.ssh() else {
                 ui.set_host_key_dialog_open(false);
@@ -1092,6 +1093,7 @@ pub(super) fn apply_security_prompt(ui: &AppWindow, prompt: ActiveSecurityPrompt
             ui.set_password_private_key(private_key);
             ui.set_password_vault_storage(vault_storage);
             ui.set_password_vault_unlock_only(vault_unlock_only);
+            ui.set_password_credential_unavailable(credential_unavailable);
             ui.set_password_key_path(key_path.into());
             ui.set_password_dialog_tab_id(tab_id.to_string().into());
             ui.set_password_dialog_open(true);

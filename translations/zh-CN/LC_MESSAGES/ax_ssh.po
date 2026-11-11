@@ -481,6 +481,9 @@ msgstr "端点"
 msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
 msgstr "输入 #RRGGBB 或 #RRGGBBAA。保存时，对比度不足的颜色会回退为可读颜色。"
 
+msgid "Enter SSH password"
+msgstr "输入 SSH 密码"
+
 msgid "Enter the Telnet server address."
 msgstr "输入 Telnet 服务器地址。"
 
@@ -609,6 +612,9 @@ msgstr "从剪贴板导入"
 
 msgid "Import from Clipboard shortcut"
 msgstr "从剪贴板导入快捷键"
+
+msgid "In the macOS Keychain dialog, choose Always Allow to keep access after restarting this version of AxSSH."
+msgstr "在 macOS 钥匙串对话框中选择“始终允许”，即可在重启此版本的 AxSSH 后继续访问。"
 
 msgid "Information"
 msgstr "信息"
@@ -1087,6 +1093,9 @@ msgstr "继续 {0}"
 msgid "Retry"
 msgstr "重试"
 
+msgid "Retry access or enter the server SSH password manually."
+msgstr "请重试读取，或手动输入服务器 SSH 密码。"
+
 msgid "Return Workspace to Main Window"
 msgstr "将工作区返回主窗口"
 
@@ -1206,6 +1215,12 @@ msgstr "已保存至{0}。"
 
 msgid "Saved password"
 msgstr "已保存密码"
+
+msgid "Saved password unavailable"
+msgstr "无法读取已保存的密码"
+
+msgid "Saving may require system authorization. Enter your device password only in the system dialog."
+msgstr "保存密码可能需要系统授权。设备登录密码请仅在系统授权框中输入。"
 
 msgid "Scrollback"
 msgstr "回滚行数"

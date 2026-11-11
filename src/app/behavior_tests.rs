@@ -5,6 +5,7 @@ use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferTyp
 use slint::platform::{EventLoopProxy, Platform, WindowAdapter};
 use tokio::time::timeout;
 
+mod credential_access;
 mod terminal_fonts;
 mod terminal_wheel;
 

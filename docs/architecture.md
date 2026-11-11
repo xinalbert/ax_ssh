@@ -1502,6 +1502,27 @@ and use the `vault-unlock:<UUID>` system account. Legacy local `.unlock` files
 are read only for bounded migration: the source is removed after the protected
 save succeeds, and backend failures preserve it. Existing keyring entries stay
 in their protected account. The OS may request credential-store authorization.
+Saved-password reads and writes run off the UI thread with a 20-second soft
+deadline: AxSSH keeps waiting for the actual native result because a running
+blocking request, including its authorization prompt, cannot be cancelled by
+Tokio. A read error or authorization cancellation preserves the credential
+reference and opens a choice with no secret fields: retry access, manually enter
+the server SSH password, or cancel. Only a missing entry or a password rejected
+by the server directly requests a new server password. Successful reads start
+SSH without another password prompt. Each read carries a unique lookup ID and
+the expected profile; closed, disconnected, edited or replaced routes reject
+late results, including after waiting for the persistence gate. Disconnect can
+invalidate a pending read without a transport worker; any native prompt still
+belongs to the OS. Password fields explicitly identify the SSH password, and
+save controls explain that device-login authorization belongs in the system
+dialog. Windows uses generic Credential Manager reads, which normally have no
+authorization UI; macOS Keychain and a locked Linux Secret Service collection
+may request authorization or unlock.
+On macOS, the editor and credential dialogs explain that **Always Allow** in
+the system Keychain dialog preserves access to that credential after restarting
+the same build. The OS owns this decision; the app stores no authorization
+flag, changes no ACL, and does not treat a successful one-time read as a
+persistent grant.
 The vault derives
 a per-record key with Argon2id,
 encrypts with XChaCha20-Poly1305 using the profile UUID as associated data, and

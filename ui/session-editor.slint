@@ -48,6 +48,7 @@ export component SessionEditorPane inherits Rectangle {
     pure callback system-icon-choices(string) -> [SystemIconChoiceRow];
     pure callback system-icon-choice(string) -> SystemIconChoiceRow;
     in property <SessionEditorViewState> source;
+    in property <bool> apple-platform;
     callback save(
         string, string, string, string, string, string, string, string,
         string, string, bool, int, int, string, bool, string, string, string, string, string, string, string, string, string, string, bool, bool,
@@ -512,7 +513,10 @@ export component SessionEditorPane inherits Rectangle {
                                     ? @tr("No saved password")
                                     : @tr("Saved in {0}.", root.source.credential_storage == "system-keyring"
                                         ? @tr("System credential store")
-                                        : @tr("Encrypted application vault"));
+                                        : @tr("Encrypted application vault"))
+                                        + (root.apple-platform
+                                            ? "\n" + @tr("In the macOS Keychain dialog, choose Always Allow to keep access after restarting this version of AxSSH.")
+                                            : "");
                                 color: Theme.muted;
                                 font-size: Theme.font-body;
                                 vertical-alignment: center;
@@ -531,7 +535,7 @@ export component SessionEditorPane inherits Rectangle {
                         vertical-stretch: 0;
                         spacing: Theme.space-md;
                         SessionEditorField {
-                            label: @tr("Password");
+                            label: @tr("SSH password");
                             password-edit := SecretTextInput {
                                 width: parent.width;
                                 height: Theme.editor-input-row-height;
@@ -562,6 +566,15 @@ export component SessionEditorPane inherits Rectangle {
                                         : "system-keyring";
                                 }
                             }
+                        }
+                        if root.remember-password-draft : Text {
+                            text: @tr("Saving may require system authorization. Enter your device password only in the system dialog.")
+                                + (root.apple-platform
+                                    ? "\n" + @tr("In the macOS Keychain dialog, choose Always Allow to keep access after restarting this version of AxSSH.")
+                                    : "");
+                            color: Theme.muted;
+                            font-size: Theme.font-small;
+                            wrap: word-wrap;
                         }
                         if root.remember-password-draft
                                 && root.credential-storage-draft == "encrypted-vault" : SessionEditorField {

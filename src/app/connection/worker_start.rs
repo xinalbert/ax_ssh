@@ -3,7 +3,7 @@ use super::*;
 #[derive(Clone, Copy)]
 pub(super) enum AuthenticationStart {
     Prompt,
-    StoredCredential,
+    StoredCredential(Uuid),
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -29,8 +29,8 @@ pub(super) fn start_session_worker(
             AuthenticationStart::Prompt => {
                 matches!(phase, SshConnectionPhase::AwaitingAuthentication { .. })
             }
-            AuthenticationStart::StoredCredential => {
-                matches!(phase, SshConnectionPhase::LoadingStoredCredential)
+            AuthenticationStart::StoredCredential(lookup_id) => {
+                matches!(phase, SshConnectionPhase::LoadingStoredCredential(current) if *current == lookup_id)
             }
         }) {
             anyhow::bail!("terminal tab is not awaiting authentication");
@@ -138,17 +138,19 @@ pub(super) fn set_loading_stored_credential(
     state: &Arc<Mutex<AppState>>,
     tab_id: Uuid,
     profile_id: Uuid,
-) -> bool {
+) -> Option<Uuid> {
     let Ok(mut app) = state.lock() else {
-        return false;
+        return None;
     };
     if !terminal_has_phase(&app, tab_id, profile_id, |phase| {
         matches!(phase, SshConnectionPhase::AwaitingAuthentication { .. })
     }) {
-        return false;
+        return None;
     }
-    app.terminal_mut(tab_id)
-        .is_some_and(|terminal| terminal.set_ssh_phase(SshConnectionPhase::LoadingStoredCredential))
+    let lookup_id = Uuid::new_v4();
+    app.terminal_mut(tab_id)?
+        .set_ssh_phase(SshConnectionPhase::LoadingStoredCredential(lookup_id))
+        .then_some(lookup_id)
 }
 
 pub(super) fn set_awaiting_authentication(
@@ -164,7 +166,7 @@ pub(super) fn set_awaiting_authentication(
         matches!(
             phase,
             SshConnectionPhase::AwaitingAuthentication { .. }
-                | SshConnectionPhase::LoadingStoredCredential
+                | SshConnectionPhase::LoadingStoredCredential(_)
         )
     }) {
         return false;

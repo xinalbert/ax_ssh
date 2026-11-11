@@ -1,4 +1,4 @@
-import { AuthenticationDialog, HostKeyDialog } from "security-dialogs.slint";
+import { AuthenticationDialog, CredentialAccessDialog, HostKeyDialog } from "security-dialogs.slint";
 import { SessionManagementDialog } from "session-management-dialog.slint";
 import { SftpUploadConflictDialog } from "sftp-upload-conflict-dialog.slint";
 import { SftpRenameDialog } from "sftp-rename-dialog.slint";
@@ -19,6 +19,7 @@ export struct SecurityOverlayViewState {
     password_private_key: bool,
     password_vault_storage: bool,
     password_vault_unlock_only: bool,
+    password_credential_unavailable: bool,
     password_key_path: string,
     password_prompt_id: string,
     default_credential_storage: string,
@@ -26,6 +27,7 @@ export struct SecurityOverlayViewState {
 
 export component OverlayHost inherits Rectangle {
     in property <SecurityOverlayViewState> security;
+    in property <bool> apple-platform;
     in property <string> monospace-font-family;
     in property <TerminalNoticeViewState> terminal-notice;
     in property <string> terminal-notice-pane-id;
@@ -42,6 +44,7 @@ export component OverlayHost inherits Rectangle {
     callback reject-host-key();
     callback authenticate-session(string, string, bool, string) -> bool;
     callback cancel-password-dialog();
+    callback resolve-credential-access(bool);
     callback workspace-file-action(string, string);
     callback resolve-sftp-upload-conflict(string, string, bool);
     callback rename-remote-sftp(string, string, string);
@@ -185,8 +188,16 @@ export component OverlayHost inherits Rectangle {
         cancel => { root.reject-host-key(); }
     }
 
-    if !root.security.host_key_open && root.security.password_open : AuthenticationDialog {
+    if !root.security.host_key_open && root.security.password_open && root.security.password_credential_unavailable : CredentialAccessDialog {
         endpoint: root.security.password_endpoint;
+        apple-platform: root.apple-platform;
+        resolve(retry) => { root.resolve-credential-access(retry); }
+        cancel => { root.cancel-password-dialog(); }
+    }
+
+    if !root.security.host_key_open && root.security.password_open && !root.security.password_credential_unavailable : AuthenticationDialog {
+        endpoint: root.security.password_endpoint;
+        apple-platform: root.apple-platform;
         private-key: root.security.password_private_key;
         vault-storage: root.security.password_vault_storage;
         vault-unlock-only: root.security.password_vault_unlock_only;

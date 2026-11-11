@@ -219,10 +219,9 @@ async fn run_read<T>(operation: impl FnOnce() -> Result<T> + Send + 'static) -> 
 where
     T: Send + 'static,
 {
-    timeout(OPERATION_TIMEOUT, tokio::task::spawn_blocking(operation))
-        .await
-        .context("credential operation timed out")?
-        .context("credential task failed")?
+    // A system authorization prompt can outlive the deadline. Keep ownership
+    // until it completes so the caller cannot open a second password prompt.
+    run_with_deadline(OPERATION_TIMEOUT, "read", operation).await
 }
 
 /// Run a credential mutation to completion before returning.
@@ -246,12 +245,24 @@ async fn run_mutation_with_deadline<T>(
 where
     T: Send + 'static,
 {
+    run_with_deadline(deadline, "mutation", operation).await
+}
+
+async fn run_with_deadline<T>(
+    deadline: Duration,
+    operation_kind: &'static str,
+    operation: impl FnOnce() -> Result<T> + Send + 'static,
+) -> Result<T>
+where
+    T: Send + 'static,
+{
     let mut task = tokio::task::spawn_blocking(operation);
     match timeout(deadline, &mut task).await {
         Ok(result) => result.context("credential task failed")?,
         Err(_) => {
             warn!(
-                "credential mutation exceeded its soft deadline; waiting for completion to preserve write ordering"
+                operation_kind,
+                "credential operation exceeded its soft deadline; waiting for the platform operation to finish"
             );
             task.await.context("credential task failed")?
         }
@@ -283,6 +294,36 @@ mod tests {
             vault_password_for_save(CredentialStorage::EncryptedVault, "vault-password");
         assert!(!was_generated);
         assert_eq!(provided.as_str(), "vault-password");
+    }
+
+    #[tokio::test(start_paused = true)]
+    async fn read_deadline_keeps_waiting_for_authorization_and_preserves_its_result() {
+        for denied in [false, true] {
+            let (started, start) = tokio::sync::oneshot::channel();
+            let (release, wait) = std::sync::mpsc::sync_channel(1);
+            let read = tokio::spawn(run_read(move || {
+                started.send(()).expect("notify authorization started");
+                wait.recv().context("test authorization cancelled")?;
+                if denied {
+                    anyhow::bail!("test authorization denied");
+                }
+                Ok(7)
+            }));
+            start.await.expect("authorization started");
+            tokio::time::advance(OPERATION_TIMEOUT + Duration::from_secs(1)).await;
+            tokio::task::yield_now().await;
+            assert!(
+                !read.is_finished(),
+                "a native prompt must finish before the caller can offer password entry"
+            );
+            release.send(()).expect("finish authorization");
+            let result = read.await.expect("read task");
+            if denied {
+                assert_eq!(result.unwrap_err().to_string(), "test authorization denied");
+            } else {
+                assert_eq!(result.unwrap(), 7);
+            }
+        }
     }
 
     #[tokio::test(flavor = "multi_thread", worker_threads = 2)]

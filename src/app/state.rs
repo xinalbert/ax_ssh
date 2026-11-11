@@ -755,7 +755,8 @@ pub(super) enum SshConnectionPhase {
     AwaitingHostKey(PendingHostKey),
     ConfirmingHostKey(PendingHostKey),
     AwaitingAuthentication { vault_unlock_only: bool },
-    LoadingStoredCredential,
+    StoredCredentialUnavailable { vault_unlock_only: bool },
+    LoadingStoredCredential(Uuid),
 }
 
 pub(super) enum ActiveSecurityPrompt {
@@ -765,6 +766,7 @@ pub(super) enum ActiveSecurityPrompt {
         tab_id: Uuid,
         profile: SessionProfile,
         vault_unlock_only: bool,
+        credential_unavailable: bool,
     },
 }
 

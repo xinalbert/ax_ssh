@@ -121,6 +121,7 @@ export component AppWindow inherits Window {
     in property <bool> password-private-key: false;
     in property <bool> password-vault-storage: false;
     in property <bool> password-vault-unlock-only: false;
+    in property <bool> password-credential-unavailable: false;
     in property <string> password-key-path: "";
     in property <string> password-dialog-tab-id: "";
     in property <bool> sftp-available: false;
@@ -505,6 +506,7 @@ export component AppWindow inherits Window {
         password_open: root.password-dialog-open, password_endpoint: root.password-endpoint,
         password_private_key: root.password-private-key, password_vault_storage: root.password-vault-storage,
         password_vault_unlock_only: root.password-vault-unlock-only, password_key_path: root.password-key-path,
+        password_credential_unavailable: root.password-credential-unavailable,
         password_prompt_id: root.password-dialog-tab-id, default_credential_storage: root.credential-storage,
     };
     private property <TerminalNoticeViewState> terminal-notice-overlay: {
@@ -556,6 +558,7 @@ export component AppWindow inherits Window {
     callback reject-host-key();
     callback authenticate-session(string, string, bool, string) -> bool;
     callback cancel-password-dialog();
+    callback resolve-credential-access(bool);
     callback disconnect-session();
     callback open-sftp();
     callback list-sftp-directory(string);
@@ -1191,6 +1194,7 @@ export component AppWindow inherits Window {
     overlay-host := OverlayHost {
         width: parent.width;
         height: parent.height;
+        apple-platform: root.apple-platform;
         security: root.security-overlay;
         terminal-notice: root.terminal-notice-overlay;
         terminal-notice-pane-id: root.active-pane-id;
@@ -1216,6 +1220,7 @@ export component AppWindow inherits Window {
             return root.authenticate-session(secret, vault-password, remember, storage);
         }
         cancel-password-dialog => { root.cancel-password-dialog(); }
+        resolve-credential-access(retry) => { root.resolve-credential-access(retry); }
         workspace-file-action(mode, path) => { root.workspace-file-action(mode, path); }
         rename-remote-sftp(tab-id, path, name) => { root.rename-remote-sftp(tab-id, path, name); }
     }

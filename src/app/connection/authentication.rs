@@ -3,24 +3,35 @@ use crate::app::credential_tasks::{credential_storage_for_save, vault_password_f
 
 async fn clear_missing_auto_vault_credential(
     state: &Arc<Mutex<AppState>>,
-    tab_id: Uuid,
-    profile: &SessionProfile,
-) {
+    lookup: &CredentialLookup,
+) -> bool {
+    let tab_id = lookup.tab_id;
+    let profile = &lookup.profile;
     let persistence = match state.lock() {
         Ok(app) => app.persistence_coordinator.clone(),
-        Err(_) => return,
+        Err(_) => return false,
     };
     let _persistence_guard = persistence.gate.lock().await;
+    if !state.lock().is_ok_and(|app| lookup.is_current(&app)) {
+        return false;
+    }
     let rollback = match delete_password(profile.id, CredentialStorage::EncryptedVault, true).await
     {
         Ok(rollback) => rollback,
         Err(error) => {
             warn!(session_id = %profile.id, %error, "failed to remove unusable automatic vault credential");
-            return;
+            return false;
         }
     };
-    match set_credential_storage_while_loading(state, tab_id, profile.id, None, Some(profile)) {
-        Ok(true) => {}
+    match set_credential_storage_while_loading(
+        state,
+        tab_id,
+        profile.id,
+        None,
+        Some(profile),
+        lookup.lookup_id,
+    ) {
+        Ok(true) => return true,
         Ok(false) => {
             if let Err(error) = rollback.restore().await {
                 warn!(session_id = %profile.id, %error, "failed to restore stale automatic vault credential");
@@ -37,6 +48,7 @@ async fn clear_missing_auto_vault_credential(
             );
         }
     }
+    false
 }
 
 pub(in crate::app) fn begin_authentication(
@@ -144,210 +156,186 @@ pub(in crate::app) fn begin_authentication(
         refresh_workspace(&ui, &state);
         return;
     };
-    if storage == CredentialStorage::EncryptedVault {
-        if ssh.credential_vault_key_saved {
-            let runtime_for_lookup = runtime.clone();
-            if !set_loading_stored_credential(&state, tab_id, profile.id) {
-                debug!(tab_id = %tab_id, session_id = %profile.id, "stale authentication start ignored");
-                return;
-            }
-            set_tab_status(
-                &state,
-                &ui,
-                tab_id,
-                "Loading the hidden encrypted-vault unlock key...",
-            );
-            refresh_workspace(&ui, &state);
-            runtime.spawn(async move {
-                let unlock = load_vault_unlock_password(profile.id).await;
-                let current = match state.lock() {
-                    Ok(app) => terminal_has_phase(&app, tab_id, profile.id, |phase| {
-                        matches!(phase, SshConnectionPhase::LoadingStoredCredential)
-                    }),
-                    Err(_) => {
-                        set_status(&ui, "Cannot read session state");
-                        return;
-                    }
-                };
-                if !current {
-                    return;
-                }
-                match unlock {
-                    Ok(Some(unlock)) => match load_vault_password(profile.id, unlock).await {
-                        Ok(Some(secret)) => {
-                            if let Err(error) = start_session_worker(
-                                &runtime_for_lookup,
-                                state,
-                                ui.clone(),
-                                tab_id,
-                                profile.clone(),
-                                secret,
-                                None,
-                                true,
-                                AuthenticationStart::StoredCredential,
-                                target,
-                            ) {
-                                set_status(&ui, &format!("Cannot start connection: {error}"));
-                            }
-                        }
-                        Ok(None) => {
-                            clear_missing_auto_vault_credential(&state, tab_id, &profile).await;
-                            set_awaiting_authentication(&state, tab_id, profile.id, false);
-                            set_tab_status(
-                                &state,
-                                &ui,
-                                tab_id,
-                                "Saved password was not found; enter it again",
-                            );
-                            refresh_workspace(&ui, &state);
-                        }
-                        Err(error) => {
-                            set_awaiting_authentication(&state, tab_id, profile.id, false);
-                            set_tab_status(
-                                &state,
-                                &ui,
-                                tab_id,
-                                &format!("Cannot unlock saved password; enter it again: {error}"),
-                            );
-                            refresh_workspace(&ui, &state);
-                        }
-                    },
-                    Ok(None) => {
-                        clear_missing_auto_vault_credential(&state, tab_id, &profile).await;
-                        set_awaiting_authentication(&state, tab_id, profile.id, false);
-                        set_tab_status(
-                            &state,
-                            &ui,
-                            tab_id,
-                            "Saved password could not be unlocked; enter it again",
-                        );
-                        refresh_workspace(&ui, &state);
-                    }
-                    Err(error) => {
-                        warn!(session_id = %profile.id, %error, "automatic vault unlock key lookup failed");
-                        set_awaiting_authentication(&state, tab_id, profile.id, false);
-                        set_tab_status(
-                            &state,
-                            &ui,
-                            tab_id,
-                            &format!("System credential unavailable; enter password: {error}"),
-                        );
-                        refresh_workspace(&ui, &state);
-                    }
-                }
-            });
-        } else {
-            set_awaiting_authentication(&state, tab_id, profile.id, true);
-            set_tab_status(
-                &state,
-                &ui,
-                tab_id,
-                "Unlocking the saved password requires the vault password",
-            );
-            refresh_workspace(&ui, &state);
-        }
+    if storage == CredentialStorage::EncryptedVault && !ssh.credential_vault_key_saved {
+        set_awaiting_authentication(&state, tab_id, profile.id, true);
+        set_tab_status(
+            &state,
+            &ui,
+            tab_id,
+            "Unlocking the saved password requires the vault password",
+        );
+        refresh_workspace(&ui, &state);
         return;
     }
-
-    let runtime_for_lookup = runtime.clone();
-    if !set_loading_stored_credential(&state, tab_id, profile.id) {
-        debug!(tab_id = %tab_id, session_id = %profile.id, "stale authentication start ignored");
+    let Some(lookup_id) = set_loading_stored_credential(&state, tab_id, profile.id) else {
         return;
-    }
+    };
+    let lookup = CredentialLookup {
+        tab_id,
+        profile,
+        target,
+        lookup_id,
+        vault_unlock_only: false,
+    };
     set_tab_status(
         &state,
         &ui,
         tab_id,
-        "Loading password from system credential store...",
+        "Reading saved password; complete any system authorization prompt...",
     );
     refresh_workspace(&ui, &state);
+    let runtime_for_lookup = runtime.clone();
     runtime.spawn(async move {
-        let result = load_system_password(profile.id).await;
-        let current = match state.lock() {
-            Ok(app) => terminal_has_phase(
-                &app,
-                tab_id,
-                profile.id,
-                |phase| matches!(phase, SshConnectionPhase::LoadingStoredCredential),
-            ),
-            Err(_) => {
-                set_status(&ui, "Cannot read session state");
-                return;
+        let result = if storage == CredentialStorage::EncryptedVault {
+            match load_vault_unlock_password(lookup.profile.id).await {
+                Ok(Some(unlock)) => {
+                    if !state.lock().is_ok_and(|app| lookup.is_current(&app)) {
+                        return;
+                    }
+                    load_vault_password(lookup.profile.id, unlock).await
+                }
+                Ok(None) => Ok(None),
+                Err(error) => Err(error),
             }
+        } else {
+            load_system_password(lookup.profile.id).await
         };
-        if !current {
-            debug!(tab_id = %tab_id, session_id = %profile.id, "stale credential lookup ignored");
+        lookup
+            .complete(&runtime_for_lookup, state, ui, result)
+            .await;
+    });
+}
+
+/// The UI may disconnect, close, edit or retry while a native prompt is open.
+/// Every completion belongs to this lookup, never just to a matching phase.
+struct CredentialLookup {
+    tab_id: Uuid,
+    profile: SessionProfile,
+    target: ConnectionTarget,
+    lookup_id: Uuid,
+    vault_unlock_only: bool,
+}
+
+impl CredentialLookup {
+    fn is_current(&self, app: &AppState) -> bool {
+        app.sessions
+            .sessions
+            .iter()
+            .any(|profile| profile == &self.profile)
+            && terminal_has_phase(
+                app,
+                self.tab_id,
+                self.profile.id,
+                |phase| matches!(phase, SshConnectionPhase::LoadingStoredCredential(id) if *id == self.lookup_id),
+            )
+    }
+
+    fn finish(
+        &self,
+        state: &Arc<Mutex<AppState>>,
+        phase: SshConnectionPhase,
+        status: String,
+    ) -> bool {
+        let Ok(mut app) = state.lock() else {
+            return false;
+        };
+        if !self.is_current(&app) {
+            return false;
+        }
+        let Some(terminal) = app.terminal_mut(self.tab_id) else {
+            return false;
+        };
+        terminal.set_ssh_phase(phase);
+        terminal.status = status;
+        true
+    }
+
+    async fn complete(
+        mut self,
+        runtime: &Handle,
+        state: Arc<Mutex<AppState>>,
+        ui: slint::Weak<AppWindow>,
+        result: Result<Option<zeroize::Zeroizing<String>>>,
+    ) {
+        if !state.lock().is_ok_and(|app| self.is_current(&app)) {
             return;
         }
-
         match result {
             Ok(Some(secret)) => {
                 if let Err(error) = start_session_worker(
-                    &runtime_for_lookup,
-                    state,
+                    runtime,
+                    state.clone(),
                     ui.clone(),
-                    tab_id,
-                    profile.clone(),
+                    self.tab_id,
+                    self.profile.clone(),
                     secret,
                     None,
                     true,
-                    AuthenticationStart::StoredCredential,
-                    target,
+                    AuthenticationStart::StoredCredential(self.lookup_id),
+                    self.target,
+                ) && self.finish(
+                    &state,
+                    SshConnectionPhase::StoredCredentialUnavailable {
+                        vault_unlock_only: self.vault_unlock_only,
+                    },
+                    format!("Cannot start connection: {error}"),
                 ) {
-                    set_status(&ui, &format!("Cannot start connection: {error}"));
+                    refresh_workspace(&ui, &state);
                 }
             }
             Ok(None) => {
-                let persistence = match state.lock() {
-                    Ok(app) => app.persistence_coordinator.clone(),
-                    Err(_) => {
-                        set_status(&ui, "Cannot read session state");
-                        return;
+                let cleared = if self
+                    .profile
+                    .ssh()
+                    .is_some_and(|ssh| ssh.credential_vault_key_saved)
+                {
+                    clear_missing_auto_vault_credential(&state, &self).await
+                } else {
+                    let persistence = match state.lock() {
+                        Ok(app) => app.persistence_coordinator.clone(),
+                        Err(_) => return,
+                    };
+                    let _guard = persistence.gate.lock().await;
+                    match set_credential_storage_while_loading(
+                        &state,
+                        self.tab_id,
+                        self.profile.id,
+                        None,
+                        Some(&self.profile),
+                        self.lookup_id,
+                    ) {
+                        Ok(true) => true,
+                        Ok(false) => return,
+                        Err(error) => {
+                            warn!(session_id = %self.profile.id, %error, "failed to clear missing credential reference");
+                            false
+                        }
                     }
                 };
-                let _persistence_guard = persistence.gate.lock().await;
-                match set_credential_storage_while_loading(
+                if cleared && let Some(ssh) = self.profile.ssh_mut() {
+                    ssh.credential_storage = None;
+                    ssh.credential_vault_key_saved = false;
+                }
+                if self.finish(
                     &state,
-                    tab_id,
-                    profile.id,
-                    None,
-                    Some(&profile),
+                    SshConnectionPhase::AwaitingAuthentication {
+                        vault_unlock_only: false,
+                    },
+                    "Saved password was not found; enter the server SSH password".into(),
                 ) {
-                    Ok(true) => {}
-                    Ok(false) => {
-                        debug!(tab_id = %tab_id, session_id = %profile.id, "stale missing credential result ignored");
-                        return;
-                    }
-                    Err(error) => {
-                        warn!(session_id = %profile.id, %error, "failed to clear missing credential storage policy");
-                    }
+                    refresh_workspace(&ui, &state);
                 }
-                if !set_awaiting_authentication(&state, tab_id, profile.id, false) {
-                    return;
-                }
-                set_tab_status(
-                    &state,
-                    &ui,
-                    tab_id,
-                    "Saved password was not found; enter it again",
-                );
-                refresh_workspace(&ui, &state);
             }
             Err(error) => {
-                warn!(session_id = %profile.id, %error, "system credential lookup failed");
-                if !set_awaiting_authentication(&state, tab_id, profile.id, false) {
-                    return;
+                warn!(session_id = %self.profile.id, %error, "saved credential lookup failed");
+                if self.finish(&state, SshConnectionPhase::StoredCredentialUnavailable {
+                    vault_unlock_only: self.vault_unlock_only,
+                }, format!("Saved password unavailable; retry access or enter the server SSH password: {error:#}")) {
+                    refresh_workspace(&ui, &state);
                 }
-                set_tab_status(
-                    &state,
-                    &ui,
-                    tab_id,
-                    &format!("System credential unavailable; enter password: {error}"),
-                );
-                refresh_workspace(&ui, &state);
             }
         }
-    });
+    }
 }
 
 pub(in crate::app) fn wire_authentication(
@@ -357,18 +345,69 @@ pub(in crate::app) fn wire_authentication(
     window_router: WindowRouter,
     window_id: Uuid,
 ) {
+    let ui_for_choice = ui.as_weak();
+    let state_for_choice = state.clone();
+    let runtime_for_choice = runtime.clone();
+    let router_for_choice = window_router.clone();
+    ui.on_resolve_credential_access(move |retry| {
+        sync_window_active(&router_for_choice, window_id, &state_for_choice);
+        let pending = state_for_choice.lock().ok().and_then(|mut app| {
+            let tab_id = app.active_tab_id()?;
+            let terminal = app.terminal(tab_id)?;
+            let (profile_id, _) = terminal.ssh_route()?;
+            if !matches!(
+                terminal.ssh_phase(),
+                Some(SshConnectionPhase::StoredCredentialUnavailable { .. })
+            ) {
+                return None;
+            }
+            let target = terminal.connection_target();
+            let profile = app
+                .sessions
+                .sessions
+                .iter()
+                .find(|profile| profile.id == profile_id)?
+                .clone();
+            app.terminal_mut(tab_id)?
+                .set_ssh_phase(SshConnectionPhase::AwaitingAuthentication {
+                    vault_unlock_only: false,
+                });
+            Some((tab_id, profile, target))
+        });
+        let Some((tab_id, profile, target)) = pending else {
+            return;
+        };
+        if retry {
+            begin_authentication(
+                &runtime_for_choice,
+                state_for_choice.clone(),
+                ui_for_choice.clone(),
+                tab_id,
+                profile,
+                target,
+            );
+        } else {
+            set_tab_status(
+                &state_for_choice,
+                &ui_for_choice,
+                tab_id,
+                "Enter the server SSH password",
+            );
+            refresh_workspace(&ui_for_choice, &state_for_choice);
+        }
+    });
     let ui_for_auth = ui.as_weak();
     let state_for_auth = state.clone();
     let runtime_for_auth = runtime.clone();
     let router_for_auth = window_router.clone();
-    ui.on_authenticate_session(move |password, vault_password, remember_password, storage| {
-        log_ui_action("authentication.submit");
-        sync_window_active(&router_for_auth, window_id, &state_for_auth);
-        let password = zeroize::Zeroizing::new(password.as_str().to_owned());
-        let vault_password = zeroize::Zeroizing::new(vault_password.as_str().to_owned());
-        let target = match state_for_auth.lock() {
-            Ok(app) => {
-                app.active_tab_id().and_then(|tab_id| {
+    ui.on_authenticate_session(
+        move |password, vault_password, remember_password, storage| {
+            log_ui_action("authentication.submit");
+            sync_window_active(&router_for_auth, window_id, &state_for_auth);
+            let password = zeroize::Zeroizing::new(password.as_str().to_owned());
+            let vault_password = zeroize::Zeroizing::new(vault_password.as_str().to_owned());
+            let target = match state_for_auth.lock() {
+                Ok(app) => app.active_tab_id().and_then(|tab_id| {
                     let terminal = app.terminal(tab_id)?;
                     let (profile_id, _) = terminal.ssh_route()?;
                     let vault_unlock_only = match terminal.ssh_phase()? {
@@ -379,7 +418,8 @@ pub(in crate::app) fn wire_authentication(
                         | SshConnectionPhase::Probing(_)
                         | SshConnectionPhase::AwaitingHostKey(_)
                         | SshConnectionPhase::ConfirmingHostKey(_)
-                        | SshConnectionPhase::LoadingStoredCredential => return None,
+                        | SshConnectionPhase::LoadingStoredCredential(_)
+                        | SshConnectionPhase::StoredCredentialUnavailable { .. } => return None,
                     };
                     let profile = app
                         .sessions
@@ -387,154 +427,102 @@ pub(in crate::app) fn wire_authentication(
                         .iter()
                         .find(|profile| profile.id == profile_id)
                         .cloned()?;
-                    Some((tab_id, profile, vault_unlock_only, terminal.connection_target()))
+                    Some((
+                        tab_id,
+                        profile,
+                        vault_unlock_only,
+                        terminal.connection_target(),
+                    ))
+                }),
+                Err(_) => {
+                    set_status(&ui_for_auth, "Cannot read session state");
+                    return false;
+                }
+            };
+            let Some((tab_id, profile, vault_unlock_only, connection_target)) = target else {
+                set_status(&ui_for_auth, "No SSH tab is awaiting authentication");
+                return false;
+            };
+            let Some(ssh) = profile.ssh() else {
+                set_status(&ui_for_auth, "Authentication request is not an SSH profile");
+                return false;
+            };
+            let password_auth = matches!(ssh.auth, AuthMethod::Password);
+            let previous_storage = ssh.credential_storage;
+            if vault_unlock_only {
+                if vault_password.is_empty() {
+                    set_status(
+                        &ui_for_auth,
+                        "Enter the vault password to unlock the saved SSH password",
+                    );
+                    return false;
+                }
+                let Some(lookup_id) =
+                    set_loading_stored_credential(&state_for_auth, tab_id, profile.id)
+                else {
+                    set_status(&ui_for_auth, "Authentication request is no longer current");
+                    return false;
+                };
+                refresh_workspace(&ui_for_auth, &state_for_auth);
+                let state = state_for_auth.clone();
+                let ui = ui_for_auth.clone();
+                let runtime = runtime_for_auth.clone();
+                let lookup = CredentialLookup {
+                    tab_id,
+                    profile,
+                    target: connection_target,
+                    lookup_id,
+                    vault_unlock_only: true,
+                };
+                runtime_for_auth.spawn(async move {
+                    let result = load_vault_password(lookup.profile.id, vault_password).await;
+                    lookup.complete(&runtime, state, ui, result).await;
+                });
+                return true;
+            }
+            if password_auth && password.is_empty() {
+                set_status(&ui_for_auth, "Password cannot be empty");
+                return false;
+            }
+            let credential_to_store = if password_auth {
+                let storage = selected_storage_for_remember(remember_password, storage.as_str());
+                storage.map(|storage| {
+                    let (vault_password, vault_password_generated) =
+                        vault_password_for_save(storage, vault_password.as_str());
+                    PendingCredentialStore {
+                        expected_profile: profile.clone(),
+                        storage,
+                        previous_storage,
+                        vault_password: (storage == CredentialStorage::EncryptedVault)
+                            .then_some(vault_password),
+                        vault_password_generated,
+                        previous_vault_password_generated: ssh.credential_vault_key_saved,
+                        secret: password.clone(),
+                    }
                 })
-            }
-            Err(_) => {
-                set_status(&ui_for_auth, "Cannot read session state");
-                return false;
-            }
-        };
-        let Some((tab_id, profile, vault_unlock_only, connection_target)) = target else {
-            set_status(&ui_for_auth, "No SSH tab is awaiting authentication");
-            return false;
-        };
-        let Some(ssh) = profile.ssh() else {
-            set_status(&ui_for_auth, "Authentication request is not an SSH profile");
-            return false;
-        };
-        let password_auth = matches!(ssh.auth, AuthMethod::Password);
-        let previous_storage = ssh.credential_storage;
-        if vault_unlock_only {
-            if vault_password.is_empty() {
-                set_status(&ui_for_auth, "Enter the vault password to unlock the saved SSH password");
-                return false;
-            }
-            if !set_loading_stored_credential(&state_for_auth, tab_id, profile.id) {
-                set_status(&ui_for_auth, "Authentication request is no longer current");
-                return false;
-            }
-            refresh_workspace(&ui_for_auth, &state_for_auth);
-            let state = state_for_auth.clone();
-            let ui = ui_for_auth.clone();
-            let runtime = runtime_for_auth.clone();
-            runtime_for_auth.spawn(async move {
-                match load_vault_password(profile.id, vault_password).await {
-                    Ok(Some(secret)) => {
-                        if let Err(error) = start_session_worker(
-                            &runtime,
-                            state,
-                            ui.clone(),
-                            tab_id,
-                            profile.clone(),
-                            secret,
-                            None,
-                            true,
-                            AuthenticationStart::StoredCredential,
-                            connection_target,
-                        ) {
-                            set_status(&ui, &format!("Cannot start connection: {error}"));
-                        }
-                    }
-                    Ok(None) => {
-                        let persistence = match state.lock() {
-                            Ok(app) => app.persistence_coordinator.clone(),
-                            Err(_) => {
-                                set_status(&ui, "Cannot read session state");
-                                return;
-                            }
-                        };
-                        let _persistence_guard = persistence.gate.lock().await;
-                        match set_credential_storage_while_loading(
-                            &state,
-                            tab_id,
-                            profile.id,
-                            None,
-                            Some(&profile),
-                        ) {
-                            Ok(true) => {}
-                            Ok(false) => {
-                                debug!(tab_id = %tab_id, session_id = %profile.id, "stale missing vault credential result ignored");
-                                return;
-                            }
-                            Err(error) => {
-                                warn!(session_id = %profile.id, %error, "failed to clear missing vault credential storage reference");
-                            }
-                        }
-                        if !set_awaiting_authentication(&state, tab_id, profile.id, false) {
-                            return;
-                        }
-                        set_tab_status(
-                            &state,
-                            &ui,
-                            tab_id,
-                            "Saved vault password was not found; enter the SSH password",
-                        );
-                        refresh_workspace(&ui, &state);
-                    }
-                    Err(error) => {
-                        if !set_awaiting_authentication(&state, tab_id, profile.id, false) {
-                            return;
-                        }
-                        set_tab_status(
-                            &state,
-                            &ui,
-                            tab_id,
-                            &format!(
-                                "Cannot unlock saved password; enter the SSH password to continue: {error}"
-                            ),
-                        );
-                        refresh_workspace(&ui, &state);
-                    }
+            } else {
+                None
+            };
+            match start_session_worker(
+                &runtime_for_auth,
+                state_for_auth.clone(),
+                ui_for_auth.clone(),
+                tab_id,
+                profile.clone(),
+                password,
+                credential_to_store,
+                false,
+                AuthenticationStart::Prompt,
+                connection_target,
+            ) {
+                Ok(()) => true,
+                Err(error) => {
+                    set_status(&ui_for_auth, &format!("Cannot start connection: {error}"));
+                    false
                 }
-            });
-            return true;
-        }
-        if password_auth && password.is_empty() {
-            set_status(&ui_for_auth, "Password cannot be empty");
-            return false;
-        }
-        let credential_to_store = if password_auth {
-            let storage = selected_storage_for_remember(
-                remember_password,
-                storage.as_str(),
-            );
-            storage.map(|storage| {
-                let (vault_password, vault_password_generated) =
-                    vault_password_for_save(storage, vault_password.as_str());
-                PendingCredentialStore {
-                    expected_profile: profile.clone(),
-                    storage,
-                    previous_storage,
-                    vault_password: (storage == CredentialStorage::EncryptedVault)
-                        .then_some(vault_password),
-                    vault_password_generated,
-                    previous_vault_password_generated: ssh.credential_vault_key_saved,
-                    secret: password.clone(),
-                }
-            })
-        } else {
-            None
-        };
-        match start_session_worker(
-            &runtime_for_auth,
-            state_for_auth.clone(),
-            ui_for_auth.clone(),
-            tab_id,
-            profile.clone(),
-            password,
-            credential_to_store,
-            false,
-            AuthenticationStart::Prompt,
-            connection_target,
-        ) {
-            Ok(()) => true,
-            Err(error) => {
-                set_status(&ui_for_auth, &format!("Cannot start connection: {error}"));
-                false
             }
-        }
-    });
+        },
+    );
 
     let ui_for_cancel = ui.as_weak();
     let state_for_cancel = state.clone();
@@ -550,7 +538,10 @@ pub(in crate::app) fn wire_authentication(
                     let (profile_id, _) = terminal.ssh_route()?;
                     matches!(
                         terminal.ssh_phase(),
-                        Some(SshConnectionPhase::AwaitingAuthentication { .. })
+                        Some(
+                            SshConnectionPhase::AwaitingAuthentication { .. }
+                                | SshConnectionPhase::StoredCredentialUnavailable { .. }
+                        )
                     )
                     .then_some((tab_id, profile_id))
                 });
@@ -589,6 +580,20 @@ pub(in crate::app) fn wire_authentication(
             .and_then(|mut app| {
                 let terminal = app.active_terminal_mut().context("no active terminal")?;
                 terminal.cancel_reconnect();
+                if terminal.worker.is_none()
+                    && terminal
+                        .ssh_phase()
+                        .is_some_and(|phase| !matches!(phase, SshConnectionPhase::Idle))
+                {
+                    if let Some(probe) = terminal.take_pending_probe()
+                        && probe.cancel.send(()).is_err()
+                    {
+                        debug!("host-key probe already stopped while disconnecting");
+                    }
+                    terminal.set_ssh_phase(SshConnectionPhase::Idle);
+                    terminal.status = "Disconnected".into();
+                    return Ok(());
+                }
                 terminal
                     .worker
                     .as_ref()
@@ -596,7 +601,10 @@ pub(in crate::app) fn wire_authentication(
                     .request_disconnect()
             });
         match result {
-            Ok(()) => set_status(&ui_for_disconnect, "Disconnecting..."),
+            Ok(()) => {
+                set_status(&ui_for_disconnect, "Disconnect requested");
+                refresh_workspace(&ui_for_disconnect, &state_for_disconnect);
+            }
             Err(error) => set_status(
                 &ui_for_disconnect,
                 &format!("Cannot disconnect session: {error}"),
@@ -619,16 +627,4 @@ fn selected_storage_for_remember(
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn prompt_storage_uses_explicit_selection_only_when_remembering() {
-        let storage = selected_storage_for_remember(false, "encrypted-vault");
-        assert_eq!(storage, None);
-        let storage = selected_storage_for_remember(true, "encrypted-vault");
-        assert_eq!(storage, Some(CredentialStorage::EncryptedVault));
-        let storage = selected_storage_for_remember(true, "system-keyring");
-        assert_eq!(storage, Some(CredentialStorage::SystemKeyring));
-    }
-}
+mod tests;

@@ -23,20 +23,23 @@ pub(in crate::app) fn prepare_stored_credential_retry(
     tab_id: Uuid,
     session_id: Uuid,
     attempt_id: Uuid,
-) -> Result<bool> {
+) -> Result<Option<Uuid>> {
+    let lookup_id = Uuid::new_v4();
     prepare_retry_with_phase(
         state,
         tab_id,
         session_id,
         attempt_id,
-        SshConnectionPhase::LoadingStoredCredential,
+        SshConnectionPhase::LoadingStoredCredential(lookup_id),
     )
+    .map(|current| current.then_some(lookup_id))
 }
 
 pub(in crate::app) fn finish_stored_credential_retry(
     state: &Arc<Mutex<AppState>>,
     tab_id: Uuid,
     session_id: Uuid,
+    lookup_id: Uuid,
 ) -> bool {
     let Ok(mut app) = state.lock() else {
         return false;
@@ -47,7 +50,7 @@ pub(in crate::app) fn finish_stored_credential_retry(
             .is_some_and(|route| route.0 == session_id)
             && matches!(
                 terminal.ssh_phase(),
-                Some(SshConnectionPhase::LoadingStoredCredential)
+                Some(SshConnectionPhase::LoadingStoredCredential(current)) if *current == lookup_id
             )
     });
     if !current {
@@ -164,6 +167,7 @@ pub(in crate::app) fn set_credential_storage_while_loading(
     session_id: Uuid,
     credential_storage: Option<CredentialStorage>,
     expected_profile: Option<&SessionProfile>,
+    lookup_id: Uuid,
 ) -> Result<bool> {
     let mut app = state
         .lock()
@@ -174,7 +178,7 @@ pub(in crate::app) fn set_credential_storage_while_loading(
             .is_some_and(|route| route.0 == session_id)
             && matches!(
                 terminal.ssh_phase(),
-                Some(SshConnectionPhase::LoadingStoredCredential)
+                Some(SshConnectionPhase::LoadingStoredCredential(current)) if lookup_id == *current
             )
     });
     if !current {

@@ -347,7 +347,8 @@ pub(in crate::app) fn wire_host_key_confirmation(
                         Some(SshConnectionPhase::Idle)
                         | Some(SshConnectionPhase::Probing(_))
                         | Some(SshConnectionPhase::AwaitingAuthentication { .. })
-                        | Some(SshConnectionPhase::LoadingStoredCredential)
+                        | Some(SshConnectionPhase::StoredCredentialUnavailable { .. })
+                        | Some(SshConnectionPhase::LoadingStoredCredential(_))
                         | Some(SshConnectionPhase::AwaitingHostKey(_))
                         | Some(SshConnectionPhase::ConfirmingHostKey(_))
                         | None => None,

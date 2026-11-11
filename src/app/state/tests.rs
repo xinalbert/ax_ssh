@@ -462,6 +462,7 @@ fn each_ssh_tab_keeps_its_own_authentication_prompt() {
             tab_id,
             profile,
             vault_unlock_only,
+            ..
         } => {
             assert_eq!(tab_id, first_tab);
             assert_eq!(profile.id, first_profile.id);
@@ -478,6 +479,7 @@ fn each_ssh_tab_keeps_its_own_authentication_prompt() {
             tab_id,
             profile,
             vault_unlock_only,
+            ..
         } => {
             assert_eq!(tab_id, second_tab);
             assert_eq!(profile.id, second_profile.id);
@@ -634,10 +636,9 @@ fn stale_stored_credential_cleanup_cannot_reopen_a_closed_tab() {
         .set_ssh_attempt(Some(second_attempt));
     let state = Arc::new(Mutex::new(state));
 
-    assert!(
-        prepare_stored_credential_retry(&state, first_tab, profile.id, first_attempt,)
-            .expect("current stored credential retry should transition")
-    );
+    let cleanup_id = prepare_stored_credential_retry(&state, first_tab, profile.id, first_attempt)
+        .expect("current stored credential retry should transition")
+        .expect("cleanup lookup ID");
     state
         .lock()
         .expect("state should remain writable")
@@ -645,7 +646,7 @@ fn stale_stored_credential_cleanup_cannot_reopen_a_closed_tab() {
         .expect("first tab should close");
 
     assert!(!finish_stored_credential_retry(
-        &state, first_tab, profile.id,
+        &state, first_tab, profile.id, cleanup_id,
     ));
     let state = state.lock().expect("state should remain readable");
     assert_eq!(
@@ -675,7 +676,7 @@ fn stale_credential_lookup_cannot_clear_a_closed_tabs_storage_reference() {
     state
         .terminal_mut(tab_id)
         .expect("terminal should exist")
-        .set_ssh_phase(SshConnectionPhase::LoadingStoredCredential);
+        .set_ssh_phase(SshConnectionPhase::LoadingStoredCredential(Uuid::new_v4()));
     let state = Arc::new(Mutex::new(state));
 
     state
@@ -685,8 +686,15 @@ fn stale_credential_lookup_cannot_clear_a_closed_tabs_storage_reference() {
         .expect("tab should close");
 
     assert!(
-        !set_credential_storage_while_loading(&state, tab_id, profile.id, None, None)
-            .expect("stale credential result should be ignored without error")
+        !set_credential_storage_while_loading(
+            &state,
+            tab_id,
+            profile.id,
+            None,
+            None,
+            Uuid::new_v4()
+        )
+        .expect("stale credential result should be ignored without error")
     );
     let state = state.lock().expect("state should remain readable");
     assert_eq!(
@@ -695,6 +703,56 @@ fn stale_credential_lookup_cannot_clear_a_closed_tabs_storage_reference() {
             .expect("profile should remain SSH")
             .credential_storage,
         Some(CredentialStorage::SystemKeyring)
+    );
+}
+
+#[test]
+fn rejected_password_cleanup_cannot_finish_or_clear_a_replacement_lookup() {
+    let mut app = test_state();
+    let mut profile = SessionProfile::new("Credential cleanup", "fixture.invalid", "fixture");
+    profile.ssh_mut().unwrap().credential_storage = Some(CredentialStorage::SystemKeyring);
+    app.sessions.upsert(profile.clone());
+    let tab = app.open_terminal_tab(&profile);
+    let attempt = Uuid::new_v4();
+    app.terminal_mut(tab)
+        .unwrap()
+        .set_ssh_attempt(Some(attempt));
+    let state = Arc::new(Mutex::new(app));
+    let old_id = prepare_stored_credential_retry(&state, tab, profile.id, attempt)
+        .unwrap()
+        .unwrap();
+    let new_id = Uuid::new_v4();
+    state
+        .lock()
+        .unwrap()
+        .terminal_mut(tab)
+        .unwrap()
+        .set_ssh_phase(SshConnectionPhase::LoadingStoredCredential(new_id));
+    assert!(!finish_stored_credential_retry(
+        &state, tab, profile.id, old_id
+    ));
+    assert!(
+        !set_credential_storage_while_loading(
+            &state,
+            tab,
+            profile.id,
+            None,
+            Some(&profile),
+            old_id
+        )
+        .unwrap()
+    );
+    let app = state.lock().unwrap();
+    assert!(
+        matches!(app.terminal(tab).unwrap().ssh_phase(), Some(SshConnectionPhase::LoadingStoredCredential(id)) if *id == new_id)
+    );
+    assert_eq!(
+        app.sessions
+            .sessions
+            .iter()
+            .find(|candidate| candidate.id == profile.id)
+            .unwrap(),
+        &profile
     );
 }
 

@@ -51,8 +51,50 @@ export component HostKeyDialog inherits ModalFrame {
     }
 }
 
+export component CredentialAccessDialog inherits ModalFrame {
+    in property <string> endpoint;
+    in property <bool> apple-platform;
+    callback resolve(bool);
+    callback cancel();
+
+    dialog-width: Theme.password-dialog-width;
+    dialog-height: Theme.credential-access-dialog-height
+        + (root.apple-platform ? Theme.credential-authorization-hint-height : 0px);
+    dismissed => { root.cancel(); }
+    VerticalLayout {
+        padding: Theme.dialog-padding;
+        spacing: Theme.space-xl;
+        Text {
+            text: @tr("Saved password unavailable");
+            color: Theme.text;
+            font-size: Theme.font-title;
+            font-weight: 700;
+            wrap: word-wrap;
+        }
+        ElidedLabel { text: root.endpoint; text-color: Theme.muted; font-size: Theme.font-body; }
+        Text {
+            text: @tr("Retry access or enter the server SSH password manually.")
+                + (root.apple-platform
+                    ? "\n" + @tr("In the macOS Keychain dialog, choose Always Allow to keep access after restarting this version of AxSSH.")
+                    : "");
+            color: Theme.text;
+            font-size: Theme.font-body;
+            wrap: word-wrap;
+        }
+        Rectangle { vertical-stretch: 1; }
+        ElidedButton { text: @tr("Enter SSH password"); clicked => { root.resolve(false); } }
+        HorizontalLayout {
+            alignment: end;
+            spacing: Theme.space-md;
+            ElidedButton { text: @tr("Cancel"); clicked => { root.cancel(); } }
+            ElidedButton { text: @tr("Retry"); clicked => { root.resolve(true); } }
+        }
+    }
+}
+
 export component AuthenticationDialog inherits ModalFrame {
     in property <string> endpoint;
+    in property <bool> apple-platform;
     in property <bool> private-key;
     in property <bool> vault-storage;
     in property <bool> vault-unlock-only;
@@ -97,7 +139,10 @@ export component AuthenticationDialog inherits ModalFrame {
     dialog-width: Theme.password-dialog-width;
     dialog-height: root.private-key
         ? Theme.password-private-key-dialog-height
-        : Theme.password-dialog-height;
+        : (remember-password.checked
+            ? Theme.password-save-dialog-height
+                + (root.apple-platform ? Theme.credential-authorization-hint-height : 0px)
+            : Theme.password-dialog-height);
     dismissed => { root.cancel-and-clear(); }
 
     VerticalLayout {
@@ -130,7 +175,7 @@ export component AuthenticationDialog inherits ModalFrame {
             height: self.visible ? Theme.editor-input-row-height : 0px;
             placeholder-text: root.private-key
                 ? @tr("Private key passphrase (optional)")
-                : @tr("Password");
+                : @tr("SSH password");
             accessible-label: root.private-key
                 ? @tr("Private key passphrase")
                 : @tr("SSH password");
@@ -175,6 +220,15 @@ export component AuthenticationDialog inherits ModalFrame {
                         : "system-keyring";
                 }
             }
+        }
+        if !root.private-key && !root.vault-unlock-only && remember-password.checked : Text {
+            text: @tr("Saving may require system authorization. Enter your device password only in the system dialog.")
+                + (root.apple-platform
+                    ? "\n" + @tr("In the macOS Keychain dialog, choose Always Allow to keep access after restarting this version of AxSSH.")
+                    : "");
+            color: Theme.muted;
+            font-size: Theme.font-small;
+            wrap: word-wrap;
         }
         HorizontalLayout {
             alignment: end;

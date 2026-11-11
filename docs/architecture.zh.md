@@ -946,6 +946,18 @@ profile 只持久化路径；私钥内容和可选 passphrase 只在一次 block
 进入 Private key 模式时才启动；离开该模式或关闭编辑器会清空选项 model 并推进代次，在途扫描
 不能重新写回已经释放的 UI 状态。
 
+保存密码的读取和写入均在 UI 线程外执行，20 秒为软期限：运行中的阻塞请求及系统授权框无法由
+Tokio 取消，因此继续等待真实结果。读取失败或用户取消系统授权时保留凭据引用，先显示没有秘密输入框的
+选择：重试读取、手动输入服务器 SSH 密码或取消。只有条目确实缺失或服务器拒绝旧密码时才直接请求新的
+服务器密码；读取成功直接启动 SSH。每次读取携带唯一 lookup ID 和预期 profile，关闭、断开、编辑或
+新读取替换后拒绝迟到结果，等待持久化 gate 后也重新校验。无 transport worker 时也可断开待处理的读取；
+原生授权框仍由操作系统管理。密码字段明确标为 SSH 密码，保存控件说明设备登录授权只在系统框中完成。
+Windows 使用通用 Credential Manager 读取，通常无授权界面；macOS Keychain 和锁定的 Linux
+Secret Service 集合可能要求授权或解锁。
+macOS 编辑器和凭据弹窗说明：在系统钥匙串对话框选择 **始终允许**，可在重启同一构建后
+保留对该凭据的访问。该决定由系统管理，应用不保存授权标记、不修改 ACL，也不把一次读取
+成功视为持久授权。
+
 SSH agent profile 只持久化 `AuthMethod::SshAgent`，不能包含密码凭据引用，也不保存 agent
 socket 路径、identity 注释、公钥、私钥或 passphrase。真实 SSH 握手通过上述同一精确主机密钥
 校验后，`src/ssh.rs` 才为本次连接访问运行时 agent。Unix/macOS 使用当前

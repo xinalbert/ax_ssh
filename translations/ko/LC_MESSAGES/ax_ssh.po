@@ -481,6 +481,9 @@ msgstr "연결 대상"
 msgid "Enter #RRGGBB or #RRGGBBAA values. Unsafe contrast falls back to readable colors when saved."
 msgstr "#RRGGBB 또는 #RRGGBBAA 값을 입력하세요. 대비가 부족한 색상은 저장 시 읽기 쉬운 색상으로 대체됩니다."
 
+msgid "Enter SSH password"
+msgstr "SSH 비밀번호 입력"
+
 msgid "Enter the Telnet server address."
 msgstr "Telnet 서버 주소를 입력하세요."
 
@@ -609,6 +612,9 @@ msgstr "클립보드에서 가져오기"
 
 msgid "Import from Clipboard shortcut"
 msgstr "클립보드에서 가져오기 단축키"
+
+msgid "In the macOS Keychain dialog, choose Always Allow to keep access after restarting this version of AxSSH."
+msgstr "macOS 키체인 대화상자에서 “항상 허용”을 선택하면 이 버전의 AxSSH를 다시 시작한 후에도 접근 권한이 유지됩니다."
 
 msgid "Information"
 msgstr "정보"
@@ -1087,6 +1093,9 @@ msgstr "{0} 재개"
 msgid "Retry"
 msgstr "다시 시도"
 
+msgid "Retry access or enter the server SSH password manually."
+msgstr "다시 시도하거나 서버 SSH 비밀번호를 직접 입력하세요."
+
 msgid "Return Workspace to Main Window"
 msgstr "작업 공간을 기본 창으로 되돌리기"
 
@@ -1206,6 +1215,12 @@ msgstr "{0}에 저장되었습니다."
 
 msgid "Saved password"
 msgstr "저장된 비밀번호"
+
+msgid "Saved password unavailable"
+msgstr "저장된 비밀번호를 읽을 수 없음"
+
+msgid "Saving may require system authorization. Enter your device password only in the system dialog."
+msgstr "저장 시 시스템 승인이 필요할 수 있습니다. 기기 로그인 비밀번호는 시스템 대화 상자에만 입력하세요."
 
 msgid "Scrollback"
 msgstr "터미널 스크롤 기록"
