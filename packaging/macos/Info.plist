@@ -21,9 +21,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>2026.11.9</string>
+	<string>2026.11.11</string>
 	<key>CFBundleVersion</key>
-	<string>20261109.1</string>
+	<string>20261111</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>11.0</string>
 	<key>NSMicrophoneUsageDescription</key>
