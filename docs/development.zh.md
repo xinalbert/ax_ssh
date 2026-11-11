@@ -82,6 +82,17 @@ variables > Actions 中添加名为 `CODECOV_TOKEN` 的 Codecov repository token
 拿不到该 secret，因此会跳过上传，但仍会生成覆盖率报告。该 job 与跨平台构建矩阵分开，每次 CI
 只上传一份覆盖率报告。
 
+CI 和 Release 直接运行 `cargo-audit` 0.22.2，固定安装器版本，仅授予仓库只读权限。
+审计以 job 退出码判定结果，不再创建或更新额外的 GitHub Check。本机使用相同工具版本复现：
+
+```bash
+cargo audit --file Cargo.lock --ignore RUSTSEC-2023-0071
+```
+
+`RUSTSEC-2023-0071` 仍是 russh 所用 RSA 依赖的唯一已接受例外。其他漏洞使 job 失败并
+阻止发布构建；依赖停止维护的警告仍会输出，但不单独导致失败。更新安全公告数据库和
+registry 需要联网；审计命令执行失败会使 job 失败。
+
 ## 界面翻译
 
 英文为源语言；`translations/` 下所有已登记 PO 目录均由 Slint 编译进可执行文件。

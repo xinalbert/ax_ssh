@@ -97,6 +97,20 @@ is skipped when the secret is unavailable, as on pull requests from forks; the
 coverage report is still generated. This job is separate from the cross-platform
 build matrix and creates one coverage upload.
 
+CI and Release run `cargo-audit` 0.22.2 directly, with a pinned installer and
+read-only repository permissions. The audit result is the job's exit status;
+it does not create or update a separate GitHub Check. To reproduce locally
+with the same tool version:
+
+```bash
+cargo audit --file Cargo.lock --ignore RUSTSEC-2023-0071
+```
+
+`RUSTSEC-2023-0071` remains the sole accepted exception for the RSA dependency
+used by russh. Other vulnerabilities fail the job and block release builds;
+unmaintained-dependency warnings remain visible and nonfatal. Advisory database
+and registry updates require network access; a failed audit command fails the job.
+
 ## Interface translations
 
 English is the source language; all registered PO catalogs under `translations/`
