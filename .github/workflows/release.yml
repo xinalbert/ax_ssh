@@ -66,7 +66,7 @@ jobs:
       - name: Test
         run: cargo test --locked
       - name: Test release helper scripts
-        run: python -m unittest scripts/test_release_version.py scripts/test_generate_release_highlights.py -v
+        run: python -m unittest scripts/test_release_version.py scripts/test_generate_release_highlights.py scripts/test_macos_signing.py -v
 
   security-audit:
     name: Release RustSec audit
@@ -161,6 +161,10 @@ jobs:
           save-if: false
           env-vars: CC CXX CLANGCC CLANGCXX CLANG_PATH LIBCLANG_PATH LLVM_HOME VCINSTALLDIR
 
+      - name: Validate macOS signing helper
+        if: runner.os == 'macOS'
+        run: python3 -m unittest scripts/test_macos_signing.py -v
+
       - name: Build release binary
         run: cargo build --release --locked --target ${{ matrix.target }}
 
@@ -178,8 +182,6 @@ jobs:
             packaging/macos/build-app.sh "$app"
           binary="$app/Contents/MacOS/AxSSH"
           lipo "$binary" -verify_arch "${{ matrix.macos_arch }}"
-          codesign --force --deep --sign - "$app"
-          codesign --verify --deep --strict --verbose=2 "$app"
           asset="AxSSH-${RELEASE_PUBLIC_VERSION}-${{ matrix.name }}.zip"
           ditto -c -k --keepParent "$app" "$asset"
           echo "ASSET_PATH=$asset" >> "$GITHUB_ENV"
@@ -283,8 +285,7 @@ jobs:
           lipo -create "$arm_binary" "$x86_binary" -output "$universal_binary"
           chmod 755 "$universal_binary"
           lipo "$universal_binary" -verify_arch arm64 x86_64
-          codesign --force --deep --sign - "$app"
-          codesign --verify --deep --strict --verbose=2 "$app"
+          sh packaging/macos/sign-app.sh "$app"
           asset="AxSSH-${RELEASE_PUBLIC_VERSION}-macos-universal.zip"
           ditto -c -k --keepParent "$app" "$asset"
           echo "ASSET_PATH=$asset" >> "$GITHUB_ENV"

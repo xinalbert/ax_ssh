@@ -32,4 +32,6 @@ cp "$root_dir/LICENSE" "$app_dir/Contents/Resources/LICENSE"
 cp "$root_dir/THIRD_PARTY_NOTICES.md" "$app_dir/Contents/Resources/THIRD_PARTY_NOTICES.md"
 chmod +x "$app_dir/Contents/MacOS/AxSSH"
 
+sh "$root_dir/packaging/macos/sign-app.sh" "$app_dir"
+
 printf 'Created %s\n' "$app_dir"

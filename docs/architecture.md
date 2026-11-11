@@ -1522,7 +1522,10 @@ On macOS, the editor and credential dialogs explain that **Always Allow** in
 the system Keychain dialog preserves access to that credential after restarting
 the same build. The OS owns this decision; the app stores no authorization
 flag, changes no ACL, and does not treat a successful one-time read as a
-persistent grant.
+persistent grant. Local and release bundles share the final ad-hoc signing
+helper with identifier `com.axssh.AxSSH`. Its default code-hash requirement is
+retained: an unchanged packaged program keeps its identity across relaunches,
+while changed code can require authorization again even at the same version.
 The vault derives
 a per-record key with Argon2id,
 encrypts with XChaCha20-Poly1305 using the profile UUID as associated data, and

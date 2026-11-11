@@ -372,6 +372,21 @@ Build a macOS application bundle with:
 packaging/macos/build-app.sh
 ```
 
+Local, single-architecture release, and universal bundles use
+`packaging/macos/sign-app.sh` after all resources and executable slices are
+final. This applies and verifies an ad-hoc signature with the fixed
+`com.axssh.AxSSH` identifier; no signing certificate is required. Run the native
+identity checks with `python3 -m unittest scripts/test_macos_signing.py -v`.
+
+When macOS requests access to a saved credential, choose **Always Allow** in
+the system Keychain dialog to keep that item's grant after restarting the same
+AxSSH build. Enter the device/login password only in that system dialog.
+**Allow Once** covers only the current request. Reuse the same packaged app:
+ad-hoc signatures identify the exact code, so recompilation or upgrading can
+require authorization again even if the displayed version is unchanged.
+Keychain locking and revoked access still follow system policy. AxSSH does not
+modify the item's access controls or write an application authorization flag.
+
 ### Cross-compile Windows on macOS
 
 Windows CI and releases target `x86_64-pc-windows-msvc` and

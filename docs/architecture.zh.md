@@ -956,7 +956,9 @@ Windows 使用通用 Credential Manager 读取，通常无授权界面；macOS K
 Secret Service 集合可能要求授权或解锁。
 macOS 编辑器和凭据弹窗说明：在系统钥匙串对话框选择 **始终允许**，可在重启同一构建后
 保留对该凭据的访问。该决定由系统管理，应用不保存授权标记、不修改 ACL，也不把一次读取
-成功视为持久授权。
+成功视为持久授权。本机和发行包共用最终临时签名入口，标识为 `com.axssh.AxSSH`，保留
+默认的代码 hash requirement；未变化的打包程序在重新启动后身份一致，代码变化则可能
+再次要求授权，即使显示版本相同。
 
 SSH agent profile 只持久化 `AuthMethod::SshAgent`，不能包含密码凭据引用，也不保存 agent
 socket 路径、identity 注释、公钥、私钥或 passphrase。真实 SSH 握手通过上述同一精确主机密钥

@@ -268,6 +268,17 @@ Software presentation 选择器和 pane layout hint 仍只属于 macOS。
 packaging/macos/build-app.sh
 ```
 
+本机、单架构发行包和通用包都在资源及可执行文件的架构切片准备完成后使用
+`packaging/macos/sign-app.sh`。该入口以固定标识 `com.axssh.AxSSH` 执行并验证临时
+（ad-hoc）签名，无需签名证书。原生身份回归命令为
+`python3 -m unittest scripts/test_macos_signing.py -v`。
+
+macOS 请求读取已保存凭据时，在系统钥匙串对话框中选择 **始终允许**，即可在重启同一
+AxSSH 构建后保留对该条目的访问授权。设备/登录密码只输入系统框；**允许一次** 仅覆盖
+当前请求。请继续使用同一个打包应用：临时签名识别具体代码，即使显示版本不变，重新编译或
+升级也可能要求再次授权。钥匙串锁定和权限撤销仍按系统策略处理。AxSSH 不修改条目访问
+控制，也不写入应用侧授权标记。
+
 ### 在 macOS 上交叉编译 Windows
 
 Windows CI 和发布目标为 `x86_64-pc-windows-msvc` 与 `aarch64-pc-windows-msvc`，
