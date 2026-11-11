@@ -873,3 +873,33 @@
 - 关键结论：windows-11-arm 为原生 ARM64 runner，目标为 aarch64-pc-windows-msvc。AWS-LC 的 ARM64 MSVC 构建要求 clang-cl；Skia 支持该目标，但本版本自动 VC 路径只含 VS 2019/2022，需通过 VCINSTALLDIR 显式提供当前 VS 路径。runner 含原生 ARM64 LLVM 和 VC 组件；Skia 0.153.3 已有匹配 ARM64 D3D/GL 特性的预编译资源，无须改变应用依赖。共用 action 初始化开发 Shell 并保留 SDK/头文件/库/工具路径，避免仅设置 VCINSTALLDIR 后让 C/C++ 自动发现误判环境完整。字体现有流程把自带字体注册阻塞在全系统扫描之后；确定性阻塞扫描可在 macOS 复现相同超时，但不能据此断言 Windows 原始失败只有这一原因。
 - 对实施计划的影响：W2 增加原生 CI 四项门禁与 ARM64 ZIP，CI/Release 共用工具环境；自带字体 UI 注册成功后才继续扫描并应用系统回退。W3 保留原生 Windows CI/GUI 验证的限制。
 - 未解决问题：Windows ARM64 的实际构建、链接、全量测试与 GUI 尚需原生 CI 和 Windows 设备验证。
+
+## 2026-11-10 三平台保存密码授权与标准流程
+
+- 时间：2026-11-10 15:07 +0800
+- 检索问题：AxSSH 密码框与系统授权框为何会先后出现，其他平台是否存在同样问题？
+- 检索原因：用户要求核对标准做法并修复跨平台重复输入体验。
+- 来源列表：[Apple Keychain 流程](https://developer.apple.com/documentation/security/using-the-keychain-to-manage-user-secrets)、[Microsoft CredReadW](https://learn.microsoft.com/en-us/windows/win32/api/wincred/nf-wincred-credreadw)、[Secret Service 提示规范](https://specifications.freedesktop.org/secret-service/latest/prompts.html)、[Transmit 认证顺序](https://help.panic.com/transmit/transmit5/sftp-authentication/)；锁定 Tokio 1.54.1 和 keyring 4.2.0 及三平台适配器源码。
+- 关键结论：已有有效密码应读取后直接连接；首次密码与本机授权用途不同。Windows 当前适配器用 CredReadW 通用凭据，通常无额外授权框；Linux 服务负责解锁提示。Tokio 已运行的 blocking 任务不可取消，原读取硬超时会停止等待却留下系统请求；原错误分支把授权失败直接转成服务器密码提示。
+- 对实施计划的影响：C1 使用软期限保留等待、lookup ID 和预期 profile 隔离旧结果；错误后保留凭据并显示选择，缺失才直接手动输入；C2 解释服务器密码与设备登录授权，保留系统安全边界。
+- 未解决问题：原用户现场触发原因尚未实机复现；三平台原生系统授权、取消和真实 GUI 仍需目标平台验证，系统窗口不能通过 Tokio 硬取消。
+
+## 2026-11-10 同一构建的钥匙串授权连续性
+
+- 时间：2026-11-10 17:26 +0800
+- 检索问题：没有正式证书，能否在重启同一版本后保留已允许的钥匙串访问？
+- 检索原因：用户保留临时签名，并要求同一版本重启后记住授权。
+- 来源列表：[Apple 钥匙串访问选项](https://support.apple.com/en-gb/guide/mac-help/kychn002/26/mac/26)、[Apple 代码签名 requirement](https://developer.apple.com/library/archive/documentation/Security/Conceptual/CodeSigningGuide/RequirementLang/RequirementLang.html)、[Apple 代码签名与钥匙串身份跟踪](https://developer.apple.com/library/archive/documentation/Security/Conceptual/CodeSigningGuide/AboutCS/AboutCS.html)；锁定 keyring 4.1.5、apple-native-keyring-store 1.0.2 和 security-framework 3.7.0 源码。
+- 关键结论：Always Allow 由钥匙串保存针对具体条目的访问决定；Allow Once 只覆盖当前请求。ad-hoc 签名仅识别一个具体程序，默认 requirement 包含代码 hash，因此只保留固定 bundle ID 并不保证重新编译后延续授权。当前只读路径没有重建凭据，系统 adapter 修改密码时原位更新条目；无需新增应用授权标记或修改系统 ACL。
+- 对实施计划的影响：K1 让本机打包和三类 Release 包共用完整 bundle 临时签名入口；用原生 codesign 验证复制、重复签名和代码改变的身份边界。K2 按 macOS 平台展示“始终允许”操作指引。K3 明确同一版本指同一实际构建，升级或重新编译仍可能再授权。
+- 未解决问题：真实钥匙串的系统窗口、用户选择及重启后的读取仍需用户实机验证；签名测试不读取用户凭据或更改系统授权。
+
+## 2026-11-11 RustSec 审计的 GitHub Check 回写失败
+
+- 时间：2026-11-11 16:08 +0800
+- 检索问题：为什么审计已扫描依赖却立即失败，能否让 CI/Release 直接使用漏洞扫描退出码？
+- 检索原因：用户发现推送后的 CI 提前失败并要求修改 workflow。
+- 来源列表：[失败 CI](https://github.com/xinalbert/ax_ssh/actions/runs/42982775517/job/130396833418)、[同 commit Release](https://github.com/xinalbert/ax_ssh/actions/runs/42982855201)、[锁定 audit-check reporter](https://github.com/rustsec/audit-check/blob/858dc40f52ca2b8570b7a997c1c4e35c6fc9a432/src/reporter.ts)、[锁定 Check API helper](https://github.com/clechasseur/rs-actions-core/blob/v3.0.5/src/checks.ts)、[固定安装器文档](https://github.com/taiki-e/install-action/blob/cfdb7ed4ccc7c7dce37759eae89dc5674b469b39/README.md)、[支持工具清单](https://github.com/taiki-e/install-action/blob/cfdb7ed4ccc7c7dce37759eae89dc5674b469b39/TOOLS.md)；本机 cargo-audit 0.22.2 的 CLI 帮助及实际退出码。
+- 关键结论：失败 annotation 为更新 Check 时返回 Not Found，job 原已有 checks: write；reporter 会额外创建/更新 Security audit Check，并把 API 失败作为 action 失败。6 条 unmaintained 警告本身不是漏洞失败。同 commit Release audit 成功，且其开始晚于失败 CI audit 结束，不能归因为两次审计同时更新。本机直接 CLI 保留唯一 RSA 例外时退出 0、输出同样 6 条警告；不传例外并复用已更新数据库时检出 RUSTSEC-2023-0071，退出 1。
+- 对实施计划的影响：CI/Release 一致使用固定 SHA 的 install-action v2.90.3 安装 cargo-audit 0.22.2，禁止 fallback、保留默认下载校验，直接审计 Cargo.lock 并移除 Check 写权限；保留漏洞失败、联网失败和现有 RSA 例外，发布构建仍依赖 audit 成功。
+- 未解决问题：GitHub 404 的具体服务端原因未证明；公共 API 后续请求受未认证限流影响。新 workflow 的 Ubuntu 执行需推送后验证，本机通过不替代远端运行；已有 tag/run 不会使用本地修改。
