@@ -1172,6 +1172,7 @@ async fn x11_request_does_not_prepare_a_local_server_before_a_remote_channel_ope
         app_path: "/definitely/not/an/axssh-x-server".to_owned(),
         launch_on_connect: true,
         allow_no_auth: false,
+        ..X11Settings::default()
     };
     let (worker, mut events) = SshSessionHandle::spawn_with_x11_settings(
         &Handle::current(),

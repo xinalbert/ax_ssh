@@ -227,6 +227,8 @@ pub(super) fn wire_settings(
               osc52_clipboard,
               x11_server_provider,
               x11_server_app_path,
+              x11_windows_app_path,
+              x11_config_path,
               x11_launch_on_connect,
               x11_allow_no_auth,
               local_shell,
@@ -373,6 +375,8 @@ pub(super) fn wire_settings(
             settings.x11 = X11Settings::normalized(
                 x11_server_provider.as_str(),
                 x11_server_app_path.as_str(),
+                x11_windows_app_path.as_str(),
+                x11_config_path.as_str(),
                 x11_launch_on_connect,
                 x11_allow_no_auth,
             );
@@ -410,6 +414,9 @@ pub(super) fn wire_settings(
                     terminal_selection: theme_dark_terminal_selection.to_string(),
                 },
             ));
+            let x11_changed = state
+                .lock()
+                .is_ok_and(|app| app.sessions.settings.x11 != settings.x11);
             if is_preview {
                 let families = match apply_preview_settings(&state, settings.clone()) {
                     Ok(families) => families,
@@ -423,6 +430,9 @@ pub(super) fn wire_settings(
                 };
                 if let Some(ui) = ui_for_save.upgrade() {
                     apply_settings_to_open_windows(&ui, &settings);
+                }
+                if x11_changed {
+                    load_x11_server_installations(&runtime, state.clone(), ui_for_save.clone());
                 }
                 apply_terminal_presentation_policy(&window_router, &settings);
                 refresh_session_models(&ui_for_save, &state);
@@ -480,6 +490,13 @@ pub(super) fn wire_settings(
                         match save_result {
                             Ok(Ok(saved_settings)) => dispatch_ui(&ui_for_result, move |ui| {
                                 apply_settings_to_open_windows(ui, &saved_settings);
+                                if x11_changed && close_tab_id.is_none() {
+                                    load_x11_server_installations(
+                                        &runtime_for_close,
+                                        state_for_refresh.clone(),
+                                        ui.as_weak(),
+                                    );
+                                }
                                 apply_terminal_presentation_policy(
                                     &window_router_for_save,
                                     &saved_settings,

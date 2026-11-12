@@ -12,6 +12,9 @@ use tokio::time::{Duration, timeout};
 
 use crate::config::{X11ServerProvider, X11Settings};
 
+#[cfg(any(target_os = "windows", test))]
+mod windows;
+
 const PROCESS_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_COMMAND_OUTPUT_BYTES: usize = 1_024;
 const MAX_DISPLAY_CANDIDATES: usize = 8;
@@ -35,6 +38,8 @@ pub(crate) struct XServerPlan {
     app_path: Option<PathBuf>,
     launch_on_connect: bool,
     allow_no_auth: bool,
+    #[cfg(target_os = "windows")]
+    windows_config: Option<windows::WindowsLaunchConfig>,
 }
 
 impl XServerPlan {
@@ -58,6 +63,15 @@ impl XServerPlan {
             X11ServerProvider::MacXServer
             | X11ServerProvider::VcXsrv
             | X11ServerProvider::Xming => {
+                #[cfg(target_os = "windows")]
+                if let Some(display) = self
+                    .windows_config
+                    .as_ref()
+                    .and_then(|config| config.display)
+                {
+                    push_unique(&mut candidates, format!("127.0.0.1:{display}"));
+                    return candidates;
+                }
                 push_unique(&mut candidates, "127.0.0.1:0".to_owned());
             }
             X11ServerProvider::XQuartz => {
@@ -102,7 +116,20 @@ impl XServerPlan {
                 Ok("127.0.0.1:0".to_owned())
             }
             X11ServerProvider::VcXsrv | X11ServerProvider::Xming => {
-                launch_windows_server(app_path, self.allow_no_auth).await
+                #[cfg(target_os = "windows")]
+                {
+                    let config = self.windows_config.clone().unwrap_or_default();
+                    let display = config
+                        .display
+                        .unwrap_or_else(select_available_windows_display);
+                    config
+                        .command(app_path, display, self.allow_no_auth)?
+                        .spawn()
+                        .context("failed to launch the configured Windows X server")?;
+                    Ok(format!("127.0.0.1:{display}"))
+                }
+                #[cfg(not(target_os = "windows"))]
+                anyhow::bail!("Windows X server applications are unavailable on this platform")
             }
             X11ServerProvider::Custom => {
                 launch_custom_server(app_path).await?;
@@ -146,6 +173,33 @@ pub fn discovered_provider_locations() -> Vec<String> {
         })
         .take(MAX_DISCOVERED_PROVIDER_LOCATIONS)
         .collect()
+}
+
+/// List bounded XLaunch candidates without opening XML or launching a server.
+/// Run on a blocking worker, using the same path priority as session startup.
+#[cfg(target_os = "windows")]
+pub fn discovered_xlaunch_configurations(settings: &X11Settings) -> Result<Vec<String>> {
+    if !matches!(
+        settings.provider,
+        X11ServerProvider::Xming | X11ServerProvider::VcXsrv
+    ) || !settings.xlaunch_config_path.is_empty()
+    {
+        return Ok(Vec::new());
+    }
+    let executable = configured_app_path(settings.provider, settings)
+        .or_else(|| default_app_path(settings.provider));
+    windows::discover_configurations(executable.as_deref()).map(|paths| {
+        paths
+            .into_iter()
+            .map(|path| path.display().to_string())
+            .collect()
+    })
+}
+
+/// Windows XLaunch configurations are unavailable on other platforms.
+#[cfg(not(target_os = "windows"))]
+pub fn discovered_xlaunch_configurations(_settings: &X11Settings) -> Result<Vec<String>> {
+    Ok(Vec::new())
 }
 
 pub fn provider_index(provider: X11ServerProvider) -> i32 {
@@ -220,19 +274,42 @@ fn resolve_plan(settings: X11Settings) -> Result<XServerPlan> {
         X11ServerProvider::Auto => auto_provider(),
         provider => provider,
     };
-    let app_path = match configured_provider {
-        X11ServerProvider::Custom if !settings.app_path.is_empty() => {
-            Some(PathBuf::from(&settings.app_path))
+    let app_path = configured_app_path(configured_provider, &settings).or_else(|| {
+        if configured_provider == X11ServerProvider::Custom {
+            None
+        } else {
+            default_app_path(provider)
         }
-        X11ServerProvider::Custom => None,
-        _ => default_app_path(provider),
+    });
+    #[cfg(target_os = "windows")]
+    let windows_config = if matches!(
+        configured_provider,
+        X11ServerProvider::VcXsrv | X11ServerProvider::Xming
+    ) {
+        windows::configuration_path(&settings.xlaunch_config_path, app_path.as_deref())?
+            .as_deref()
+            .map(windows::WindowsLaunchConfig::load)
+            .transpose()?
+    } else {
+        None
     };
     Ok(XServerPlan {
         provider,
         app_path,
         launch_on_connect: settings.launch_on_connect,
         allow_no_auth: settings.allow_no_auth,
+        #[cfg(target_os = "windows")]
+        windows_config,
     })
+}
+
+fn configured_app_path(provider: X11ServerProvider, settings: &X11Settings) -> Option<PathBuf> {
+    let path = match provider {
+        X11ServerProvider::Custom => &settings.app_path,
+        X11ServerProvider::Xming | X11ServerProvider::VcXsrv => &settings.windows_app_path,
+        _ => return None,
+    };
+    (!path.is_empty()).then(|| PathBuf::from(path))
 }
 
 fn auto_provider() -> X11ServerProvider {
@@ -339,6 +416,16 @@ fn platform_default_display() -> String {
 }
 
 async fn ensure_launch_target(provider: X11ServerProvider, path: &Path) -> Result<()> {
+    #[cfg(target_os = "windows")]
+    if matches!(
+        provider,
+        X11ServerProvider::Xming | X11ServerProvider::VcXsrv
+    ) && !path
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("exe"))
+    {
+        anyhow::bail!("Xming/VcXsrv executable path must point to an .exe file");
+    }
     let path = path.to_owned();
     tokio::task::spawn_blocking(move || validate_launch_target(provider, &path))
         .await
@@ -352,12 +439,15 @@ fn validate_launch_target(provider: X11ServerProvider, path: &Path) -> Result<()
             path.display()
         )
     })?;
-    if provider != X11ServerProvider::Custom {
+    if !matches!(
+        provider,
+        X11ServerProvider::Custom | X11ServerProvider::Xming | X11ServerProvider::VcXsrv
+    ) {
         return Ok(());
     }
     if !metadata.is_file() {
         anyhow::bail!(
-            "custom X server path must be a regular executable file: {}",
+            "X server path must be a regular executable file: {}",
             path.display()
         );
     }
@@ -385,32 +475,6 @@ async fn launch_macos_app(path: &Path, app_args: &[&str]) -> Result<()> {
 #[cfg(not(target_os = "macos"))]
 async fn launch_macos_app(_path: &Path, _app_args: &[&str]) -> Result<()> {
     anyhow::bail!("macOS X server applications are unavailable on this platform")
-}
-
-#[cfg(target_os = "windows")]
-async fn launch_windows_server(path: &Path, allow_no_auth: bool) -> Result<String> {
-    if !allow_no_auth {
-        anyhow::bail!(
-            "automatic VcXsrv/Xming startup requires explicit local no-auth compatibility"
-        );
-    }
-    let display = select_available_windows_display();
-    let display_arg = format!(":{display}");
-    let mut command = detached_command(path);
-    command
-        .arg(display_arg)
-        .arg("-multiwindow")
-        .arg("-clipboard")
-        .arg("-ac");
-    command
-        .spawn()
-        .context("failed to launch the configured Windows X server")?;
-    Ok(format!("127.0.0.1:{display}"))
-}
-
-#[cfg(not(target_os = "windows"))]
-async fn launch_windows_server(_path: &Path, _allow_no_auth: bool) -> Result<String> {
-    anyhow::bail!("Windows X server applications are unavailable on this platform")
 }
 
 async fn launch_custom_server(path: &Path) -> Result<()> {
@@ -570,6 +634,34 @@ mod tests {
     use super::*;
 
     #[test]
+    fn windows_provider_override_is_separate_from_legacy_custom_path() {
+        let mut settings = X11Settings {
+            app_path: "/previous/custom/server".to_owned(),
+            windows_app_path: "D:/X servers/Xming.exe".to_owned(),
+            ..X11Settings::default()
+        };
+        for provider in [X11ServerProvider::Xming, X11ServerProvider::VcXsrv] {
+            assert_eq!(
+                configured_app_path(provider, &settings),
+                Some(PathBuf::from(&settings.windows_app_path))
+            );
+        }
+        assert_eq!(
+            configured_app_path(X11ServerProvider::Custom, &settings),
+            Some(PathBuf::from(&settings.app_path))
+        );
+        assert_eq!(
+            configured_app_path(X11ServerProvider::Auto, &settings),
+            None
+        );
+        settings.windows_app_path.clear();
+        assert_eq!(
+            configured_app_path(X11ServerProvider::Xming, &settings),
+            None
+        );
+    }
+
+    #[test]
     fn provider_options_and_indices_follow_the_current_platform() {
         let options = provider_options();
         assert!(!options.is_empty());
@@ -644,6 +736,7 @@ mod tests {
             app_path: String::new(),
             launch_on_connect: true,
             allow_no_auth: false,
+            ..X11Settings::default()
         })
         .await
         .expect("plan should resolve without launching");
@@ -659,6 +752,7 @@ mod tests {
             app_path: "/opt/custom/x-server".to_owned(),
             launch_on_connect: true,
             allow_no_auth: false,
+            ..X11Settings::default()
         })
         .await
         .expect("auto plan should resolve without launching");
@@ -666,12 +760,11 @@ mod tests {
         assert_ne!(plan.app_path, Some(PathBuf::from("/opt/custom/x-server")));
     }
 
+    #[cfg(not(target_os = "windows"))]
     #[tokio::test]
     async fn known_provider_ignores_a_saved_custom_path() {
         let provider = if cfg!(target_os = "macos") {
             X11ServerProvider::XQuartz
-        } else if cfg!(target_os = "windows") {
-            X11ServerProvider::VcXsrv
         } else {
             X11ServerProvider::System
         };
@@ -680,6 +773,7 @@ mod tests {
             app_path: "/opt/custom/x-server".to_owned(),
             launch_on_connect: true,
             allow_no_auth: false,
+            ..X11Settings::default()
         })
         .await
         .expect("known provider plan should resolve without launching");
@@ -694,11 +788,37 @@ mod tests {
             app_path: "/opt/custom/x-server".to_owned(),
             launch_on_connect: true,
             allow_no_auth: false,
+            ..X11Settings::default()
         })
         .await
         .expect("custom provider plan should resolve without launching");
 
         assert_eq!(plan.app_path, Some(PathBuf::from("/opt/custom/x-server")));
+    }
+
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    async fn explicit_windows_plan_uses_executable_override_and_configured_display() {
+        let path =
+            std::env::temp_dir().join(format!("axssh-plan-{}.xlaunch", uuid::Uuid::new_v4()));
+        std::fs::write(&path, r#"<XLaunch ClientMode="NoClient" Display="3"/>"#).unwrap();
+        for provider in [X11ServerProvider::Xming, X11ServerProvider::VcXsrv] {
+            let plan = XServerPlan::resolve(X11Settings {
+                provider,
+                app_path: "C:/old/custom.exe".to_owned(),
+                windows_app_path: "D:/X servers/server.exe".to_owned(),
+                xlaunch_config_path: path.to_string_lossy().into_owned(),
+                ..X11Settings::default()
+            })
+            .await
+            .unwrap();
+            assert_eq!(
+                plan.app_path,
+                Some(PathBuf::from("D:/X servers/server.exe"))
+            );
+            assert_eq!(plan.display_candidates().await, ["127.0.0.1:3"]);
+        }
+        std::fs::remove_file(path).unwrap();
     }
 
     #[test]

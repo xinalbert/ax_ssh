@@ -976,12 +976,26 @@ identity 和签署认证请求，client 始终由 russh worker 独占。AxSSH �
 X11 forwarding 是逐 SSH profile 的方式：`off`、`untrusted`（`-X`）或 `trusted`（`-Y`）。新 profile
 默认 `trusted`；旧配置缺失字段和 legacy `true` 迁移为 `trusted`，legacy `false` 迁移为 `off`。它只适用于 Terminal mode，SFTP-only、Telnet 和 Serial
 worker 永远不会申请 X11。全局 `X11Settings` 只保存非秘密的 provider、仅供 Custom 使用的
-应用路径、启动偏好和显式 no-auth 兼容选择。`src/x_server.rs` 负责按平台解析 Auto：macOS 通过
+应用路径、显式 Windows provider 的程序路径覆盖、可选 XLaunch 配置路径、启动偏好和显式 no-auth 兼容选择。`src/x_server.rs` 负责按平台解析 Auto：macOS 通过
 `NSWorkspace` 和 bundle identifier 发现应用，Windows 先搜索进程 `PATH` 再检查 Program Files；
 同时向 Settings 返回有上限、只读的已知安装位置快照。标准安装路径仍作为存在性检查后的兜底。
 macOS Auto 依次选择 XQuartz、MacXServer；Windows Auto 依次选择 VcXsrv、Xming；Linux 提供系统
 `DISPLAY` 和 Custom。所有已知 provider 都忽略保存的 Custom 路径，AxSSH 不下载或安装任何
 provider。Custom 不经命令 shell 启动，且必须是普通文件；Unix 上还必须具有 executable 权限。
+
+显式选择 Xming 或 VcXsrv 时优先使用 `windows_app_path`，留空仍搜索 PATH/Program Files。
+Auto 忽略该覆盖和 `xlaunch_config_path`，也继续忽略独立的旧 Custom 路径。
+显式配置路径优先；留空时，先非递归查实际程序目录，有候选则不降级到用户目录；否则查系统
+Desktop/Documents。每个目录最多枚举 4096 项、最多八个候选，超限或枚举失败不猜测结果。
+唯一候选自动采用，多个候选必须在设置下拉框或路径字段明确选择。设置发现仅枚举文件名，
+后台有 150ms 去抖和三秒超时，并在查找前及 UI 发布前重验当前 X11 设置/Settings 生命周期；
+不解析 XML、不探测端点。关闭设置或窗口会清空候选模型。
+`src/x_server/windows.rs` 在本机 server 准备的 blocking task 中读取可选 UTF-8 `.xlaunch`
+文件（最多 64 KiB，XML 和参数均有界），将窗口模式、剪贴板、Wgl、DisableAC 与 ExtraParams
+转换为直接传给 server 的参数，不依赖 XLaunch.exe。固定显示号选择相应 loopback endpoint；
+`-1` 在启动前选择可用显示号。文件必须使用 `ClientMode=NoClient`，不启动其它程序或 XDMCP，
+也不接受覆盖 endpoint 的附加参数。no-auth 仍要求用户显式开启兼容选项。设置只保存路径，
+不保存或记录 XML 内容、凭据。
 
 Trusted 模式只会带着随机 128-bit fake cookie 发送 X11 forwarding request，不读取本机
 `DISPLAY`、不运行 `xauth`、不探测本机端点，也不启动 X server。只有远端 X11 channel 提供完整

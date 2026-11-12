@@ -20,6 +20,7 @@ component ComboBoxChevron inherits Path {
 export component ThemedComboBox inherits FocusScope {
     in property <[string]> model;
     in-out property <int> current-index: 0;
+    in property <bool> allow-empty-selection: false;
     out property <string> current-value: root.current-index >= 0
         && root.current-index < root.model.length
         ? root.model[root.current-index]
@@ -85,9 +86,9 @@ export component ThemedComboBox inherits FocusScope {
 
     changed model => {
         if root.model.length == 0 {
-            root.current-index = 0;
+            root.current-index = root.allow-empty-selection ? -1 : 0;
         } else {
-            root.current-index = root.current-index.clamp(0, root.model.length - 1);
+            root.current-index = root.current-index.clamp(root.allow-empty-selection ? -1 : 0, root.model.length - 1);
         }
     }
 

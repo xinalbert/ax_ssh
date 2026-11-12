@@ -187,6 +187,21 @@ pub(super) const SETTINGS_SEARCH_CATALOG: &[SearchRow] = &[
     ),
     (
         "X11",
+        "X server executable",
+        "Leave empty to detect Xming or VcXsrv automatically",
+    ),
+    (
+        "X11",
+        "XLaunch configuration",
+        "Leave empty to find .xlaunch files; use Start no client",
+    ),
+    (
+        "X11",
+        "Detected XLaunch configurations",
+        "Choose a file when several are found",
+    ),
+    (
+        "X11",
         "Start for first X11 application",
         "Launch the selected X server only when needed",
     ),
@@ -440,6 +455,21 @@ const SETTINGS_SEARCH_DE: &[SearchRow] = &[
         "X11",
         "Benutzerdefinierte Programmdatei",
         "Benutzerdefinierte X-Server-Programmdatei starten",
+    ),
+    (
+        "X11",
+        "X-Server-Programmdatei",
+        "Leer lassen, um Xming oder VcXsrv automatisch zu erkennen",
+    ),
+    (
+        "X11",
+        "XLaunch-Konfiguration",
+        "Leer lassen, um .xlaunch-Dateien ohne Client-Start zu suchen",
+    ),
+    (
+        "X11",
+        "Erkannte XLaunch-Konfigurationen",
+        "Bei mehreren Dateien eine auswählen",
     ),
     (
         "X11",
@@ -719,6 +749,21 @@ const SETTINGS_SEARCH_EN_GB: &[SearchRow] = &[
     ),
     (
         "X11",
+        "X server executable",
+        "Leave empty to detect Xming or VcXsrv automatically",
+    ),
+    (
+        "X11",
+        "XLaunch configuration",
+        "Leave empty to find .xlaunch files; use Start no client",
+    ),
+    (
+        "X11",
+        "Detected XLaunch configurations",
+        "Choose a file when several are found",
+    ),
+    (
+        "X11",
         "Start for first X11 application",
         "Launch the selected X server only when needed",
     ),
@@ -972,6 +1017,21 @@ const SETTINGS_SEARCH_ES: &[SearchRow] = &[
         "X11",
         "Ejecutable personalizado",
         "Ejecutar un servidor X personalizado",
+    ),
+    (
+        "X11",
+        "Ejecutable del servidor X",
+        "Dejar vacío para detectar Xming o VcXsrv automáticamente",
+    ),
+    (
+        "X11",
+        "Configuración de XLaunch",
+        "Dejar vacío para buscar .xlaunch; usar la opción sin cliente",
+    ),
+    (
+        "X11",
+        "Configuraciones de XLaunch detectadas",
+        "Elegir un archivo si se encuentran varios",
     ),
     (
         "X11",
@@ -1255,6 +1315,21 @@ const SETTINGS_SEARCH_FR: &[SearchRow] = &[
     ),
     (
         "X11",
+        "Exécutable du serveur X",
+        "Laisser vide pour détecter automatiquement Xming ou VcXsrv",
+    ),
+    (
+        "X11",
+        "Configuration XLaunch",
+        "Laisser vide pour rechercher les .xlaunch sans démarrage de client",
+    ),
+    (
+        "X11",
+        "Configurations XLaunch détectées",
+        "Choisir un fichier si plusieurs sont trouvés",
+    ),
+    (
+        "X11",
         "Lancer pour la première application X11",
         "Lancer le serveur X sélectionné uniquement si nécessaire",
     ),
@@ -1503,6 +1578,21 @@ const SETTINGS_SEARCH_JA: &[SearchRow] = &[
     ),
     (
         "X11",
+        "X サーバーの実行ファイル",
+        "空欄の場合は Xming または VcXsrv を自動検出",
+    ),
+    (
+        "X11",
+        "XLaunch 設定ファイル",
+        "空欄で .xlaunch を検索（クライアントを起動しない設定を使用）",
+    ),
+    (
+        "X11",
+        "検出された XLaunch 設定",
+        "複数のファイルが見つかった場合は選択してください",
+    ),
+    (
+        "X11",
         "最初のX11アプリで起動",
         "必要なときだけ選択したXサーバーを起動",
     ),
@@ -1739,6 +1829,21 @@ const SETTINGS_SEARCH_KO: &[SearchRow] = &[
     ),
     (
         "X11",
+        "X 서버 실행 파일",
+        "비워 두면 Xming 또는 VcXsrv를 자동으로 감지합니다",
+    ),
+    (
+        "X11",
+        "XLaunch 설정 파일",
+        "비워 두면 .xlaunch 검색; 클라이언트를 시작하지 않는 설정 사용",
+    ),
+    (
+        "X11",
+        "감지된 XLaunch 설정",
+        "여러 파일이 발견되면 하나를 선택하세요",
+    ),
+    (
+        "X11",
         "첫 X11 앱에서 실행",
         "필요할 때만 선택한 X 서버 실행",
     ),
@@ -1968,6 +2073,21 @@ const SETTINGS_SEARCH_PT_BR: &[SearchRow] = &[
         "X11",
         "Executável personalizado",
         "Iniciar um executável personalizado de servidor X",
+    ),
+    (
+        "X11",
+        "Executável do servidor X",
+        "Deixe vazio para detectar Xming ou VcXsrv automaticamente",
+    ),
+    (
+        "X11",
+        "Configuração do XLaunch",
+        "Deixe vazio para buscar .xlaunch sem iniciar um cliente",
+    ),
+    (
+        "X11",
+        "Configurações do XLaunch detectadas",
+        "Escolha um arquivo se vários forem encontrados",
     ),
     (
         "X11",
@@ -2251,6 +2371,21 @@ const SETTINGS_SEARCH_RU: &[SearchRow] = &[
     ),
     (
         "X11",
+        "Исполняемый файл X-сервера",
+        "Оставьте пустым для автоматического поиска Xming или VcXsrv",
+    ),
+    (
+        "X11",
+        "Конфигурация XLaunch",
+        "Оставьте пустым для поиска .xlaunch без запуска клиента",
+    ),
+    (
+        "X11",
+        "Найденные конфигурации XLaunch",
+        "Выберите файл, если найдено несколько",
+    ),
+    (
+        "X11",
         "Запустить для первого приложения X11",
         "Запускать выбранный X-сервер только при необходимости",
     ),
@@ -2527,6 +2662,21 @@ const SETTINGS_SEARCH_UK: &[SearchRow] = &[
     ),
     (
         "X11",
+        "Виконуваний файл X-сервера",
+        "Залиште порожнім для автоматичного пошуку Xming або VcXsrv",
+    ),
+    (
+        "X11",
+        "Конфігурація XLaunch",
+        "Залиште порожнім для пошуку .xlaunch без запуску клієнта",
+    ),
+    (
+        "X11",
+        "Знайдені конфігурації XLaunch",
+        "Виберіть файл, якщо знайдено декілька",
+    ),
+    (
+        "X11",
         "Запустити для першої програми X11",
         "Запускати вибраний X-сервер лише за потреби",
     ),
@@ -2705,6 +2855,17 @@ const SETTINGS_SEARCH_ZH_CN: &[SearchRow] = &[
     ("X11", "提供程序", "转发图形应用使用的 X server"),
     ("X11", "检测到的位置", "已知本地 X server 安装"),
     ("X11", "自定义可执行文件", "启动自定义 X server 程序"),
+    (
+        "X11",
+        "X 服务器可执行文件",
+        "留空时自动检测 Xming 或 VcXsrv",
+    ),
+    (
+        "X11",
+        "XLaunch 配置文件",
+        "留空时自动查找 .xlaunch；请使用“不启动客户端”配置",
+    ),
+    ("X11", "检测到的 XLaunch 配置", "找到多个文件时请选择一个"),
     ("X11", "首个 X11 应用时启动", "仅在需要时启动所选 X server"),
     (
         "X11",
@@ -2821,6 +2982,13 @@ const SETTINGS_SEARCH_ZH_TW: &[SearchRow] = &[
     ("X11", "提供程式", "轉發圖形應用使用的 X server"),
     ("X11", "檢測到的位置", "已知本地 X server 安裝"),
     ("X11", "自定義可執行檔案", "啟動自定義 X server 程式"),
+    ("X11", "X 伺服器執行檔", "留空時自動偵測 Xming 或 VcXsrv"),
+    (
+        "X11",
+        "XLaunch 設定檔",
+        "留空時自動尋找 .xlaunch；請使用「不啟動用戶端」設定",
+    ),
+    ("X11", "偵測到的 XLaunch 設定", "找到多個檔案時請選擇一個"),
     ("X11", "首個 X11 應用時啟動", "僅在需要時啟動所選 X server"),
     (
         "X11",

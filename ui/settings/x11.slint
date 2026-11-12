@@ -13,9 +13,12 @@ import { ThemedComboBox } from "../components/themed-combo-box.slint";
 export component X11SettingsPage inherits SettingsPage {
     in property <[string]> provider-options;
     in property <[string]> discovered-installations;
+    in property <[string]> discovered-configurations;
     in-out property <string> draft-provider;
     in-out property <int> draft-provider-index;
     in-out property <string> draft-app-path;
+    in-out property <string> draft-windows-app-path;
+    in-out property <string> draft-config-path;
     in-out property <bool> draft-launch-on-connect;
     in-out property <bool> draft-allow-no-auth;
 
@@ -48,6 +51,48 @@ export component X11SettingsPage inherits SettingsPage {
     for location[index] in root.discovered-installations : SettingsInfoRow {
         label: index == 0 ? @tr("Detected locations") : "";
         value: location;
+    }
+    if root.draft-provider == "xming" || root.draft-provider == "vcxsrv" : SettingsRow {
+        label: @tr("X server executable");
+        description: @tr("Leave empty to detect Xming or VcXsrv automatically");
+        SettingsField {
+            FlatTextInput {
+                width: parent.width;
+                height: Theme.settings-control-height;
+                text <=> root.draft-windows-app-path;
+                placeholder-text: @tr("Executable path");
+                accessible-label: @tr("X server executable");
+            }
+        }
+    }
+    if root.draft-provider == "xming" || root.draft-provider == "vcxsrv" : SettingsRow {
+        label: @tr("XLaunch configuration");
+        description: @tr("Leave empty to find .xlaunch files; use Start no client");
+        SettingsField {
+            FlatTextInput {
+                width: parent.width;
+                height: Theme.settings-control-height;
+                text <=> root.draft-config-path;
+                placeholder-text: @tr("Optional .xlaunch path");
+                accessible-label: @tr("XLaunch configuration");
+            }
+        }
+    }
+    if (root.draft-provider == "xming" || root.draft-provider == "vcxsrv")
+            && root.discovered-configurations.length > 0 : SettingsRow {
+        label: @tr("Detected XLaunch configurations");
+        description: @tr("Choose a file when several are found");
+        SettingsField {
+            ThemedComboBox {
+                width: parent.width;
+                height: Theme.settings-control-height;
+                model: root.discovered-configurations;
+                current-index: -1;
+                allow-empty-selection: true;
+                accessible-label: @tr("Detected XLaunch configurations");
+                selected(value, _index) => { root.draft-config-path = value; }
+            }
+        }
     }
     // Custom is the final provider option on every platform. Use the index
     // shown by the combo box so this row appears as soon as Custom is selected.

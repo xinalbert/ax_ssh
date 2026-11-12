@@ -208,6 +208,9 @@ msgstr "As alterações entram em vigor após reiniciar o AxSSH"
 msgid "Choose Custom to launch this path without a command shell"
 msgstr "Escolha Personalizado para executar este caminho sem um shell de comandos"
 
+msgid "Choose a file when several are found"
+msgstr "Escolha um arquivo se vários forem encontrados"
+
 msgid "Choose how this connection appears in the workspace."
 msgstr "Escolha como esta conexão aparece no espaço de trabalho."
 
@@ -414,6 +417,9 @@ msgstr "Destino: {0}"
 
 msgid "Detect again on next connection"
 msgstr "Detectar novamente na próxima conexão"
+
+msgid "Detected XLaunch configurations"
+msgstr "Configurações do XLaunch detectadas"
 
 msgid "Detected key"
 msgstr "Chave detectada"
@@ -661,6 +667,12 @@ msgstr "Imagens por camada (alternativa)"
 msgid "Leave blank to keep saved password"
 msgstr "Deixe em branco para manter a senha salva"
 
+msgid "Leave empty to detect Xming or VcXsrv automatically"
+msgstr "Deixe vazio para detectar Xming ou VcXsrv automaticamente"
+
+msgid "Leave empty to find .xlaunch files; use Start no client"
+msgstr "Deixe vazio para buscar .xlaunch sem iniciar um cliente"
+
 msgid "License"
 msgstr "Licença"
 
@@ -879,6 +891,9 @@ msgstr "Option atua como Meta"
 
 msgid "Optional"
 msgstr "Opcional"
+
+msgid "Optional .xlaunch path"
+msgstr "Caminho opcional do .xlaunch"
 
 msgid "Optional; blank enables local automatic unlock"
 msgstr "Opcional; deixar em branco permite desbloqueio local automático"
@@ -1627,6 +1642,9 @@ msgstr "Caminho do arquivo do espaço de trabalho"
 msgid "Workspace tab width"
 msgstr "Largura das abas do espaço de trabalho"
 
+msgid "X server executable"
+msgstr "Executável do servidor X"
+
 msgid "X server used by forwarded graphical applications"
 msgstr "Servidor X usado por aplicativos gráficos encaminhados"
 
@@ -1635,6 +1653,9 @@ msgstr "X11"
 
 msgid "X11 forwarding"
 msgstr "Encaminhamento X11"
+
+msgid "XLaunch configuration"
+msgstr "Configuração do XLaunch"
 
 msgid "lines"
 msgstr "linhas"
@@ -1786,6 +1807,10 @@ msgid "Changes take effect after restarting AxSSH"
 msgstr "As alterações entram em vigor após reiniciar o AxSSH"
 
 msgctxt "settings-search"
+msgid "Choose a file when several are found"
+msgstr "Escolha um arquivo se vários forem encontrados"
+
+msgctxt "settings-search"
 msgid "Choose copy or paste behavior for terminal right click"
 msgstr "Escolher copiar ou colar ao clicar com o botão direito no terminal"
 
@@ -1840,6 +1865,10 @@ msgstr "Paleta clara personalizada"
 msgctxt "settings-search"
 msgid "Default terminal size"
 msgstr "Tamanho padrão do terminal"
+
+msgctxt "settings-search"
+msgid "Detected XLaunch configurations"
+msgstr "Configurações do XLaunch detectadas"
 
 msgctxt "settings-search"
 msgid "Detected locations"
@@ -1908,6 +1937,14 @@ msgstr "Iniciar um executável personalizado de servidor X"
 msgctxt "settings-search"
 msgid "Launch the selected X server only when needed"
 msgstr "Iniciar o servidor X selecionado somente quando necessário"
+
+msgctxt "settings-search"
+msgid "Leave empty to detect Xming or VcXsrv automatically"
+msgstr "Deixe vazio para detectar Xming ou VcXsrv automaticamente"
+
+msgctxt "settings-search"
+msgid "Leave empty to find .xlaunch files; use Start no client"
+msgstr "Deixe vazio para buscar .xlaunch sem iniciar um cliente"
 
 msgctxt "settings-search"
 msgid "Line height"
@@ -2158,12 +2195,20 @@ msgid "Workspace tab width"
 msgstr "Largura das abas do espaço de trabalho"
 
 msgctxt "settings-search"
+msgid "X server executable"
+msgstr "Executável do servidor X"
+
+msgctxt "settings-search"
 msgid "X server used by forwarded graphical applications"
 msgstr "Servidor X usado por aplicativos gráficos encaminhados"
 
 msgctxt "settings-search"
 msgid "X11"
 msgstr "X11"
+
+msgctxt "settings-search"
+msgid "XLaunch configuration"
+msgstr "Configuração do XLaunch"
 
 msgctxt "settings-search"
 msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"

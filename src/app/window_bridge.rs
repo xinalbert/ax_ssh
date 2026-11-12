@@ -220,6 +220,7 @@ fn initialize_detached_component(ui: &AppWindow, state: &Arc<Mutex<AppState>>) -
     ui.set_local_shell_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     ui.set_x11_server_provider_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     ui.set_x11_server_installations(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+    ui.set_x11_config_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     ui.set_application_font_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     ui.set_terminal_font_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     let default_shortcuts = ShortcutSettings::default();
@@ -256,6 +257,7 @@ pub(super) fn release_window_resources(ui: &AppWindow) {
     ui.set_local_shell_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     ui.set_x11_server_provider_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     ui.set_x11_server_installations(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+    ui.set_x11_config_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     ui.set_application_font_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     ui.set_terminal_font_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     ui.set_terminal_panes(ModelRc::new(VecModel::from(Vec::<TerminalPaneView>::new())));

@@ -201,6 +201,21 @@
   ],
   [
     "X11",
+    "X server executable",
+    "Leave empty to detect Xming or VcXsrv automatically"
+  ],
+  [
+    "X11",
+    "XLaunch configuration",
+    "Leave empty to find .xlaunch files; use Start no client"
+  ],
+  [
+    "X11",
+    "Detected XLaunch configurations",
+    "Choose a file when several are found"
+  ],
+  [
+    "X11",
     "Start for first X11 application",
     "Launch the selected X server only when needed"
   ],

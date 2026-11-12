@@ -140,6 +140,8 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
     );
     ui.set_x11_server_provider_index(ax_ssh::x_server::provider_index(settings.x11.provider));
     ui.set_x11_server_app_path(settings.x11.app_path.clone().into());
+    ui.set_x11_windows_app_path(settings.x11.windows_app_path.clone().into());
+    ui.set_x11_config_path(settings.x11.xlaunch_config_path.clone().into());
     ui.set_x11_launch_on_connect(settings.x11.launch_on_connect);
     ui.set_x11_allow_no_auth(settings.x11.allow_no_auth);
     ui.set_scrollback_lines(settings.terminal.scrollback_lines as i32);

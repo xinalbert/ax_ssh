@@ -208,6 +208,9 @@ msgstr "Изменения вступят в силу после перезап�
 msgid "Choose Custom to launch this path without a command shell"
 msgstr "Выберите «Свой», чтобы запустить этот путь без командной оболочки"
 
+msgid "Choose a file when several are found"
+msgstr "Выберите файл, если найдено несколько"
+
 msgid "Choose how this connection appears in the workspace."
 msgstr "Выберите, как это подключение отображается в рабочей области."
 
@@ -414,6 +417,9 @@ msgstr "Назначение: {0}"
 
 msgid "Detect again on next connection"
 msgstr "Определить заново при следующем подключении"
+
+msgid "Detected XLaunch configurations"
+msgstr "Найденные конфигурации XLaunch"
 
 msgid "Detected key"
 msgstr "Обнаруженный ключ"
@@ -661,6 +667,12 @@ msgstr "Изображения слоёв (резервный вариант)"
 msgid "Leave blank to keep saved password"
 msgstr "Оставьте пустым, чтобы сохранить прежний пароль"
 
+msgid "Leave empty to detect Xming or VcXsrv automatically"
+msgstr "Оставьте пустым для автоматического поиска Xming или VcXsrv"
+
+msgid "Leave empty to find .xlaunch files; use Start no client"
+msgstr "Оставьте пустым для поиска .xlaunch без запуска клиента"
+
 msgid "License"
 msgstr "Лицензия"
 
@@ -879,6 +891,9 @@ msgstr "Option как Meta"
 
 msgid "Optional"
 msgstr "Необязательно"
+
+msgid "Optional .xlaunch path"
+msgstr "Необязательный путь к .xlaunch"
 
 msgid "Optional; blank enables local automatic unlock"
 msgstr "Необязательно; пустое значение включает автоматическую локальную разблокировку"
@@ -1627,6 +1642,9 @@ msgstr "Путь к файлу рабочей области"
 msgid "Workspace tab width"
 msgstr "Ширина вкладки рабочей области"
 
+msgid "X server executable"
+msgstr "Исполняемый файл X-сервера"
+
 msgid "X server used by forwarded graphical applications"
 msgstr "X-сервер для перенаправленных графических приложений"
 
@@ -1635,6 +1653,9 @@ msgstr "X11"
 
 msgid "X11 forwarding"
 msgstr "Перенаправление X11"
+
+msgid "XLaunch configuration"
+msgstr "Конфигурация XLaunch"
 
 msgid "lines"
 msgstr "строк"
@@ -1786,6 +1807,10 @@ msgid "Changes take effect after restarting AxSSH"
 msgstr "Изменения вступят в силу после перезапуска AxSSH"
 
 msgctxt "settings-search"
+msgid "Choose a file when several are found"
+msgstr "Выберите файл, если найдено несколько"
+
+msgctxt "settings-search"
 msgid "Choose copy or paste behavior for terminal right click"
 msgstr "Выбрать копирование или вставку по правому щелчку в терминале"
 
@@ -1840,6 +1865,10 @@ msgstr "Своя светлая палитра"
 msgctxt "settings-search"
 msgid "Default terminal size"
 msgstr "Размер терминала по умолчанию"
+
+msgctxt "settings-search"
+msgid "Detected XLaunch configurations"
+msgstr "Найденные конфигурации XLaunch"
 
 msgctxt "settings-search"
 msgid "Detected locations"
@@ -1908,6 +1937,14 @@ msgstr "Запустить свой исполняемый файл X-серве
 msgctxt "settings-search"
 msgid "Launch the selected X server only when needed"
 msgstr "Запускать выбранный X-сервер только при необходимости"
+
+msgctxt "settings-search"
+msgid "Leave empty to detect Xming or VcXsrv automatically"
+msgstr "Оставьте пустым для автоматического поиска Xming или VcXsrv"
+
+msgctxt "settings-search"
+msgid "Leave empty to find .xlaunch files; use Start no client"
+msgstr "Оставьте пустым для поиска .xlaunch без запуска клиента"
 
 msgctxt "settings-search"
 msgid "Line height"
@@ -2158,12 +2195,20 @@ msgid "Workspace tab width"
 msgstr "Ширина вкладки рабочей области"
 
 msgctxt "settings-search"
+msgid "X server executable"
+msgstr "Исполняемый файл X-сервера"
+
+msgctxt "settings-search"
 msgid "X server used by forwarded graphical applications"
 msgstr "X-сервер для перенаправленных графических приложений"
 
 msgctxt "settings-search"
 msgid "X11"
 msgstr "X11"
+
+msgctxt "settings-search"
+msgid "XLaunch configuration"
+msgstr "Конфигурация XLaunch"
 
 msgctxt "settings-search"
 msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"

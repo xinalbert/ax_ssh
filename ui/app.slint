@@ -221,9 +221,12 @@ export component AppWindow inherits Window {
     in property <string> whisper-model;
     in property <[string]> x11-server-provider-options;
     in property <[string]> x11-server-installations;
+    in property <[string]> x11-config-options;
     in property <string> x11-server-provider: "auto";
     in property <int> x11-server-provider-index: 0;
     in property <string> x11-server-app-path: "";
+    in property <string> x11-windows-app-path: "";
+    in property <string> x11-config-path: "";
     in property <bool> x11-launch-on-connect: true;
     in property <bool> x11-allow-no-auth: false;
     out property <color> theme-terminal-foreground: Theme.terminal-foreground;
@@ -436,9 +439,12 @@ export component AppWindow inherits Window {
             terminal_mouse_local_selection_priority: root.terminal-mouse-local-selection-priority,
             x11_server_provider_options: root.x11-server-provider-options,
             x11_server_installations: root.x11-server-installations,
+            x11_config_options: root.x11-config-options,
             x11_server_provider: root.x11-server-provider,
             x11_server_provider_index: root.x11-server-provider-index,
             x11_server_app_path: root.x11-server-app-path,
+            x11_windows_app_path: root.x11-windows-app-path,
+            x11_config_path: root.x11-config-path,
             x11_launch_on_connect: root.x11-launch-on-connect,
             x11_allow_no_auth: root.x11-allow-no-auth,
             apple_platform: root.apple-platform, scrollback_lines: root.scrollback-lines,
@@ -537,7 +543,7 @@ export component AppWindow inherits Window {
         string, string, string, string, string, int, int, int, float, bool, bool, bool, bool, bool, int, int, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
-        bool, bool, bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
+        bool, bool, bool, bool, bool, bool, string, string, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
         string, bool, bool, string, int, int, int, int, int, string, bool,
     );
     callback save-audio-settings(int, int, string, string);
@@ -1017,7 +1023,7 @@ export component AppWindow inherits Window {
                           theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
                           theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
                           theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, terminal-mouse-local-selection-priority, option-as-meta, alternate-scroll-to-home, osc52-clipboard,
-                          x11-provider, x11-app-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows,
+                          x11-provider, x11-app-path, x11-windows-app-path, x11-config-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows,
                           sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key,
                           import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
                           sftp-filter-enabled, sftp-filter-use-platform-defaults, sftp-filter-custom-patterns,
@@ -1034,7 +1040,7 @@ export component AppWindow inherits Window {
                     theme-dark-muted, theme-dark-accent, theme-dark-success, theme-dark-danger,
                     theme-dark-overlay, theme-dark-terminal-foreground, theme-dark-terminal-background,
                     theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, terminal-mouse-local-selection-priority, option-as-meta, alternate-scroll-to-home, osc52-clipboard,
-                    x11-provider, x11-app-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows, sidebar,
+                    x11-provider, x11-app-path, x11-windows-app-path, x11-config-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows, sidebar,
                     tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key, import-key, export-key,
                     toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage, sftp-filter-enabled,
                     sftp-filter-use-platform-defaults, sftp-filter-custom-patterns, sftp-per-tab-transfers,

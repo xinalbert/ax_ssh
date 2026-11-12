@@ -264,6 +264,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
             .collect::<Vec<_>>(),
     )));
     ui.set_x11_server_installations(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+    ui.set_x11_config_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     ui.set_application_font_options(ModelRc::new(VecModel::from(font_option_rows(
         &settings.appearance.application_font_family,
         &[],

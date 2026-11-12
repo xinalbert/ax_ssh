@@ -47,6 +47,12 @@ pub struct X11Settings {
     pub provider: X11ServerProvider,
     #[serde(default)]
     pub app_path: String,
+    /// Executable override for an explicitly selected Xming or VcXsrv provider.
+    #[serde(default)]
+    pub windows_app_path: String,
+    /// Optional local-server settings imported from an XLaunch XML file.
+    #[serde(default)]
+    pub xlaunch_config_path: String,
     #[serde(default = "default_true")]
     pub launch_on_connect: bool,
     #[serde(default)]
@@ -57,12 +63,16 @@ impl X11Settings {
     pub fn normalized(
         provider: &str,
         app_path: &str,
+        windows_app_path: &str,
+        xlaunch_config_path: &str,
         launch_on_connect: bool,
         allow_no_auth: bool,
     ) -> Self {
         Self {
             provider: X11ServerProvider::from_setting(provider),
             app_path: normalize_x11_app_path(app_path),
+            windows_app_path: normalize_x11_app_path(windows_app_path),
+            xlaunch_config_path: normalize_x11_app_path(xlaunch_config_path),
             launch_on_connect,
             allow_no_auth,
         }
@@ -72,6 +82,8 @@ impl X11Settings {
         *self = Self::normalized(
             self.provider.as_setting(),
             &self.app_path,
+            &self.windows_app_path,
+            &self.xlaunch_config_path,
             self.launch_on_connect,
             self.allow_no_auth,
         );
@@ -83,6 +95,8 @@ impl Default for X11Settings {
         Self {
             provider: X11ServerProvider::Auto,
             app_path: String::new(),
+            windows_app_path: String::new(),
+            xlaunch_config_path: String::new(),
             launch_on_connect: true,
             allow_no_auth: false,
         }

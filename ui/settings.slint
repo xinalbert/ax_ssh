@@ -91,9 +91,12 @@ export struct SettingsViewState {
     whisper_model: string,
     x11_server_provider_options: [string],
     x11_server_installations: [string],
+    x11_config_options: [string],
     x11_server_provider: string,
     x11_server_provider_index: int,
     x11_server_app_path: string,
+    x11_windows_app_path: string,
+    x11_config_path: string,
     x11_launch_on_connect: bool,
     x11_allow_no_auth: bool,
     apple_platform: bool,
@@ -211,9 +214,12 @@ export component SettingsPane inherits Rectangle {
     private property <bool> option-as-meta: root.source.option_as_meta;
     private property <[string]> x11-server-provider-options: root.source.x11_server_provider_options;
     private property <[string]> x11-server-installations: root.source.x11_server_installations;
+    private property <[string]> x11-config-options: root.source.x11_config_options;
     private property <string> x11-server-provider: root.source.x11_server_provider;
     private property <int> x11-server-provider-index: root.source.x11_server_provider_index;
     private property <string> x11-server-app-path: root.source.x11_server_app_path;
+    private property <string> x11-windows-app-path: root.source.x11_windows_app_path;
+    private property <string> x11-config-path: root.source.x11_config_path;
     private property <bool> x11-launch-on-connect: root.source.x11_launch_on_connect;
     private property <bool> x11-allow-no-auth: root.source.x11_allow_no_auth;
     private property <bool> apple-platform: root.source.apple_platform;
@@ -261,7 +267,7 @@ export component SettingsPane inherits Rectangle {
         string, string, string, string, string, int, int, int, float, bool, bool, bool, bool, bool, int, int, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
-        bool, bool, bool, bool, bool, bool, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
+        bool, bool, bool, bool, bool, bool, string, string, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
         string, bool, bool, string, int, int, int, int, int, string, bool,
     );
     callback save-audio-settings(int, int, string, string);
@@ -348,6 +354,8 @@ export component SettingsPane inherits Rectangle {
     private property <string> draft-x11-server-provider: root.x11-server-provider;
     private property <int> draft-x11-server-provider-index: root.x11-server-provider-index;
     private property <string> draft-x11-server-app-path: root.x11-server-app-path;
+    private property <string> draft-x11-windows-app-path: root.x11-windows-app-path;
+    private property <string> draft-x11-config-path: root.x11-config-path;
     private property <bool> draft-x11-launch-on-connect: root.x11-launch-on-connect;
     private property <bool> draft-x11-allow-no-auth: root.x11-allow-no-auth;
     private property <int> draft-scrollback-lines: root.scrollback-lines;
@@ -483,6 +491,8 @@ export component SettingsPane inherits Rectangle {
             root.draft-osc52-clipboard,
             root.draft-x11-server-provider,
             root.draft-x11-server-app-path,
+            root.draft-x11-windows-app-path,
+            root.draft-x11-config-path,
             root.draft-x11-launch-on-connect,
             root.draft-x11-allow-no-auth,
             root.draft-local-shell,
@@ -572,6 +582,8 @@ export component SettingsPane inherits Rectangle {
     changed draft-osc52-clipboard => { root.schedule-preview(); }
     changed draft-x11-server-provider => { root.schedule-preview(); }
     changed draft-x11-server-app-path => { root.schedule-preview(); }
+    changed draft-x11-windows-app-path => { root.schedule-preview(); }
+    changed draft-x11-config-path => { root.schedule-preview(); }
     changed draft-x11-launch-on-connect => { root.schedule-preview(); }
     changed draft-x11-allow-no-auth => { root.schedule-preview(); }
     changed draft-scrollback-lines => { root.schedule-preview(); }
@@ -894,9 +906,12 @@ export component SettingsPane inherits Rectangle {
                         scroll-revision: root.section-scroll-revision;
                         provider-options: root.x11-server-provider-options;
                         discovered-installations: root.x11-server-installations;
+                        discovered-configurations: root.x11-config-options;
                         draft-provider <=> root.draft-x11-server-provider;
                         draft-provider-index <=> root.draft-x11-server-provider-index;
                         draft-app-path <=> root.draft-x11-server-app-path;
+                        draft-windows-app-path <=> root.draft-x11-windows-app-path;
+                        draft-config-path <=> root.draft-x11-config-path;
                         draft-launch-on-connect <=> root.draft-x11-launch-on-connect;
                         draft-allow-no-auth <=> root.draft-x11-allow-no-auth;
                     }

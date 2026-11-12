@@ -1572,7 +1572,8 @@ X11 forwarding is an SSH-profile mode: `off`, `untrusted` (`-X`), or `trusted`
 `true` migrate to `trusted`, while legacy `false` migrates to `off`. It applies
 only to terminal mode: SFTP-only, Telnet, and Serial workers never request X11.
 Global `X11Settings` stores only the non-secret provider,
-Custom-only application path, launch preference, and explicit no-auth
+Custom-only application path, explicit Windows-provider executable override,
+optional XLaunch configuration path, launch preference, and explicit no-auth
 compatibility choice. `src/x_server.rs` resolves Auto to platform providers,
 discovers macOS applications by bundle identifier through `NSWorkspace`,
 searches the Windows process `PATH` before Program Files, and returns a bounded
@@ -1583,6 +1584,27 @@ the system `DISPLAY` and Custom choices. Every known provider ignores a saved
 Custom path, and no provider is downloaded or installed. A Custom target is
 launched without a command shell and must be a regular file with executable
 permission on Unix.
+
+An explicitly selected Xming or VcXsrv uses `windows_app_path` before discovery;
+an empty override retains PATH/Program Files discovery. Auto ignores that
+override and `xlaunch_config_path`, as well as the separate legacy Custom path.
+An explicit configuration path wins. Otherwise a nonrecursive search prefers
+the actual program folder; only without candidates there does it search system
+Desktop/Documents folders. Enumeration is capped at 4096 entries per folder
+and eight candidates, with no guessing on limits or errors. A unique candidate
+is used automatically; multiple candidates require an explicit Settings choice.
+Settings discovery enumerates filenames only, with a 150ms debounce, three-second
+timeout, and X11-settings/Settings-lifetime checks before lookup and UI publication.
+It does not parse XML or probe endpoints. Closing Settings/windows clears the model.
+`src/x_server/windows.rs` imports the optional UTF-8 `.xlaunch` file during
+blocking local-server preparation (64 KiB maximum, bounded XML and arguments).
+It constructs server arguments directly for window mode, clipboard, Wgl,
+DisableAC and ExtraParams; XLaunch.exe is not required. Fixed display numbers
+select the corresponding loopback endpoint; `-1` selects an available display
+before launch. Files must use `ClientMode=NoClient`; program/XDMCP startup and
+additional parameters that override the endpoint are rejected. No-auth still
+requires the explicit compatibility choice. XML contents and credentials are
+not persisted or logged; only paths enter application settings.
 
 Trusted mode sends an X11 forwarding request with one random 128-bit fake cookie,
 but it does not read local `DISPLAY`, run `xauth`, probe a local endpoint, or

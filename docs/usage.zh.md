@@ -51,8 +51,20 @@ cargo run --locked
 
 在 **Settings > X11** 选择本机 server。macOS 提供 Auto、XQuartz、MacXServer、Custom；
 Windows 提供 Auto、VcXsrv、Xming、Custom；Linux 提供 System DISPLAY、Custom。已知 provider
-由 macOS 应用数据库或 Windows executable 搜索路径与 Program Files 自动定位，只有 Custom
-会显示检测到的安装位置；选择 Custom 后可自行提供 executable 路径。Trusted（`-Y`）模式的首个 X11 application 时启动
+由 macOS 应用数据库或 Windows executable 搜索路径与 Program Files 自动定位，设置页显示检测到的安装位置。
+Windows 非默认安装位置可直接选择 **Xming** 或 **VcXsrv**，在 **X 服务器可执行文件**
+中填写完整 `.exe` 路径，例如 `D:\Tools\Xming\Xming.exe`；留空继续自动发现。路径不需要
+外加引号，也不要附加命令参数。Custom 的“自定义可执行文件”继续使用独立路径。
+可选在 **XLaunch 配置文件** 中填写使用 **Start no client（不启动客户端）** 保存的 UTF-8
+`.xlaunch` 文件路径。AxSSH 读取其中的服务器设置和附加参数，支持固定或自动显示号，
+不依赖 XLaunch.exe，也不启动配置中的其它程序。若文件关闭访问控制，还需要显式开启下方的
+无 X authority 兼容选项。配置路径留空时，先在实际 Xming/VcXsrv 程序目录查找 `.xlaunch`；
+该目录没有候选时，再查系统桌面和文档目录。搜索只枚举当前目录，不递归或扫描全盘。
+唯一候选会自动使用；找到多个时，在 **检测到的 XLaunch 配置** 下拉框中明确选择，或手动填写路径。
+手动路径优先，未找到文件时使用 AxSSH 的默认 provider 参数；搜索有界，候选过多或目录过大时需填写路径。这些 Windows 覆盖只对
+明确选择的 provider 生效，Auto 保持自动发现。
+
+Trusted（`-Y`）模式的首个 X11 application 时启动
 默认开启：打开 SSH shell 只向服务端申请 forwarding，不会启动本机 X server。Untrusted（`-X`）模式在 host-key 验证和 SSH 认证完成后、发送 X11 forwarding request 前要求本机 X server 生成短时受限 authorization，
 因此可能在 shell 打开前准备或启动选中的本机 server；它绝不回退到 no-auth 或真实的 trusted cookie。Trusted 模式仍要求
 `xauth` 中存在精确的 `MIT-MAGIC-COOKIE-1`，XQuartz 和系统 X.Org/Xwayland 应使用该模式。

@@ -208,6 +208,9 @@ msgstr "Changes take effect after restarting AxSSH"
 msgid "Choose Custom to launch this path without a command shell"
 msgstr "Choose Custom to launch this path without a command shell"
 
+msgid "Choose a file when several are found"
+msgstr "Choose a file when several are found"
+
 msgid "Choose how this connection appears in the workspace."
 msgstr "Choose how this connection appears in the workspace."
 
@@ -414,6 +417,9 @@ msgstr "Destination: {0}"
 
 msgid "Detect again on next connection"
 msgstr "Detect again on next connection"
+
+msgid "Detected XLaunch configurations"
+msgstr "Detected XLaunch configurations"
 
 msgid "Detected key"
 msgstr "Detected key"
@@ -661,6 +667,12 @@ msgstr "Layer images (fallback)"
 msgid "Leave blank to keep saved password"
 msgstr "Leave blank to keep saved password"
 
+msgid "Leave empty to detect Xming or VcXsrv automatically"
+msgstr "Leave empty to detect Xming or VcXsrv automatically"
+
+msgid "Leave empty to find .xlaunch files; use Start no client"
+msgstr "Leave empty to find .xlaunch files; use Start no client"
+
 msgid "License"
 msgstr "Licence"
 
@@ -879,6 +891,9 @@ msgstr "Option acts as Meta"
 
 msgid "Optional"
 msgstr "Optional"
+
+msgid "Optional .xlaunch path"
+msgstr "Optional .xlaunch path"
 
 msgid "Optional; blank enables local automatic unlock"
 msgstr "Optional; blank enables local automatic unlock"
@@ -1627,6 +1642,9 @@ msgstr "Workspace file path"
 msgid "Workspace tab width"
 msgstr "Workspace tab width"
 
+msgid "X server executable"
+msgstr "X server executable"
+
 msgid "X server used by forwarded graphical applications"
 msgstr "X server used by forwarded graphical applications"
 
@@ -1635,6 +1653,9 @@ msgstr "X11"
 
 msgid "X11 forwarding"
 msgstr "X11 forwarding"
+
+msgid "XLaunch configuration"
+msgstr "XLaunch configuration"
 
 msgid "lines"
 msgstr "lines"
@@ -1786,6 +1807,10 @@ msgid "Changes take effect after restarting AxSSH"
 msgstr "Changes take effect after restarting AxSSH"
 
 msgctxt "settings-search"
+msgid "Choose a file when several are found"
+msgstr "Choose a file when several are found"
+
+msgctxt "settings-search"
 msgid "Choose copy or paste behavior for terminal right click"
 msgstr "Choose copy or paste behaviour for terminal right click"
 
@@ -1840,6 +1865,10 @@ msgstr "Custom light palette"
 msgctxt "settings-search"
 msgid "Default terminal size"
 msgstr "Default terminal size"
+
+msgctxt "settings-search"
+msgid "Detected XLaunch configurations"
+msgstr "Detected XLaunch configurations"
 
 msgctxt "settings-search"
 msgid "Detected locations"
@@ -1908,6 +1937,14 @@ msgstr "Launch a custom X server executable"
 msgctxt "settings-search"
 msgid "Launch the selected X server only when needed"
 msgstr "Launch the selected X server only when needed"
+
+msgctxt "settings-search"
+msgid "Leave empty to detect Xming or VcXsrv automatically"
+msgstr "Leave empty to detect Xming or VcXsrv automatically"
+
+msgctxt "settings-search"
+msgid "Leave empty to find .xlaunch files; use Start no client"
+msgstr "Leave empty to find .xlaunch files; use Start no client"
 
 msgctxt "settings-search"
 msgid "Line height"
@@ -2158,12 +2195,20 @@ msgid "Workspace tab width"
 msgstr "Workspace tab width"
 
 msgctxt "settings-search"
+msgid "X server executable"
+msgstr "X server executable"
+
+msgctxt "settings-search"
 msgid "X server used by forwarded graphical applications"
 msgstr "X server used by forwarded graphical applications"
 
 msgctxt "settings-search"
 msgid "X11"
 msgstr "X11"
+
+msgctxt "settings-search"
+msgid "XLaunch configuration"
+msgstr "XLaunch configuration"
 
 msgctxt "settings-search"
 msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"

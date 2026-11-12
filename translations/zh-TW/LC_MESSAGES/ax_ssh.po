@@ -208,6 +208,9 @@ msgstr "重啟 AxSSH 後生效"
 msgid "Choose Custom to launch this path without a command shell"
 msgstr "選擇“自定義”以直接啟動此路徑，不經過命令 Shell"
 
+msgid "Choose a file when several are found"
+msgstr "找到多個檔案時請選擇一個"
+
 msgid "Choose how this connection appears in the workspace."
 msgstr "選擇此連線在工作區中的顯示方式。"
 
@@ -414,6 +417,9 @@ msgstr "目的地：{0}"
 
 msgid "Detect again on next connection"
 msgstr "下次連線時重新識別"
+
+msgid "Detected XLaunch configurations"
+msgstr "偵測到的 XLaunch 設定"
 
 msgid "Detected key"
 msgstr "檢測到的金鑰"
@@ -661,6 +667,12 @@ msgstr "圖層影象（回退）"
 msgid "Leave blank to keep saved password"
 msgstr "留空以保留已儲存的密碼"
 
+msgid "Leave empty to detect Xming or VcXsrv automatically"
+msgstr "留空時自動偵測 Xming 或 VcXsrv"
+
+msgid "Leave empty to find .xlaunch files; use Start no client"
+msgstr "留空時自動尋找 .xlaunch；請使用「不啟動用戶端」設定"
+
 msgid "License"
 msgstr "許可證"
 
@@ -879,6 +891,9 @@ msgstr "Option 作為 Meta"
 
 msgid "Optional"
 msgstr "可選"
+
+msgid "Optional .xlaunch path"
+msgstr "選填的 .xlaunch 檔案路徑"
 
 msgid "Optional; blank enables local automatic unlock"
 msgstr "可選；留空啟用本地自動解鎖"
@@ -1627,6 +1642,9 @@ msgstr "工作區檔案路徑"
 msgid "Workspace tab width"
 msgstr "工作區分頁寬度"
 
+msgid "X server executable"
+msgstr "X 伺服器執行檔"
+
 msgid "X server used by forwarded graphical applications"
 msgstr "轉發圖形應用使用的 X server"
 
@@ -1635,6 +1653,9 @@ msgstr "X11"
 
 msgid "X11 forwarding"
 msgstr "X11 轉發"
+
+msgid "XLaunch configuration"
+msgstr "XLaunch 設定檔"
 
 msgid "lines"
 msgstr "行"
@@ -1786,6 +1807,10 @@ msgid "Changes take effect after restarting AxSSH"
 msgstr "重啟 AxSSH 後生效"
 
 msgctxt "settings-search"
+msgid "Choose a file when several are found"
+msgstr "找到多個檔案時請選擇一個"
+
+msgctxt "settings-search"
 msgid "Choose copy or paste behavior for terminal right click"
 msgstr "選擇終端機右鍵行為"
 
@@ -1840,6 +1865,10 @@ msgstr "自定義淺色配色"
 msgctxt "settings-search"
 msgid "Default terminal size"
 msgstr "預設終端機大小"
+
+msgctxt "settings-search"
+msgid "Detected XLaunch configurations"
+msgstr "偵測到的 XLaunch 設定"
 
 msgctxt "settings-search"
 msgid "Detected locations"
@@ -1908,6 +1937,14 @@ msgstr "啟動自定義 X server 程式"
 msgctxt "settings-search"
 msgid "Launch the selected X server only when needed"
 msgstr "僅在需要時啟動所選 X server"
+
+msgctxt "settings-search"
+msgid "Leave empty to detect Xming or VcXsrv automatically"
+msgstr "留空時自動偵測 Xming 或 VcXsrv"
+
+msgctxt "settings-search"
+msgid "Leave empty to find .xlaunch files; use Start no client"
+msgstr "留空時自動尋找 .xlaunch；請使用「不啟動用戶端」設定"
 
 msgctxt "settings-search"
 msgid "Line height"
@@ -2158,12 +2195,20 @@ msgid "Workspace tab width"
 msgstr "工作區標籤寬度"
 
 msgctxt "settings-search"
+msgid "X server executable"
+msgstr "X 伺服器執行檔"
+
+msgctxt "settings-search"
 msgid "X server used by forwarded graphical applications"
 msgstr "轉發圖形應用使用的 X server"
 
 msgctxt "settings-search"
 msgid "X11"
 msgstr "X11"
+
+msgctxt "settings-search"
+msgid "XLaunch configuration"
+msgstr "XLaunch 設定檔"
 
 msgctxt "settings-search"
 msgid "macOS CPU presentation path; changes take effect after restarting AxSSH"

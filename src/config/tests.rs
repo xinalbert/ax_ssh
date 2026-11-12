@@ -1991,8 +1991,14 @@ fn x11_forwarding_mode_migrates_legacy_toggles_and_round_trips_without_a_secret(
 
 #[test]
 fn x11_settings_normalize_and_round_trip_without_secret_material() {
-    let settings =
-        X11Settings::normalized("MacXServer", "  /Applications/MacXServer.app  ", true, true);
+    let settings = X11Settings::normalized(
+        "MacXServer",
+        "  /Applications/MacXServer.app  ",
+        "",
+        "",
+        true,
+        true,
+    );
     assert_eq!(settings.provider, X11ServerProvider::MacXServer);
     assert_eq!(settings.app_path, "/Applications/MacXServer.app");
     assert!(settings.launch_on_connect);
@@ -2006,6 +2012,34 @@ fn x11_settings_normalize_and_round_trip_without_secret_material() {
 
     let defaults: X11Settings = serde_json::from_str("{}").expect("defaults should load");
     assert_eq!(defaults, X11Settings::default());
+}
+
+#[test]
+fn x11_windows_paths_survive_persistence_and_default_for_older_settings() {
+    let settings = X11Settings::normalized(
+        "xming",
+        "/previous/custom",
+        "  D:/X servers/Xming.exe  ",
+        "  D:/X settings/work.xlaunch  ",
+        true,
+        false,
+    );
+    assert_eq!(settings.windows_app_path, "D:/X servers/Xming.exe");
+    assert_eq!(settings.xlaunch_config_path, "D:/X settings/work.xlaunch");
+    let mut store = SessionStore::default();
+    store.settings.x11 = settings.clone();
+    let root = std::env::temp_dir().join(format!("axssh-x11-settings-{}", Uuid::new_v4()));
+    let config = ConfigStore::new(root.join("sessions.json"));
+    config.save(&store).expect("X11 paths should persist");
+    assert_eq!(config.load().unwrap().settings.x11, settings);
+    std::fs::remove_dir_all(root).unwrap();
+    let old: X11Settings =
+        serde_json::from_str(r#"{"provider":"xming","app_path":"/previous/custom"}"#).unwrap();
+    assert!(old.windows_app_path.is_empty());
+    assert!(old.xlaunch_config_path.is_empty());
+    let invalid = X11Settings::normalized("xming", "", "bad\npath", "bad\0path", true, false);
+    assert!(invalid.windows_app_path.is_empty());
+    assert!(invalid.xlaunch_config_path.is_empty());
 }
 
 #[test]

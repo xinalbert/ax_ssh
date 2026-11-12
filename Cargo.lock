@@ -501,6 +501,7 @@ dependencies = [
  "rand",
  "raw-window-handle",
  "regex",
+ "roxmltree 0.21.2",
  "rubato",
  "russh",
  "russh-sftp",

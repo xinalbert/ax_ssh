@@ -101,12 +101,34 @@ pub(in crate::app) fn load_x11_server_installations(
     state: Arc<Mutex<AppState>>,
     ui: slint::Weak<AppWindow>,
 ) {
+    let settings = match state.lock() {
+        Ok(app) => app.sessions.settings.x11.clone(),
+        Err(_) => return,
+    };
+    dispatch_ui(&ui, |ui| {
+        ui.set_x11_config_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+    });
     runtime.spawn(async move {
-        let discovery =
-            tokio::task::spawn_blocking(ax_ssh::x_server::discovered_provider_locations);
-        match tokio::time::timeout(std::time::Duration::from_secs(3), discovery).await {
-            Ok(Ok(locations)) => dispatch_ui(&ui, move |ui| {
-                if !state.lock().is_ok_and(|app| app.has_settings_tab()) {
+        // Debounce path edits and recheck before entering the blocking lookup.
+        tokio::time::sleep(std::time::Duration::from_millis(150)).await;
+        if !state
+            .lock()
+            .is_ok_and(|app| app.has_settings_tab() && app.sessions.settings.x11 == settings)
+        {
+            return;
+        }
+        let requested_settings = settings.clone();
+        let mut discovery = tokio::task::spawn_blocking(move || {
+            (
+                ax_ssh::x_server::discovered_provider_locations(),
+                ax_ssh::x_server::discovered_xlaunch_configurations(&requested_settings),
+            )
+        });
+        match tokio::time::timeout(std::time::Duration::from_secs(3), &mut discovery).await {
+            Ok(Ok((locations, configurations))) => dispatch_ui(&ui, move |ui| {
+                if !state.lock().is_ok_and(|app| {
+                    app.has_settings_tab() && app.sessions.settings.x11 == settings
+                }) {
                     return;
                 }
                 ui.set_x11_server_installations(ModelRc::new(VecModel::from(
@@ -115,9 +137,27 @@ pub(in crate::app) fn load_x11_server_installations(
                         .map(SharedString::from)
                         .collect::<Vec<_>>(),
                 )));
+                let configurations = match configurations {
+                    Ok(paths) => paths,
+                    Err(error) => {
+                        warn!(%error, "XLaunch configuration discovery failed");
+                        Vec::new()
+                    }
+                };
+                ui.set_x11_config_options(ModelRc::new(VecModel::from(
+                    configurations
+                        .into_iter()
+                        .map(SharedString::from)
+                        .collect::<Vec<_>>(),
+                )));
             }),
             Ok(Err(error)) => warn!(%error, "X server location discovery task failed"),
-            Err(_) => warn!("X server location discovery timed out"),
+            Err(_) => {
+                // Abort queued work; a running bounded filesystem lookup can
+                // finish without retaining or publishing to the component.
+                discovery.abort();
+                warn!("X server location discovery timed out");
+            }
         }
     });
 }
@@ -194,6 +234,7 @@ pub(in crate::app) fn clear_settings_option_models(
         ui.set_terminal_font_index(terminal_index);
         ui.set_local_shell_options(ModelRc::new(VecModel::from(shell_options)));
         ui.set_x11_server_installations(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
+        ui.set_x11_config_options(ModelRc::new(VecModel::from(Vec::<SharedString>::new())));
     });
 }
 

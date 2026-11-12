@@ -82,8 +82,26 @@ Choose the local server under **Settings > X11**. macOS offers Auto, XQuartz,
 MacXServer, and Custom; Windows offers Auto, VcXsrv, Xming, and Custom; Linux
 offers System DISPLAY and Custom. AxSSH locates known providers through the
 macOS application database or the Windows executable search path and Program
-Files and displays the detected locations in Settings; choose Custom to provide
-an executable path yourself. Trusted (`-Y`) forwarding keeps first-X11-
+Files and displays the detected locations in Settings. For a nonstandard Windows
+installation, select **Xming** or **VcXsrv** and enter the complete `.exe` path
+in **X server executable**, for example `D:\Tools\Xming\Xming.exe`. Leave it empty
+to retain automatic discovery; paths in these fields need no surrounding quotes
+or command-line arguments. **Custom executable** remains a separate setting for
+the Custom provider. Optionally enter a UTF-8 `.xlaunch` file in **XLaunch
+configuration**, saved with **Start no client**. AxSSH imports its server
+settings and additional server parameters, including fixed or automatic display
+selection; it does not need XLaunch.exe or start programs from the file. A file
+that disables access control also requires the explicit compatibility option
+below. Leave the configuration path empty to search the actual Xming/VcXsrv
+program folder first, then the system Desktop and Documents folders if the
+program folder has no candidates. Discovery is nonrecursive. One candidate is
+used automatically; for several candidates, select one under **Detected XLaunch
+configurations** or enter its path. A manually entered path takes precedence;
+no candidates retains AxSSH's usual provider arguments. Discovery is bounded;
+too many files or an oversized directory requires an explicit path.
+These Windows overrides apply to the explicitly selected provider, not Auto.
+
+Trusted (`-Y`) forwarding keeps first-X11-
 application startup enabled by default: opening an SSH shell only asks the
 server for forwarding and never starts a local X server. Untrusted (`-X`)
 forwarding asks the local X server to generate a short-lived restricted
