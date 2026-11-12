@@ -149,7 +149,7 @@
 | `src/terminal/input.rs` | 与 UI 无关的终端按键编码 | `TerminalKey`、`TerminalModifiers`、`encode_key` | 控制字节、application-cursor Home/End、导航/Function 键和 xterm 修饰序列；不提供 application-keypad/SS3 专用编码 |
 | `src/local_shell.rs` | 本地 PTY 进程与线程生命周期 | `LocalShellHandle`、`force_kill_child`、`terminate_child`、`send_event_with_cancellation`、`configure_local_pty_output_modes`、`configure_local_shell_command`、`configure_local_shell_locale` | 每个 Tab 独占 child/killer/process-group、reader/writer、取消感知的有界事件反压和 owned joins；Unix 在 native PTY 创建后、shell 启动前启用 `OPOST | ONLCR`，由 PTY 行规程将普通输出的 `LF` 映射为 `CRLF`；输入/resize/shutdown/reader close 通过有界命令通道唤醒，空闲 child 每秒兜底检查，reader EOF 后最多一秒使用 25ms 快速确认；相同行列不唤醒 worker，取消优先放弃未投递事件，process-group 终止成功后不等待 child-killer，shutdown 不遗留 detached blocking join；shell 启动按平台判断：macOS 缺失 `SHELL` 时回退 `/bin/zsh`，zsh 使用 `-l` 加载 login 配置并按需补 Homebrew PATH；Unix 子进程的 C/空 locale 在启动前规范化为 UTF-8，已有 UTF-8 locale 保持不变；Linux/其他 Unix 不强制 login 参数，Windows 保留 cmd/PowerShell 原生 profile 行为 |
 | `src/logging.rs` | 进程级 tracing 与 crash 诊断生命周期 | `LoggingGuard`、滚动 writer、panic hook | 日志目录、过滤、保留、退出 flush、私有 `ax_ssh-crash.log` 同步报告，以及向 About 提供已创建目录 |
-| `src/x_server.rs` | 跨平台本机 X server 选择、位置快照与启动边界 | `provider_options`、`provider_index`、`discovered_provider_locations`、`XServerPlan` | macOS bundle/Windows PATH 与 Program Files 系统发现、只读已知位置快照、Custom executable、display 候选和 Trusted 首个通过 cookie 校验的 X11 channel 时的有界启动；Untrusted 在请求前准备受限授权；不持有 SSH channel、cookie 或 UI 状态 |
+| `src/x_server.rs` 与 `src/x_server/windows.rs` | 跨平台本机 X server 选择、位置快照与启动边界 | `provider_options`、`provider_index`、`discovered_provider_locations`、`discovered_xlaunch_configurations`、`XServerPlan`、`WindowsLaunchConfig` | macOS bundle/Windows PATH 与 Program Files 系统发现、显式 Xming/VcXsrv 程序路径覆盖、独立 Custom 路径、程序/桌面/文档非递归 .xlaunch 发现、唯一采用/多候选选择及有界本机 server 配置解析、显示号和直接启动；Trusted 在首个通过 cookie 校验的 X11 channel 时准备，Untrusted 在请求前准备受限授权；不持有 SSH channel、cookie 或 UI 状态，不执行 XLaunch 的程序/远端登录 |
 | `src/ssh.rs` | russh 0.65.0 传输、host-key trust 与受限系统 release 探测 | `ClientHandler`、`PublicKeyOrCertificate`、`SshConnection`、`SshSessionHandle`、`read_system_release`、`probe_host_key`、known_hosts append/remove helpers | `TCP_NODELAY`、交互 PTY 的 `OPOST/ONLCR`、profile 指纹与系统 OpenSSH `known_hosts` 快照、unknown/changed/revoked 分类、证书 deny-by-default、密码/私钥/运行时 agent 认证、最多 5 个 agent identity 与 30 秒总上限、独立 exec channel 的四秒/2 KiB release 探测、默认拒绝/有界转交服务端 X11 channel、取消和连接 worker；不保存 agent 端点/identity、X11 cookie、release 原文之外的秘密或凭据 |
 | `src/ssh/known_hosts.rs` | OpenSSH known_hosts 解析与显式记录管理 | `Snapshot`、`TrustDecision`、atomic append/remove | 有界文件读取、host/port/alias/wildcard/negative/hashed 匹配、multiple keys、`@revoked` 优先拒绝、坏行只收窄信任；不接触 Slint、凭据或 live russh handles |
 | `src/ssh/private_keys.rs` | 本机私钥边界 | `discover_private_keys`、`load_private_key` | `.ssh` 发现、blocking 加载和 `Zeroizing` passphrase |
@@ -252,9 +252,9 @@
 ## 刷新规则
 
 - 刷新触发：新增/删除模块、入口、跨层契约、构建/CI 或持久化事实时更新相应路径和定位；功能实现和验证历史追加到月度记录。
-- 最近依据：2026-11-11 CI/Release 直接 CLI RustSec 审计与最小权限；当前页完整传输控制、应用批次取消代次和 loopback 回归，当前 transport 的 SFTP 初始化会话复用、单文件启动及额度/失效回归；保留子系统确认/初始化恢复、签名、凭据及侧栏改动。
+- 最近依据：2026-11-12 Xming/VcXsrv 独立程序路径、.xlaunch 自动发现/候选选择与有界 server 配置导入；2026-11-11 CI/Release 直接 CLI RustSec 审计与最小权限；当前页完整传输控制、应用批次取消代次和 loopback 回归，当前 transport 的 SFTP 初始化会话复用、单文件启动及额度/失效回归；保留子系统确认/初始化恢复、签名、凭据及侧栏改动。
 - 地图只保留当前路由，不继续累积旧任务的“当前/最近”段落。此前地图逐字保存在[历史地图快照](project-map-before-2026-10-20.md)，实施状态见 [current.md](current.md)，历史见 [changes/2026/11.md](changes/2026/11.md)。
 
 ## 最后更新时间
 
-- 2026-11-11 16:54 +0800
+- 2026-11-12 09:27 +0800

@@ -903,3 +903,13 @@
 - 关键结论：失败 annotation 为更新 Check 时返回 Not Found，job 原已有 checks: write；reporter 会额外创建/更新 Security audit Check，并把 API 失败作为 action 失败。6 条 unmaintained 警告本身不是漏洞失败。同 commit Release audit 成功，且其开始晚于失败 CI audit 结束，不能归因为两次审计同时更新。本机直接 CLI 保留唯一 RSA 例外时退出 0、输出同样 6 条警告；不传例外并复用已更新数据库时检出 RUSTSEC-2023-0071，退出 1。
 - 对实施计划的影响：CI/Release 一致使用固定 SHA 的 install-action v2.90.3 安装 cargo-audit 0.22.2，禁止 fallback、保留默认下载校验，直接审计 Cargo.lock 并移除 Check 写权限；保留漏洞失败、联网失败和现有 RSA 例外，发布构建仍依赖 audit 成功。
 - 未解决问题：GitHub 404 的具体服务端原因未证明；公共 API 后续请求受未认证限流影响。新 workflow 的 Ubuntu 执行需推送后验证，本机通过不替代远端运行；已有 tag/run 不会使用本地修改。
+
+## 2026-11-12 Xming/VcXsrv 非默认位置与 XLaunch 配置
+
+- 时间：2026-11-12 09:08 +0800
+- 检索问题：如何保留非默认安装位置的 provider 参数，并读取 .xlaunch 的显示号和服务器设置？
+- 检索原因：用户要求修复 Xming 路径被忽略、Custom 丢失启动参数及不能加载 .xlaunch 的限制。
+- 来源列表：[VcXsrv 官方使用说明](https://sourceforge.net/p/vcxsrv/wiki/Using%20VcXsrv%20Windows%20X%20Server/)、[上游配置读写](https://github.com/marchaesen/vcxsrv/blob/master/xorg-server/hw/xwin/xlaunch/config.cc)、[上游启动实现](https://github.com/marchaesen/vcxsrv/blob/master/xorg-server/hw/xwin/xlaunch/main.cc)、[Windows C 参数引号规则](https://learn.microsoft.com/en-us/cpp/c-language/parsing-c-command-line-arguments?view=msvc-170)。
+- 关键结论：XLaunch 保存 XML，包含 WindowMode、ClientMode、Display、Clipboard、ClipboardPrimary、Wgl、DisableAC、ExtraParams；它除启动服务器外，还能启动本地/远端程序。Display=-1 采用自动显示号。直接运行 XLaunch -run 会让 AxSSH 无法可靠获取自动显示号，因此读取本机服务器字段并构造独立参数更符合现有 endpoint/信任所有权。
+- 对实施计划的影响：增加独立 windows_app_path 与 xlaunch_config_path，保留旧 Custom 字段；明确选择 Xming/VcXsrv 才应用覆盖。只接受 NoClient 配置，固定显示号参与候选，自动显示号在启动前选择；附加参数按 Windows C 规则解析，无 shell，no-auth 仍需显式选择。XML parser 复用锁文件中已有 roxmltree 0.21.2，无版本升级。
+- 未解决问题：Xming 官网本次返回 502；依据共享格式及上游 VcXsrv 实现，Xming 的不同版本和 Windows 原生启动仍需实机验证。本机配置解析/参数测试不替代 GUI 或真实 X server 验收。
