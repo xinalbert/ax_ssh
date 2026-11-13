@@ -208,7 +208,11 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     let state = Arc::new(Mutex::new(AppState::new(config, sessions)));
     let restore_font_registry = font_registry.clone();
     let restore_terminal_font_started = Arc::new(AtomicBool::new(false));
-    let ui = AppWindow::new()
+    #[cfg(target_os = "macos")]
+    let create_window = || macos_window::with_main_window_attributes(AppWindow::new);
+    #[cfg(not(target_os = "macos"))]
+    let create_window = AppWindow::new;
+    let ui = create_window()
         .inspect_err(|error| {
             if log_renderer_fault("create-main-window", error) {
                 persist_renderer_fallback(&log_directory, renderer_preference, error);
@@ -362,7 +366,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         window_router.clone(),
         MAIN_WINDOW_ID,
         #[cfg(target_os = "macos")]
-        macos_window_ready_callback(&ui, &window_router, MAIN_WINDOW_ID, main_placement),
+        macos_window_ready_callback(&ui, &window_router, MAIN_WINDOW_ID, main_placement, false),
     );
     if let Some(snapshot) = workspace_snapshot.as_ref() {
         restore_detached_workspaces(

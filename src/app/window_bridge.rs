@@ -4,6 +4,8 @@ use std::path::Path;
 
 use i_slint_core::context::set_window_event_hook;
 use i_slint_core::platform::WindowEvent;
+#[cfg(target_os = "macos")]
+use slint::Color;
 
 use super::*;
 
@@ -43,6 +45,8 @@ pub(super) fn restore_detached_workspaces(
         let Some((transfer, pane_tree)) = restored_detached_route(window, &available_tabs) else {
             continue;
         };
+        #[cfg(target_os = "macos")]
+        let show_terminal_actions = pane_tree.is_some();
         let detached_ui = match AppWindow::new().and_then(|ui| {
             initialize_detached_component(&ui, state)
                 .map_err(|error| slint::PlatformError::from(error.to_string()))?;
@@ -104,6 +108,7 @@ pub(super) fn restore_detached_workspaces(
                 window_router,
                 new_window_id,
                 window.placement,
+                show_terminal_actions,
             ),
         );
         refresh_workspace(&detached_ui.as_weak(), state);
@@ -564,6 +569,8 @@ pub(super) fn wire_window_actions(
                     return;
                 }
             };
+            #[cfg(target_os = "macos")]
+            let show_terminal_titlebar_actions = pane_tree.is_some();
             router_for_show.register_detached(
                 detached_id,
                 detached_ui.as_weak(),
@@ -607,7 +614,13 @@ pub(super) fn wire_window_actions(
                 router_for_show.clone(),
                 detached_id,
                 #[cfg(target_os = "macos")]
-                macos_window_ready_callback(&detached_ui, &router_for_show, detached_id, None),
+                macos_window_ready_callback(
+                    &detached_ui,
+                    &router_for_show,
+                    detached_id,
+                    None,
+                    show_terminal_titlebar_actions,
+                ),
             );
             router_for_show.finish_detach(detach_token);
             refresh_workspace(&detached_ui.as_weak(), &state_for_show);
@@ -696,6 +709,7 @@ pub(super) fn macos_window_ready_callback(
     router: &WindowRouter,
     window_id: Uuid,
     placement: Option<ax_ssh::config::WindowPlacement>,
+    show_terminal_actions: bool,
 ) -> Box<dyn FnOnce()> {
     let ui = ui.as_weak();
     let router = router.clone();
@@ -707,14 +721,89 @@ pub(super) fn macos_window_ready_callback(
             if let Err(error) = macos_window::configure_application_icon() {
                 warn!(%error, "failed to configure the macOS application icon");
             }
+            if let Err(error) = macos_window::configure(ui.window()) {
+                warn!(%error, "failed to configure the standard macOS title bar");
+            }
             schedule_macos_application_menu_configuration(&ui);
         } else {
+            configure_macos_detached_titlebar_buttons(&ui, show_terminal_actions);
             schedule_detached_presentation_refresh(&ui, window_id);
         }
-        // The native window and its final content-size convention now exist.
-        // Restore before this first event can capture provisional bounds.
         window_state::restore(&ui, placement, &router, window_id);
     })
+}
+
+#[cfg(target_os = "macos")]
+fn configure_macos_detached_titlebar_buttons(ui: &AppWindow, show_terminal_actions: bool) {
+    let ui_for_split_right = ui.as_weak();
+    let ui_for_split_down = ui.as_weak();
+    let ui_for_return = ui.as_weak();
+    if let Err(error) = macos_window::configure_detached_titlebar_buttons(
+        ui.window(),
+        &detached_titlebar_style(ui),
+        show_terminal_actions,
+        move || {
+            if let Some(ui) = ui_for_split_right.upgrade() {
+                let _ =
+                    ui.invoke_terminal_pane_command(ui.get_active_pane_id(), "split-right".into());
+            }
+        },
+        move || {
+            if let Some(ui) = ui_for_split_down.upgrade() {
+                let _ =
+                    ui.invoke_terminal_pane_command(ui.get_active_pane_id(), "split-down".into());
+            }
+        },
+        move || {
+            log_ui_action("workspace.return-window");
+            if let Some(ui) = ui_for_return.upgrade() {
+                ui.invoke_return_workspace(ui.get_active_tab_id());
+            }
+        },
+    ) {
+        warn!(%error, "failed to configure detached macOS title-bar buttons");
+    }
+    if let Err(error) = update_macos_detached_system_icon(ui) {
+        warn!(%error, "failed to configure detached macOS system icon");
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn update_macos_detached_system_icon(ui: &AppWindow) -> Result<()> {
+    let theme = ui.global::<Theme>();
+    macos_window::update_detached_system_icon(
+        ui.window(),
+        &ui.get_active_tab_system_image(),
+        &ui.get_active_tab_title(),
+        &ui.get_active_tab_system_release(),
+        theme.get_system_icons_follow_theme() || ui.get_active_tab_system_platform().is_empty(),
+        theme.get_text(),
+    )
+}
+
+#[cfg(target_os = "macos")]
+fn detached_titlebar_background(ui: &AppWindow) -> Color {
+    if ui.get_active_tab_kind().as_str() == "terminal" {
+        ui.get_theme_terminal_background()
+    } else {
+        ui.global::<Theme>().get_background()
+    }
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn detached_titlebar_style(ui: &AppWindow) -> macos_window::DetachedTitlebarStyle {
+    let theme = ui.global::<Theme>();
+    macos_window::DetachedTitlebarStyle {
+        background: detached_titlebar_background(ui),
+        icon_color: theme.get_muted(),
+        button_size: f64::from(theme.get_terminal_split_button_size()),
+        button_spacing: f64::from(theme.get_terminal_split_button_spacing()),
+        split_icon_size: f64::from(theme.get_terminal_split_glyph_size()),
+        transfer_icon_size: f64::from(theme.get_workspace_transfer_glyph_size()),
+        split_right_icon: theme.get_terminal_split_right_icon(),
+        split_down_icon: theme.get_terminal_split_down_icon(),
+        return_icon: theme.get_workspace_return_icon(),
+    }
 }
 
 #[cfg(test)]

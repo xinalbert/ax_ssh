@@ -1,7 +1,7 @@
 import { FlatActionMenu, MenuActions } from "flat-action-menu.slint";
 import { Theme } from "../theme.slint";
 import { ElidedLabel, ElidedTooltipContent } from "elided-controls.slint";
-import { TerminalSplitButton } from "workspace-titlebar.slint";
+import { SidebarPlatformGlyph } from "sidebar-controls.slint";
 
 component MenuTitleButton inherits FocusScope {
     in property <string> label;
@@ -135,7 +135,6 @@ export component DesktopMenuTitlebar inherits Rectangle {
     in property <bool> main-window;
     in property <string> connection-title;
     in property <string> system-platform;
-    in property <image> system-image;
     in property <string> system-release;
     in property <bool> actions-enabled;
     in property <bool> terminal-active;
@@ -148,7 +147,6 @@ export component DesktopMenuTitlebar inherits Rectangle {
     callback toggle-maximize();
     callback close();
     callback return-workspace();
-    callback terminal-pane-command(string);
     callback start-native-window-drag();
 
     height: Theme.desktop-titlebar-height;
@@ -305,14 +303,11 @@ export component DesktopMenuTitlebar inherits Rectangle {
                     width: Theme.tab-platform-icon-size;
                     horizontal-stretch: 0;
                     background: transparent;
-                    Image {
+                    SidebarPlatformGlyph {
                         y: (parent.height - self.height) / 2;
                         width: Theme.tab-platform-icon-size;
                         height: Theme.tab-platform-icon-size;
-                        source: root.system-image;
-                        image-fit: contain;
-                        colorize: root.system-platform.is-empty || Theme.system-icons-follow-theme
-                            ? Theme.text : transparent;
+                        platform: root.system-platform.is-empty ? "server" : root.system-platform;
                         accessible-role: none;
                     }
                 }
@@ -339,28 +334,6 @@ export component DesktopMenuTitlebar inherits Rectangle {
                 ElidedTooltipContent {
                     text: root.system-release.is-empty ? root.connection-title
                         : root.connection-title + "\n" + root.system-release;
-                }
-            }
-        }
-        if !root.main-window && root.terminal-active : Rectangle {
-            width: 2 * Theme.terminal-split-button-size + Theme.terminal-split-button-spacing;
-            HorizontalLayout {
-                y: (parent.height - self.height) / 2;
-                height: Theme.terminal-split-button-size;
-                spacing: Theme.terminal-split-button-spacing;
-                TerminalSplitButton {
-                    vertical: true;
-                    enabled: root.actions-enabled;
-                    accessible-name: @tr("Split active terminal vertically");
-                    tooltip-text: @tr("Split vertically (Alt+Shift+L)");
-                    activated => { root.terminal-pane-command("split-right"); }
-                }
-                TerminalSplitButton {
-                    vertical: false;
-                    enabled: root.actions-enabled;
-                    accessible-name: @tr("Split active terminal horizontally");
-                    tooltip-text: @tr("Split horizontally (Alt+Shift+J)");
-                    activated => { root.terminal-pane-command("split-down"); }
                 }
             }
         }

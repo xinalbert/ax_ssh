@@ -1,20 +1,60 @@
-//! Main-thread macOS menu, application icon, and native input integration.
+//! Native macOS title-bar integration for the Slint window.
 
 use anyhow::{Context, Result};
 use ax_ssh::terminal::TerminalModifiers;
 use objc2::rc::Retained;
-use objc2::runtime::{AnyObject, NSObjectProtocol, Sel};
+use objc2::runtime::{AnyClass, AnyObject, Bool, ClassBuilder, NSObjectProtocol, Sel};
 use objc2::{AnyThread, DefinedClass, MainThreadOnly, define_class, msg_send, sel};
 use objc2_app_kit::{
-    NSApplication, NSDeleteFunctionKey, NSDownArrowFunctionKey, NSEndFunctionKey, NSEvent,
-    NSEventModifierFlags, NSF1FunctionKey, NSHomeFunctionKey, NSImage, NSInsertFunctionKey,
+    NSApplication, NSAutoresizingMaskOptions, NSButton, NSCellImagePosition, NSColor,
+    NSDeleteFunctionKey, NSDownArrowFunctionKey, NSEndFunctionKey, NSEvent, NSEventModifierFlags,
+    NSF1FunctionKey, NSHomeFunctionKey, NSImage, NSImageScaling, NSImageView, NSInsertFunctionKey,
     NSLeftArrowFunctionKey, NSMenu, NSMenuItem, NSPageDownFunctionKey, NSPageUpFunctionKey,
-    NSRightArrowFunctionKey, NSUpArrowFunctionKey, NSView, NSWindow,
+    NSRightArrowFunctionKey, NSUpArrowFunctionKey, NSView, NSWindow, NSWindowButton,
+    NSWindowStyleMask, NSWindowTitleVisibility,
 };
-use objc2_foundation::{MainThreadMarker, NSData, NSObject, NSString};
+use objc2_foundation::{MainThreadMarker, NSData, NSObject, NSPoint, NSRect, NSSize, NSString};
 use raw_window_handle::{HasWindowHandle as _, RawWindowHandle};
+use std::cell::{Cell, RefCell};
+use std::io::Cursor;
 
 use super::input::NativeMenuShortcut;
+
+thread_local! {
+    // Slint creates the adapter synchronously while constructing the component;
+    // Winit may only create its NSWindow later, when the event loop resumes.
+    static MAIN_WINDOW_ATTRIBUTES_PENDING: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Limit the main-window attributes to its first adapter, including failure
+/// paths. Later detached windows and popups retain their native title bars.
+pub(super) fn with_main_window_attributes<T>(create: impl FnOnce() -> T) -> T {
+    struct ResetPending(bool);
+
+    impl Drop for ResetPending {
+        fn drop(&mut self) {
+            MAIN_WINDOW_ATTRIBUTES_PENDING.set(self.0);
+        }
+    }
+
+    let _reset = ResetPending(MAIN_WINDOW_ATTRIBUTES_PENDING.replace(true));
+    create()
+}
+
+pub(super) fn window_attributes(
+    attributes: slint::winit_030::winit::window::WindowAttributes,
+) -> slint::winit_030::winit::window::WindowAttributes {
+    use slint::winit_030::winit::platform::macos::WindowAttributesExtMacOS;
+
+    if MAIN_WINDOW_ATTRIBUTES_PENDING.replace(false) {
+        attributes
+            .with_title_hidden(true)
+            .with_titlebar_transparent(true)
+            .with_fullsize_content_view(true)
+    } else {
+        attributes
+    }
+}
 
 #[derive(Clone, Copy)]
 pub(super) enum NativeMenuSection {
@@ -63,6 +103,395 @@ impl NativeMenuTarget {
         // has the selector signature used here.
         unsafe { msg_send![super(this), init] }
     }
+}
+
+const TITLE_BAR_BUTTON_TRAILING_MARGIN: f64 = 12.0;
+// Matches Theme.macos-titlebar-leading-clearance. Keep native drag hit testing
+// aligned with the visual gap before the first workspace Tab.
+const TITLE_BAR_LEADING_CLEARANCE: f64 = 80.0;
+// Matches Theme.tab-height's current maximum in the main title-bar layout.
+const TITLE_BAR_ROW_HEIGHT: f64 = 32.0;
+// Matches Theme.tab-platform-icon-size; the larger raster supports HiDPI.
+const TITLE_BAR_SYSTEM_ICON_SIZE: f64 = 16.0;
+const TITLE_BAR_SYSTEM_ICON_RASTER_SIZE: u32 = 64;
+
+/// Resolved UI appearance only; the bridge supplies Theme's shared assets and
+/// logical dimensions without exposing generated component types to AppKit.
+pub(super) struct DetachedTitlebarStyle {
+    pub(super) background: slint::Color,
+    pub(super) icon_color: slint::Color,
+    pub(super) button_size: f64,
+    pub(super) button_spacing: f64,
+    pub(super) split_icon_size: f64,
+    pub(super) transfer_icon_size: f64,
+    pub(super) split_right_icon: slint::Image,
+    pub(super) split_down_icon: slint::Image,
+    pub(super) return_icon: slint::Image,
+}
+
+fn in_native_drag_clearance(x: f64, y_from_top: f64) -> bool {
+    (0.0..TITLE_BAR_LEADING_CLEARANCE).contains(&x)
+        && (0.0..TITLE_BAR_ROW_HEIGHT).contains(&y_from_top)
+}
+
+extern "C-unwind" fn content_mouse_down_can_move_window(view: &NSView, _cmd: Sel) -> Bool {
+    let Some(mtm) = MainThreadMarker::new() else {
+        return Bool::NO;
+    };
+    let Some(event) = NSApplication::sharedApplication(mtm).currentEvent() else {
+        return Bool::NO;
+    };
+    let point = view.convertPoint_fromView(event.locationInWindow(), None);
+    let bounds = view.bounds();
+    let x = point.x - bounds.origin.x;
+    let y_from_top = if view.isFlipped() {
+        point.y - bounds.origin.y
+    } else {
+        bounds.size.height - (point.y - bounds.origin.y)
+    };
+    Bool::new(in_native_drag_clearance(x, y_from_top))
+}
+
+fn keep_tab_gestures_out_of_window_drag(view: &NSView) -> Result<()> {
+    let original_class = view.class();
+    let class_name = c"AxSSHInteractiveTitleBarContentView";
+    let subclass = if let Some(subclass) = AnyClass::get(class_name) {
+        if original_class == subclass {
+            return Ok(());
+        }
+        anyhow::ensure!(
+            subclass.superclass() == Some(original_class),
+            "AppKit content view has an unexpected class"
+        );
+        subclass
+    } else {
+        let mut builder = ClassBuilder::new(class_name, original_class)
+            .context("could not subclass the AppKit content view")?;
+        // SAFETY: This method has NSView's no-argument BOOL getter signature.
+        // The subclass adds no ivars and inherits Winit's input handlers.
+        unsafe {
+            builder.add_method(
+                sel!(mouseDownCanMoveWindow),
+                content_mouse_down_can_move_window as extern "C-unwind" fn(_, _) -> _,
+            );
+        }
+        builder.register()
+    };
+    // SAFETY: The registered class directly subclasses the live view's class,
+    // adds no ivars, and only overrides NSView's drag-region getter.
+    let previous_class = unsafe { AnyObject::set_class(view, subclass) };
+    debug_assert_eq!(previous_class, original_class);
+    Ok(())
+}
+
+struct NativeTitleBarButtonIvars {
+    activate: Box<dyn Fn()>,
+}
+
+define_class!(
+    // SAFETY: NSButton has no subclassing requirements. The callback is
+    // main-thread-only and the title-bar view retains this button for its life.
+    #[unsafe(super(NSButton))]
+    #[name = "AxSSHNativeTitleBarButton"]
+    #[thread_kind = MainThreadOnly]
+    #[ivars = NativeTitleBarButtonIvars]
+    struct NativeTitleBarButton;
+
+    // SAFETY: NSObjectProtocol has no additional implementation requirements.
+    unsafe impl NSObjectProtocol for NativeTitleBarButton {}
+
+    impl NativeTitleBarButton {
+        #[unsafe(method(activate:))]
+        fn activate(&self, _sender: Option<&AnyObject>) {
+            (self.ivars().activate)();
+        }
+    }
+);
+
+impl NativeTitleBarButton {
+    fn new(mtm: MainThreadMarker, size: f64, activate: impl Fn() + 'static) -> Retained<Self> {
+        let this = Self::alloc(mtm).set_ivars(NativeTitleBarButtonIvars {
+            activate: Box::new(activate),
+        });
+        // SAFETY: `this` is an allocated NativeTitleBarButton and NSButton's
+        // initializer has the selector signature used here.
+        unsafe {
+            msg_send![super(this), initWithFrame: NSRect::new(
+                NSPoint::new(0.0, 0.0),
+                NSSize::new(size, size),
+            )]
+        }
+    }
+}
+
+struct NativeTitleBarSystemIconIvars {
+    source: RefCell<Option<slint::Image>>,
+}
+
+define_class!(
+    // SAFETY: NSImageView has no subclassing requirements. AppKit owns the
+    // view and its single cached image for the lifetime of the native window.
+    #[unsafe(super(NSImageView))]
+    #[name = "AxSSHNativeTitleBarSystemIcon"]
+    #[thread_kind = MainThreadOnly]
+    #[ivars = NativeTitleBarSystemIconIvars]
+    struct NativeTitleBarSystemIcon;
+
+    // SAFETY: NSObjectProtocol has no additional implementation requirements.
+    unsafe impl NSObjectProtocol for NativeTitleBarSystemIcon {}
+);
+
+impl NativeTitleBarSystemIcon {
+    fn new(mtm: MainThreadMarker) -> Retained<Self> {
+        let this = Self::alloc(mtm).set_ivars(NativeTitleBarSystemIconIvars {
+            source: RefCell::new(None),
+        });
+        // SAFETY: `this` is allocated and NSImageView's frame initializer
+        // accepts the NSRect value used here. The view stays main-thread-only.
+        unsafe { msg_send![super(this), initWithFrame: NSRect::ZERO] }
+    }
+}
+
+pub(super) fn configure(window: &slint::Window) -> Result<()> {
+    with_native_view(window, |view| {
+        let native_window = view.window().context("AppKit view has no NSWindow")?;
+        native_window
+            .setStyleMask(native_window.styleMask() | NSWindowStyleMask::FullSizeContentView);
+        native_window.setTitleVisibility(NSWindowTitleVisibility::Hidden);
+        native_window.setTitlebarAppearsTransparent(true);
+        native_window.setMovableByWindowBackground(false);
+        keep_tab_gestures_out_of_window_drag(view)?;
+        Ok(())
+    })
+}
+
+pub(super) fn configure_detached_titlebar_buttons(
+    window: &slint::Window,
+    style: &DetachedTitlebarStyle,
+    show_terminal_actions: bool,
+    split_right: impl Fn() + 'static,
+    split_down: impl Fn() + 'static,
+    return_workspace: impl Fn() + 'static,
+) -> Result<()> {
+    let mtm =
+        MainThreadMarker::new().context("macOS title-bar setup must run on the main thread")?;
+    let mut buttons = Vec::with_capacity(if show_terminal_actions { 3 } else { 1 });
+    if show_terminal_actions {
+        buttons.push(configure_titlebar_button(
+            mtm,
+            style,
+            &style.split_right_icon,
+            style.split_icon_size,
+            "Split active terminal vertically",
+            split_right,
+        )?);
+        buttons.push(configure_titlebar_button(
+            mtm,
+            style,
+            &style.split_down_icon,
+            style.split_icon_size,
+            "Split active terminal horizontally",
+            split_down,
+        )?);
+    }
+    let return_button = configure_titlebar_button(
+        mtm,
+        style,
+        &style.return_icon,
+        style.transfer_icon_size,
+        "Return workspace to main window",
+        return_workspace,
+    )?;
+    buttons.push(return_button);
+
+    with_native_window(window, |native_window| {
+        configure_detached_titlebar_appearance(native_window, style.background);
+        let zoom_button = native_window
+            .standardWindowButton(NSWindowButton::ZoomButton)
+            .context("AppKit window has no standard zoom button")?;
+        // SAFETY: AppKit owns the standard button and its superview for the
+        // native window lifetime. The title-bar view retains added subviews.
+        let title_bar = unsafe { zoom_button.superview() }
+            .context("AppKit standard zoom button has no title-bar view")?;
+        let bounds = title_bar.bounds();
+        // Keep the shared width while fitting AppKit's native title-bar height.
+        let button_height = style.button_size.min(bounds.size.height);
+        let control_width = style.button_size * buttons.len() as f64
+            + style.button_spacing * buttons.len().saturating_sub(1) as f64;
+        let origin_x =
+            (bounds.size.width - control_width - TITLE_BAR_BUTTON_TRAILING_MARGIN).max(0.0);
+        let origin_y = ((bounds.size.height - button_height) / 2.0).max(0.0);
+        for (index, button) in buttons.into_iter().enumerate() {
+            let origin_x = origin_x + index as f64 * (style.button_size + style.button_spacing);
+            button.setFrame(NSRect::new(
+                NSPoint::new(origin_x, origin_y),
+                NSSize::new(style.button_size, button_height),
+            ));
+            button.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMinXMargin);
+            title_bar.addSubview(&button);
+        }
+        Ok(())
+    })
+}
+
+pub(super) fn update_detached_titlebar_style(
+    window: &slint::Window,
+    style: &DetachedTitlebarStyle,
+) -> Result<()> {
+    with_native_window(window, |native_window| {
+        configure_detached_titlebar_appearance(native_window, style.background);
+        let zoom_button = native_window
+            .standardWindowButton(NSWindowButton::ZoomButton)
+            .context("AppKit window has no standard zoom button")?;
+        // SAFETY: This live window owns its standard button and title-bar view.
+        let title_bar = unsafe { zoom_button.superview() }
+            .context("AppKit standard zoom button has no title-bar view")?;
+        let tint = ns_color(style.icon_color);
+        for view in title_bar.subviews().iter() {
+            if let Ok(button) = view.downcast::<NativeTitleBarButton>() {
+                button.setContentTintColor(Some(&tint));
+            }
+        }
+        Ok(())
+    })
+}
+
+fn configure_detached_titlebar_appearance(
+    native_window: &NSWindow,
+    terminal_background: slint::Color,
+) {
+    let titlebar_background = ns_color(terminal_background);
+    native_window.setTitlebarAppearsTransparent(true);
+    native_window.setBackgroundColor(Some(&titlebar_background));
+}
+
+pub(super) fn update_detached_system_icon(
+    window: &slint::Window,
+    source: &slint::Image,
+    title: &str,
+    release: &str,
+    follow_theme: bool,
+    text_color: slint::Color,
+) -> Result<()> {
+    let mtm =
+        MainThreadMarker::new().context("macOS system icon must update on the main thread")?;
+    with_native_window(window, |native_window| {
+        let zoom_button = native_window
+            .standardWindowButton(NSWindowButton::ZoomButton)
+            .context("AppKit window has no standard zoom button")?;
+        // SAFETY: The standard button and superview are borrowed only while
+        // this live native window is held. AppKit retains the added image view.
+        let title_bar = unsafe { zoom_button.superview() }
+            .context("AppKit zoom button has no title-bar view")?;
+        let icon = title_bar
+            .subviews()
+            .iter()
+            .find_map(|view| view.downcast::<NativeTitleBarSystemIcon>().ok())
+            .unwrap_or_else(|| {
+                let icon = NativeTitleBarSystemIcon::new(mtm);
+                icon.setImageScaling(NSImageScaling::ScaleProportionallyUpOrDown);
+                icon.setAutoresizingMask(NSAutoresizingMaskOptions::ViewMaxXMargin);
+                title_bar.addSubview(&icon);
+                icon
+            });
+        let bounds = title_bar.bounds();
+        icon.setFrame(NSRect::new(
+            NSPoint::new(
+                TITLE_BAR_LEADING_CLEARANCE,
+                ((bounds.size.height - TITLE_BAR_SYSTEM_ICON_SIZE) / 2.0).max(0.0),
+            ),
+            NSSize::new(TITLE_BAR_SYSTEM_ICON_SIZE, TITLE_BAR_SYSTEM_ICON_SIZE),
+        ));
+        if icon.ivars().source.borrow().as_ref() != Some(source) {
+            let data = NSData::with_bytes(&titlebar_icon_png(source)?);
+            let image = NSImage::initWithData(NSImage::alloc(), &data)
+                .context("AppKit could not decode the bundled system icon")?;
+            icon.setImage(Some(&image));
+            *icon.ivars().source.borrow_mut() = Some(source.clone());
+        }
+        let description = if release.is_empty() {
+            title.to_owned()
+        } else {
+            format!("{title}\n{release}")
+        };
+        let label = NSString::from_str(&description);
+        icon.setToolTip(Some(&label));
+        if let Some(image) = icon.image() {
+            image.setTemplate(follow_theme);
+            image.setAccessibilityDescription(Some(&label));
+        }
+        let tint = follow_theme.then(|| ns_color(text_color));
+        icon.setContentTintColor(tint.as_deref());
+        Ok(())
+    })
+}
+
+fn titlebar_icon_png(source: &slint::Image) -> Result<Vec<u8>> {
+    let size = source.size();
+    let longest = size.width.max(size.height);
+    anyhow::ensure!(longest > 0, "system icon has no image pixels");
+    let dimension = |value: u32| {
+        ((u64::from(value) * u64::from(TITLE_BAR_SYSTEM_ICON_RASTER_SIZE)) / u64::from(longest))
+            .max(1) as u32
+    };
+    let pixels = i_slint_core::graphics::image_to_rgba8_with_target_size(
+        source,
+        i_slint_core::graphics::IntSize::new(dimension(size.width), dimension(size.height)),
+    )
+    .context("bundled system icon has no readable pixel buffer")?;
+    let rgba =
+        ::image::RgbaImage::from_raw(pixels.width(), pixels.height(), pixels.as_bytes().to_vec())
+            .context("system icon pixel buffer has an invalid size")?;
+    let thumbnail = ::image::DynamicImage::ImageRgba8(rgba).thumbnail(
+        TITLE_BAR_SYSTEM_ICON_RASTER_SIZE,
+        TITLE_BAR_SYSTEM_ICON_RASTER_SIZE,
+    );
+    let mut output = Cursor::new(Vec::new());
+    thumbnail
+        .write_to(&mut output, ::image::ImageFormat::Png)
+        .context("cannot encode bounded title-bar system icon")?;
+    Ok(output.into_inner())
+}
+
+fn ns_color(color: slint::Color) -> Retained<NSColor> {
+    NSColor::colorWithSRGBRed_green_blue_alpha(
+        f64::from(color.red()) / 255.0,
+        f64::from(color.green()) / 255.0,
+        f64::from(color.blue()) / 255.0,
+        f64::from(color.alpha()) / 255.0,
+    )
+}
+
+fn configure_titlebar_button(
+    mtm: MainThreadMarker,
+    style: &DetachedTitlebarStyle,
+    source: &slint::Image,
+    icon_size: f64,
+    accessibility_description: &str,
+    activate: impl Fn() + 'static,
+) -> Result<Retained<NativeTitleBarButton>> {
+    let button = NativeTitleBarButton::new(mtm, style.button_size, activate);
+    let accessibility_description = NSString::from_str(accessibility_description);
+    let data = NSData::with_bytes(&titlebar_icon_png(source)?);
+    let image = NSImage::initWithData(NSImage::alloc(), &data)
+        .context("AppKit could not decode the shared title-bar action icon")?;
+    image.setSize(NSSize::new(icon_size, icon_size));
+    image.setTemplate(true);
+    image.setAccessibilityDescription(Some(&accessibility_description));
+    button.setTitle(&NSString::new());
+    button.setImage(Some(&image));
+    button.setImagePosition(NSCellImagePosition::ImageOnly);
+    button.setImageScaling(NSImageScaling::ScaleNone);
+    button.setBordered(false);
+    button.setContentTintColor(Some(&ns_color(style.icon_color)));
+    button.setToolTip(Some(&accessibility_description));
+    // SAFETY: `activate:` is implemented by NativeTitleBarButton. NSControl
+    // keeps targets weakly, while the title-bar view retains the button itself.
+    unsafe {
+        button.setTarget(Some(&button));
+        button.setAction(Some(sel!(activate:)));
+    }
+    Ok(button)
 }
 
 pub(super) fn configure_application_icon() -> Result<()> {
@@ -322,6 +751,112 @@ fn bind_menu_item(item: &NSMenuItem, target: &NativeMenuTarget, action: Sel) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn main_titlebar_attributes_do_not_leak_to_detached_windows_or_popups() {
+        use slint::winit_030::winit::window::WindowAttributes;
+
+        let defaults = format!("{:?}", WindowAttributes::default());
+        assert_eq!(
+            format!("{:?}", window_attributes(WindowAttributes::default())),
+            defaults
+        );
+        with_main_window_attributes(|| {
+            let main = window_attributes(WindowAttributes::default().with_title("AxSSH"));
+            assert_eq!(main.title, "AxSSH");
+            assert!(
+                main.decorations,
+                "native traffic-light controls stay enabled"
+            );
+            let main = format!("{main:?}");
+            for attribute in [
+                "title_hidden: true",
+                "titlebar_transparent: true",
+                "fullsize_content_view: true",
+                "titlebar_hidden: false",
+                "titlebar_buttons_hidden: false",
+            ] {
+                assert!(main.contains(attribute), "missing {attribute}: {main}");
+            }
+            assert_eq!(
+                format!("{:?}", window_attributes(WindowAttributes::default())),
+                defaults
+            );
+        });
+        assert_eq!(
+            format!("{:?}", window_attributes(WindowAttributes::default())),
+            defaults
+        );
+    }
+
+    #[test]
+    fn failed_main_construction_clears_unconsumed_titlebar_attributes() {
+        use slint::winit_030::winit::window::WindowAttributes;
+
+        let result: Result<()> = with_main_window_attributes(|| anyhow::bail!("creation failed"));
+        assert!(result.is_err());
+        assert_eq!(
+            format!("{:?}", window_attributes(WindowAttributes::default())),
+            format!("{:?}", WindowAttributes::default())
+        );
+    }
+
+    #[test]
+    fn retry_after_adapter_failure_receives_its_own_main_attributes() {
+        use slint::winit_030::winit::window::WindowAttributes;
+
+        let result: Result<()> = with_main_window_attributes(|| {
+            let _ = window_attributes(WindowAttributes::default());
+            anyhow::bail!("renderer creation failed")
+        });
+        assert!(result.is_err());
+        let retry = with_main_window_attributes(|| window_attributes(WindowAttributes::default()));
+        assert!(format!("{retry:?}").contains("fullsize_content_view: true"));
+        assert_eq!(
+            format!("{:?}", window_attributes(WindowAttributes::default())),
+            format!("{:?}", WindowAttributes::default())
+        );
+    }
+
+    #[test]
+    fn detached_system_icon_png_preserves_alpha_color_and_bounds() {
+        let mut pixels = slint::SharedPixelBuffer::<slint::Rgba8Pixel>::new(256, 128);
+        pixels
+            .make_mut_slice()
+            .fill(slint::Rgba8Pixel::new(32, 96, 160, 128));
+        let source = slint::Image::from_rgba8(pixels);
+        let encoded = titlebar_icon_png(&source).expect("title-bar icon should encode");
+        let decoded = ::image::load_from_memory(&encoded)
+            .expect("PNG should decode")
+            .to_rgba8();
+        assert_eq!(decoded.dimensions(), (64, 32));
+        assert_eq!(decoded.get_pixel(32, 16).0, [32, 96, 160, 128]);
+        assert!(encoded.len() < 64 * 64 * 4);
+    }
+
+    #[test]
+    fn detached_system_icon_png_bounds_svg_and_rejects_empty_images() {
+        let source = slint::Image::load_from_svg_data(
+            br#"<svg xmlns="http://www.w3.org/2000/svg" width="4096" height="1024"><rect width="4096" height="1024" fill="red"/></svg>"#,
+        ).expect("SVG should load");
+        let encoded = titlebar_icon_png(&source).expect("SVG should rasterize");
+        let decoded = ::image::load_from_memory(&encoded)
+            .expect("PNG should decode")
+            .to_rgba8();
+        assert_eq!(decoded.dimensions(), (64, 16));
+        assert_eq!(decoded.get_pixel(32, 8).0, [255, 0, 0, 255]);
+        assert!(titlebar_icon_png(&slint::Image::default()).is_err());
+    }
+
+    #[test]
+    fn native_drag_clearance_excludes_sidebar_and_tab_strip() {
+        assert!(in_native_drag_clearance(48.0, 16.0));
+        assert!(!in_native_drag_clearance(-1.0, 16.0));
+        assert!(in_native_drag_clearance(79.0, 16.0));
+        assert!(!in_native_drag_clearance(80.0, 16.0));
+        assert!(!in_native_drag_clearance(48.0, -1.0));
+        assert!(!in_native_drag_clearance(48.0, 32.0));
+    }
 
     #[test]
     fn converts_settings_shortcut_keys_to_appkit_equivalents() {

@@ -64,6 +64,13 @@ pub(super) fn enable_slint_destroy_window_on_hide() {
     }
 }
 
+fn backend_selector() -> slint::BackendSelector {
+    let selector = slint::BackendSelector::new();
+    #[cfg(target_os = "macos")]
+    let selector = selector.with_winit_window_attributes_hook(macos_window::window_attributes);
+    selector
+}
+
 pub(super) fn select_slint_renderer(
     preference: RendererPreference,
     log_directory: &Path,
@@ -72,7 +79,7 @@ pub(super) fn select_slint_renderer(
     if std::env::var_os("SLINT_BACKEND").is_some() {
         // Keep the standard Slint environment override available for diagnostics
         // and explicit software-renderer fallback runs.
-        slint::BackendSelector::new()
+        backend_selector()
             .select()
             .context("failed to select Slint renderer from SLINT_BACKEND")?;
         let selection = RendererSelection {
@@ -98,7 +105,7 @@ pub(super) fn select_slint_renderer(
             reason = "previous-renderer-fault",
             "using the software renderer after a previous GPU renderer fault"
         );
-        slint::BackendSelector::new()
+        backend_selector()
             .backend_name(RENDERER_SOFTWARE.into())
             .select()
             .context("failed to select software renderer after a previous GPU fault")?;
@@ -113,7 +120,7 @@ pub(super) fn select_slint_renderer(
         return Ok(selection);
     }
 
-    match slint::BackendSelector::new()
+    match backend_selector()
         .backend_name(requested_backend.into())
         .select()
     {
@@ -138,7 +145,7 @@ pub(super) fn select_slint_renderer(
                 error = %bounded_renderer_error(&error),
                 "GPU renderer selection failed; retrying with the software renderer"
             );
-            slint::BackendSelector::new()
+            backend_selector()
                 .backend_name(RENDERER_SOFTWARE.into())
                 .select()
                 .context("failed to select software renderer after GPU renderer failure")?;

@@ -138,8 +138,8 @@ pub(in crate::app) fn install_native_window_input_hook(
     #[cfg(target_os = "macos")]
     let mut on_native_ready = Some(on_native_ready);
     ui.window().on_winit_window_event(move |_window, event| {
-        // This filter only runs after Winit has created and registered the
-        // native window. A startup timer can run before that point.
+        // The native window exists when this filter runs; a startup timer can
+        // fire before Winit has created it. Initialize before capturing bounds.
         #[cfg(target_os = "macos")]
         if let Some(initialize) = on_native_ready.take() {
             initialize();
