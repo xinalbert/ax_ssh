@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20261113-macos-native-titlebar-restore
-- 目标：撤销无边框自绘顶栏，恢复 macOS 原生标题栏；保留截图所示启动标题栏异常的修复。
-- 交付物：原生红绿灯与既有布局、创建时隐藏主窗口标题、原生就绪初始化、回归和本地提交。
+- 目标 ID：20261113-tab-window-drag
+- 目标：排查并修复 Tab 与窗口拖动的命中、坐标换算和手势冲突，保留原生 macOS 标题栏。
+- 交付物：可复现的拖动回归、最小修复、双语说明、验证记录和本地提交。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：回退 e999b7a 的无边框布局和控件变更；macOS 窗口创建属性、原生初始化、架构和 tracker。
-- 不在本轮范围内：Windows/Linux 行为变更、SSH/凭据/配置 schema、依赖升级、推送/tag/发布、GUI 启动或截图。
+- 当前范围：WorkspaceTitlebar 的指针与滚动坐标、macOS 拖窗命中、窗口动作 bridge、回归及架构/tracker。
+- 不在本轮范围内：SSH/凭据/配置 schema、依赖升级、发布/推送/tag、GUI 启动或自制截图。
 
 ## 当前状态
 
@@ -23,35 +23,35 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| R1 | completed | 审查用户最终范围和原生标题栏基线 | 现有提交、架构和锁定 backend 源码 | 恢复原生方案，保留启动异常处理 |
-| R2 | completed | 回退自绘顶栏并接回原生初始化 | 8 项原生窗口定向回归通过 | Windows/Linux 保持改动前行为 |
-| R3 | completed | 完整验证、双语说明和本地归档 | Rust 门禁、macOS target、文档/tracker/diff | 单一本地提交，不改写旧历史 |
+| D1 | completed | Tab 与原生拖窗事件/坐标审查和复现 | 真实 Slint 指针事件、静态平台审查 | 用户确认部分 Tab 拖动触发整窗移动 |
+| D2 | completed | 最小拖动修复及双语说明 | 两项定向回归通过 | 保留原生红绿灯，不扩展应用边界 |
+| D3 | completed | 完整验证与实施记录 | Rust 门禁、原生 macOS target、文档/tracker/diff 全部通过 | 实际 GUI 行为由用户确认 |
+| D4 | completed | 按用户要求归档本地提交 | 实现提交 08f2325，记录随独立文档提交归档 | 未推送、tag 或发布 |
 
 ## 已完成
 
-- 开始时工作区干净，最近两个提交为 e999b7a 和 a9bbc68。
-- 用户最终要求撤销标题栏移除，同时保留截图中偶发原生标题条和 Tab 布局异常的修复。
-- 范围限定为 macOS；保留原生红绿灯，Windows/Linux 不新增行为。
-- ui/ 与视图文件已逐字恢复至 e999b7a 之前；相对原版本只新增五份窗口/renderer bridge 的启动时序修复。
-- 创建属性 hook 覆盖 renderer 设置、环境覆盖和回退路径；一次性构造作用域在失败后清理，首个原生事件完成视图/按钮/菜单初始化及位置恢复。
-- 完成双语架构、项目地图和追加历史；本轮代码、回归和记录作为单一结果本地归档，不撤回已有历史。
+- 开工时工作区干净，基线为 47d2d01；主窗口使用原生标题栏，标题隐藏/透明属性在创建时生效。
+- 原生命中固定使用 80x32 AppKit 点，而 UI 以 Theme 和 Slint 逻辑坐标布局；已审查 Tab 滚动/按下/释放与实际重排。
+- 新增实际按下/移动/释放回归：Mac/非 Mac、1x/2x 和滚动后的 Tab 重排坐标在旧实现通过；左侧空白只能依赖原生自动拖窗的情况在新增明确路由测试中失败。
+- 原生 mouseDownCanMoveWindow 依据 currentEvent 的当前位置动态重判，未绑定手势初始命中；修复为主客户区一律禁止原生自动接管，由 Slint 实际空白区域显式发起系统拖窗。删除固定 32 点拖动高度，独立窗口原生标题栏不变。
+- 左侧留空的 x/y 显式固定在左上角，避免 Slint 对固定尺寸子项的默认居中；双语架构与项目地图已同步，历史追加验证证据。
+- 用户授权本地提交；实现、回归与双语架构归档为 08f2325，项目地图和验证记录单独归档。
 
 ## 验证
 
-- 已完成：8 项 macos_window 定向回归；fmt、Slint 重编译和 locked/offline check、严格 all-target Clippy、1008 项 Rust 测试（461 library + 547 binary）、本机 build；精确 CI 命令 `cargo check --locked --target aarch64-apple-darwin` 和 `cargo clippy --all-targets --locked --target aarch64-apple-darwin -- -D warnings`；11 个翻译目录各 694 条文案和生成一致性、56 份 Markdown/入口边界、tracker/diff 和暂存区范围检查通过。
+- 已完成：两项 titlebar_drag 定向回归、fmt、Slint 重编译及 locked/offline check、严格 all-target Clippy、1009 项 Rust 测试（461 library + 548 binary）、本机 build；精确 CI 命令 `cargo check --locked --target aarch64-apple-darwin` 和 `cargo clippy --all-targets --locked --target aarch64-apple-darwin -- -D warnings`；11 目录各 694 条翻译与生成一致性、56 份 Markdown/入口、tracker/diff 检查通过。
 - 构建产物：`target/debug/ax_ssh`，未启动 GUI。
-- 未完成：用户多次冷启动、恢复窗口/分离窗口、拖动/缩放/焦点验收；其它平台原生 CI 未在本机运行。
+- 未完成：用户 macOS 实际 Tab/窗口拖动、原生红绿灯和冷启动验收；其它平台原生 CI 未在本机运行。headless 回归验证逻辑坐标和事件，不能复现 AppKit 的原生接管。
 
 ## 风险与阻塞
 
-- 原生句柄操作必须等待真实原生事件；标题栏属性须在主窗口创建时设置，避免以固定延迟赌启动顺序。
-- 不启动或截图 GUI；外观与真实窗口行为由用户确认，其它平台原生 CI 未在本机运行。
-- AX Agent Context 无可调用 memory tools，继续使用仓库记录。
+- 原生自动拖窗与 Slint 显式拖窗应具有清晰且一致的命中边界，Tab 必须持有自身手势。
+- 所有工作限于 UI/application/macOS 平台层；不触碰 transport、秘密和持久化。
 
 ## 下一步
 
-- 用户使用新构建确认冷启动外观和窗口行为。当前仅保存本地提交，不推送、tag 或发布。
+- 用户使用新构建确认部分 Tab 是否还会带动整窗，以及左侧/右侧空白区拖窗。修复已本地提交为 08f2325，本记录随独立文档提交归档；未推送、tag 或发布。
 
 ## 最后更新时间
 
-- 2026-11-13 10:24 +0800
+- 2026-11-13 13:26 +0800
