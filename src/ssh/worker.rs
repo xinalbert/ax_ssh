@@ -26,9 +26,9 @@ use zeroize::Zeroizing;
 
 use crate::config::{SessionProfile, X11Settings};
 use crate::sftp::{
-    SFTP_TRANSFER_QUEUE_WINDOW, SftpBrowserEvent, SftpDownloadRequest, SftpDownloadRoot,
-    SftpTransferEvent, SftpUploadConflictChoice, SftpUploadRequest, SftpWriteEvent,
-    SftpWriteOperation, validate_remote_path,
+    SFTP_TRANSFER_QUEUE_WINDOW, SftpBrowserEvent, SftpConflictChoice, SftpDownloadRequest,
+    SftpDownloadRoot, SftpTransferEvent, SftpUploadRequest, SftpWriteEvent, SftpWriteOperation,
+    validate_remote_path,
 };
 use crate::terminal::TerminalOutputChunk;
 use crate::terminal_dimensions::{TerminalSize, validate_backend_size};
@@ -153,9 +153,9 @@ pub(crate) enum SshCommand {
         queue_slot: OwnedSemaphorePermit,
         accepted: oneshot::Sender<Result<(), String>>,
     },
-    ResolveSftpUploadConflict {
+    ResolveSftpConflict {
         transfer_id: Uuid,
-        choice: SftpUploadConflictChoice,
+        choice: SftpConflictChoice,
         apply_to_batch: bool,
     },
     CancelSftpTransfer {
@@ -224,6 +224,7 @@ pub struct SftpUploadSubmitter {
 #[derive(Clone)]
 pub struct SftpDownloadSubmitter {
     command_tx: mpsc::Sender<SshCommand>,
+    batch_id: Option<Uuid>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -242,6 +243,13 @@ impl std::fmt::Display for SftpSubmissionError {
 impl std::error::Error for SftpSubmissionError {}
 
 impl SftpDownloadSubmitter {
+    /// Group normal downloads into one decision scope. `None` preserves the
+    /// no-overwrite contract used by explicit native file promises on replay.
+    pub fn for_batch(mut self, batch_id: Option<Uuid>) -> Self {
+        self.batch_id = batch_id;
+        self
+    }
+
     pub async fn submit(
         &self,
         transfer_id: Uuid,
@@ -256,7 +264,8 @@ impl SftpDownloadSubmitter {
             local_directory,
             filter_patterns,
             expected_directory,
-        )?;
+        )?
+        .with_optional_conflict_batch(self.batch_id);
         self.command_tx
             .send(SshCommand::OpenSftpFile { root })
             .await
@@ -279,7 +288,8 @@ impl SftpDownloadSubmitter {
             filter_patterns,
             expected_directory,
             excluded_remote_paths,
-        )?;
+        )?
+        .with_optional_conflict_batch(self.batch_id);
         self.command_tx
             .send(SshCommand::OpenSftpFile { root })
             .await
@@ -343,6 +353,7 @@ impl SshSessionHandle {
     pub fn sftp_download_submitter(&self) -> SftpDownloadSubmitter {
         SftpDownloadSubmitter {
             command_tx: self.command_tx.clone(),
+            batch_id: Some(Uuid::new_v4()),
         }
     }
 
@@ -726,6 +737,29 @@ impl SshSessionHandle {
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP download request: {error}"))
     }
 
+    #[allow(clippy::too_many_arguments)]
+    pub fn request_open_sftp_file_in_batch(
+        &self,
+        transfer_id: Uuid,
+        batch_id: Uuid,
+        path: String,
+        local_directory: std::path::PathBuf,
+        filter_patterns: Vec<String>,
+        expected_directory: bool,
+    ) -> Result<()> {
+        let root = SftpDownloadRoot::new(
+            transfer_id,
+            path,
+            local_directory,
+            filter_patterns,
+            expected_directory,
+        )?
+        .with_conflict_batch(batch_id);
+        self.command_tx
+            .try_send(SshCommand::OpenSftpFile { root })
+            .map_err(|error| anyhow::anyhow!("cannot queue SFTP download request: {error}"))
+    }
+
     pub fn request_open_sftp_file_at_local_path(
         &self,
         transfer_id: Uuid,
@@ -769,19 +803,19 @@ impl SshSessionHandle {
             .map_err(|error| anyhow::anyhow!("cannot queue SFTP transfer controls: {error}"))
     }
 
-    pub fn request_resolve_sftp_upload_conflict(
+    pub fn request_resolve_sftp_conflict(
         &self,
         transfer_id: Uuid,
-        choice: SftpUploadConflictChoice,
+        choice: SftpConflictChoice,
         apply_to_batch: bool,
     ) -> Result<()> {
         self.command_tx
-            .try_send(SshCommand::ResolveSftpUploadConflict {
+            .try_send(SshCommand::ResolveSftpConflict {
                 transfer_id,
                 choice,
                 apply_to_batch,
             })
-            .map_err(|error| anyhow::anyhow!("cannot queue SFTP upload decision: {error}"))
+            .map_err(|error| anyhow::anyhow!("cannot queue SFTP conflict decision: {error}"))
     }
 
     pub fn request_pause_sftp_transfer(&self, transfer_id: Uuid) -> Result<()> {
@@ -905,7 +939,7 @@ async fn run_session(task: SshSessionTask) {
                     | Some(SshCommand::OpenSftpFile { .. })
                     | Some(SshCommand::OpenSftpFileAtLocalPath { .. })
                     | Some(SshCommand::OpenSftpUpload { .. })
-                    | Some(SshCommand::ResolveSftpUploadConflict { .. })
+                    | Some(SshCommand::ResolveSftpConflict { .. })
                     | Some(SshCommand::CancelSftpTransfer { .. })
                     | Some(SshCommand::PauseSftpTransfer { .. })
                     | Some(SshCommand::ResumeSftpTransfer { .. })

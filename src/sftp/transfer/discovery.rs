@@ -123,7 +123,7 @@ pub(super) async fn discover_initialized_download_requests(
     let is_directory = validate_download_root_type(&attrs.attrs, root.expected_directory())?;
     if !is_directory {
         let total_bytes = validate_regular_metadata(&attrs.attrs)?.size;
-        let request = SftpDownloadRequest::for_local_download(
+        let mut request = SftpDownloadRequest::for_local_download(
             if root.expected_directory() {
                 stable_child_transfer_id(root.transfer_id, root.remote_path.as_str())
             } else {
@@ -134,6 +134,7 @@ pub(super) async fn discover_initialized_download_requests(
             vec![root.name.clone()],
             total_bytes,
         )?;
+        request.conflict_batch = root.conflict_batch;
         if !root.excludes_remote_path(root.remote_path()) {
             cancellation.wait_until_running().await?;
             discovered_tx
@@ -244,7 +245,7 @@ pub(super) async fn discover_initialized_download_requests(
                 }
                 continue;
             }
-            let request = match SftpDownloadRequest::for_local_download(
+            let mut request = match SftpDownloadRequest::for_local_download(
                 stable_child_transfer_id(root.transfer_id, path.as_str()),
                 path,
                 root.local_directory.clone(),
@@ -257,6 +258,7 @@ pub(super) async fn discover_initialized_download_requests(
                     continue;
                 }
             };
+            request.conflict_batch = root.conflict_batch;
             if root.excludes_remote_path(request.remote_path()) {
                 continue;
             }

@@ -60,11 +60,11 @@ where
             close_upload_session(&session);
             return Ok(UploadOutcome::Conflict(remote));
         }
-        (Some(_), Some(SftpUploadConflictChoice::Skip)) => {
+        (Some(_), Some(SftpConflictChoice::Skip)) => {
             close_upload_session(&session);
             return Ok(UploadOutcome::Skipped);
         }
-        (Some(remote), Some(SftpUploadConflictChoice::Overwrite)) => {
+        (Some(remote), Some(SftpConflictChoice::Overwrite)) => {
             if request
                 .expected_remote
                 .is_some_and(|expected| expected.size.is_none() && expected.modified.is_none())
@@ -92,7 +92,7 @@ where
                 Ok((request.remote_path.clone(), true))
             }
         }
-        (Some(_), Some(SftpUploadConflictChoice::KeepBoth)) => {
+        (Some(_), Some(SftpConflictChoice::KeepBoth)) => {
             find_keep_both_path(&session, &request.remote_path, cancellation)
                 .await
                 .map(|path| (path, false))
@@ -296,8 +296,8 @@ pub(super) fn validate_local_upload_file(
     if metadata.file_type().is_symlink() || !metadata.is_file() {
         anyhow::bail!("local upload source is not a regular file");
     }
-    if local_upload_identity(&metadata) != *request.local_identity
-        || local_upload_identity(&opened) != *request.local_identity
+    if local_file_identity(&metadata) != *request.local_identity
+        || local_file_identity(&opened) != *request.local_identity
     {
         anyhow::bail!("local upload file changed while it was being uploaded");
     }
@@ -313,7 +313,7 @@ pub(super) fn read_local_upload_chunks(
         fs::symlink_metadata(&request.local_path).context("cannot inspect local upload source")?;
     if metadata.file_type().is_symlink()
         || !metadata.is_file()
-        || local_upload_identity(&metadata) != *request.local_identity
+        || local_file_identity(&metadata) != *request.local_identity
     {
         anyhow::bail!("local upload file changed before it was opened");
     }
@@ -337,11 +337,11 @@ pub(super) fn read_local_upload_chunks(
     validate_local_upload_file(request, &file)
 }
 
-pub(super) fn local_upload_identity(metadata: &fs::Metadata) -> LocalUploadIdentity {
+pub(super) fn local_file_identity(metadata: &fs::Metadata) -> LocalFileIdentity {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        LocalUploadIdentity {
+        LocalFileIdentity {
             length: metadata.len(),
             modified: metadata.modified().ok(),
             created: metadata.created().ok(),
@@ -351,7 +351,7 @@ pub(super) fn local_upload_identity(metadata: &fs::Metadata) -> LocalUploadIdent
     }
     #[cfg(not(unix))]
     {
-        LocalUploadIdentity {
+        LocalFileIdentity {
             length: metadata.len(),
             modified: metadata.modified().ok(),
             created: metadata.created().ok(),

@@ -67,7 +67,7 @@ impl SftpBrowserState {
                 .iter()
                 .map(|transfer| transfer.snapshot(self.selected_transfers.contains(&transfer.id)))
                 .collect(),
-            upload_conflict: self.upload_conflicts.front().cloned(),
+            transfer_conflict: self.transfer_conflicts.front().cloned(),
             transfers_paused: self.transfers_paused,
             transfer_selected_active_count,
             transfer_selected_pausable_count,
@@ -178,6 +178,7 @@ impl SftpBrowserState {
     pub(in crate::app) fn register_download_root_intent(
         &mut self,
         transfer_id: Uuid,
+        conflict_batch: Option<Uuid>,
         remote_path: String,
         local_directory: PathBuf,
         filter_patterns: Vec<String>,
@@ -190,6 +191,7 @@ impl SftpBrowserState {
             transfer_id,
             SftpTransferIntent::DownloadRoot {
                 transfer_id,
+                conflict_batch,
                 remote_path,
                 local_directory,
                 filter_patterns,
@@ -322,7 +324,7 @@ impl SftpBrowserState {
         self.loading = false;
         self.pending_download_roots.clear();
         self.scanning_download_roots.clear();
-        self.upload_conflicts.clear();
+        self.transfer_conflicts.clear();
         self.selected_transfers.clear();
         self.reconnect_replay_pending = true;
         #[cfg(target_os = "macos")]
@@ -403,15 +405,17 @@ impl SftpBrowserState {
         self.transfers.clear();
         self.pending_download_roots.clear();
         self.scanning_download_roots.clear();
-        self.upload_conflicts.clear();
+        self.transfer_conflicts.clear();
         self.selected_transfers.clear();
     }
 
+    #[allow(clippy::too_many_arguments)]
     pub(in crate::app) fn finish_download_root(
         &mut self,
         id: Uuid,
         discovered_files: usize,
         skipped_entries: usize,
+        skipped_files: usize,
         failed_files: usize,
         cancelled: bool,
         message: Option<String>,
@@ -424,8 +428,9 @@ impl SftpBrowserState {
         if failed_files > 0 {
             details.push(format!("{failed_files} failed"));
         }
-        if skipped_entries > 0 {
-            details.push(format!("{skipped_entries} skipped"));
+        let skipped = skipped_entries.saturating_add(skipped_files);
+        if skipped > 0 {
+            details.push(format!("{skipped} skipped"));
         }
         if let Some(message) = message {
             details.push(message);
@@ -438,6 +443,12 @@ impl SftpBrowserState {
         let status = details.join("; ");
         let phase = if cancelled {
             SftpTransferPhase::Cancelled
+        } else if skipped_entries == 0
+            && failed_files == 0
+            && skipped_files > 0
+            && skipped_files == discovered_files
+        {
+            SftpTransferPhase::Skipped
         } else if skipped_entries == 0 && failed_files == 0 {
             SftpTransferPhase::Completed
         } else {
@@ -483,7 +494,7 @@ impl SftpBrowserState {
         local_path: Option<std::path::PathBuf>,
         remote_path: Option<String>,
     ) -> Result<()> {
-        self.upload_conflicts
+        self.transfer_conflicts
             .retain(|conflict| conflict.transfer_id != id);
         if let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id) {
             if transfer.phase == SftpTransferPhase::Queued
@@ -592,7 +603,7 @@ impl SftpBrowserState {
         transfer.started_at = Some(Instant::now());
     }
 
-    pub(in crate::app) fn record_upload_conflict(&mut self, conflict: PendingUploadConflict) {
+    pub(in crate::app) fn record_transfer_conflict(&mut self, conflict: PendingSftpConflict) {
         let Some(transfer) = self
             .transfers
             .iter_mut()
@@ -600,11 +611,12 @@ impl SftpBrowserState {
         else {
             return;
         };
-        if transfer.direction != SftpTransferDirection::Upload
+        if (transfer.direction == SftpTransferDirection::Upload) != conflict.upload
             || !matches!(
                 transfer.phase,
                 SftpTransferPhase::Queued
                     | SftpTransferPhase::Uploading
+                    | SftpTransferPhase::Downloading
                     | SftpTransferPhase::Paused
                     | SftpTransferPhase::Pausing
                     | SftpTransferPhase::Resuming
@@ -625,24 +637,25 @@ impl SftpBrowserState {
             transfer.phase = SftpTransferPhase::AwaitingConflict;
             transfer.status = "Waiting for file conflict decision".to_owned();
         }
-        self.upload_conflicts.push_back(conflict);
+        self.transfer_conflicts.push_back(conflict);
     }
 
-    pub(in crate::app) fn resolve_upload_conflict(&mut self, id: Uuid, apply_to_batch: bool) {
+    pub(in crate::app) fn resolve_transfer_conflict(&mut self, id: Uuid, apply_to_batch: bool) {
         let batch_id = self
-            .upload_conflicts
+            .transfer_conflicts
             .iter()
             .find(|item| item.transfer_id == id)
-            .map(|item| item.batch_id);
+            .map(|item| (item.batch_id, item.upload));
         let resolved = self
-            .upload_conflicts
+            .transfer_conflicts
             .iter()
             .filter(|item| {
-                item.transfer_id == id || (apply_to_batch && Some(item.batch_id) == batch_id)
+                item.transfer_id == id
+                    || (apply_to_batch && Some((item.batch_id, item.upload)) == batch_id)
             })
             .map(|item| item.transfer_id)
             .collect::<HashSet<_>>();
-        self.upload_conflicts
+        self.transfer_conflicts
             .retain(|item| !resolved.contains(&item.transfer_id));
         for transfer in &mut self.transfers {
             if resolved.contains(&transfer.id) {
@@ -1013,7 +1026,7 @@ impl SftpBrowserState {
     ) {
         self.pending_download_roots.remove(&id);
         self.scanning_download_roots.remove(&id);
-        self.upload_conflicts
+        self.transfer_conflicts
             .retain(|conflict| conflict.transfer_id != id);
         let completed = {
             let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id)
@@ -1036,6 +1049,14 @@ impl SftpBrowserState {
                     )
                     | (SftpTransferPhase::Downloading, SftpTransferPhase::Cancelled)
                     | (SftpTransferPhase::Downloading, SftpTransferPhase::Failed)
+                    | (SftpTransferPhase::Downloading, SftpTransferPhase::Skipped)
+                    | (
+                        SftpTransferPhase::AwaitingConflict,
+                        SftpTransferPhase::Skipped
+                    )
+                    | (SftpTransferPhase::Pausing, SftpTransferPhase::Skipped)
+                    | (SftpTransferPhase::Paused, SftpTransferPhase::Skipped)
+                    | (SftpTransferPhase::Resuming, SftpTransferPhase::Skipped)
                     | (SftpTransferPhase::Uploading, SftpTransferPhase::Cancelled)
                     | (SftpTransferPhase::Uploading, SftpTransferPhase::Failed)
                     | (SftpTransferPhase::Uploading, SftpTransferPhase::Skipped)
@@ -1061,7 +1082,11 @@ impl SftpBrowserState {
                 transfer.downloaded_bytes = transfer.total_bytes;
             }
             transfer.status = status;
-            !transfer.phase.active() && phase == SftpTransferPhase::Completed
+            !transfer.phase.active()
+                && matches!(
+                    phase,
+                    SftpTransferPhase::Completed | SftpTransferPhase::Skipped
+                )
         };
         if completed {
             self.mark_directory_child_completed(id);

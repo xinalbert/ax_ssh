@@ -3,6 +3,7 @@ use slint::Model;
 
 mod security_dialogs;
 mod session_navigation;
+mod sftp_conflicts;
 mod sftp_navigation;
 mod shortcut_menus;
 mod terminal_connection;

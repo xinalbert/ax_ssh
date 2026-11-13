@@ -133,10 +133,33 @@ static CACHE_QUOTA_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
 const POSIX_RENAME_EXTENSION: &str = "posix-rename@openssh.com";
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub enum SftpUploadConflictChoice {
+pub enum SftpConflictChoice {
     Skip,
     Overwrite,
     KeepBoth,
+}
+
+/// Observed identity of an existing regular download target. The transport
+/// owner retains this value across the prompt; UI code only reads its summary.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct LocalDownloadFingerprint {
+    identity: LocalFileIdentity,
+}
+
+impl LocalDownloadFingerprint {
+    pub fn size(&self) -> u64 {
+        self.identity.length
+    }
+
+    pub fn modified(&self) -> Option<u32> {
+        self.identity
+            .modified?
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .ok()?
+            .as_secs()
+            .try_into()
+            .ok()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -186,6 +209,7 @@ pub enum SftpTransferEvent {
         transfer_id: Uuid,
         discovered_files: usize,
         skipped_entries: usize,
+        skipped_files: usize,
         failed_files: usize,
         cancelled: bool,
         message: Option<String>,
@@ -196,6 +220,12 @@ pub enum SftpTransferEvent {
         name: String,
         remote_size: Option<u64>,
         remote_modified: Option<u32>,
+    },
+    DownloadConflict {
+        transfer_id: Uuid,
+        batch_id: Uuid,
+        name: String,
+        local: LocalDownloadFingerprint,
     },
     Skipped {
         transfer_id: Uuid,
@@ -231,8 +261,8 @@ pub(crate) struct SftpUploadRequest {
     local_path: PathBuf,
     remote_directories: Vec<String>,
     total_bytes: u64,
-    local_identity: Arc<LocalUploadIdentity>,
-    conflict_choice: Option<SftpUploadConflictChoice>,
+    local_identity: Arc<LocalFileIdentity>,
+    conflict_choice: Option<SftpConflictChoice>,
     expected_remote: Option<RemoteUploadFingerprint>,
     execution_id: Uuid,
 }
@@ -244,7 +274,7 @@ struct RemoteUploadFingerprint {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-struct LocalUploadIdentity {
+struct LocalFileIdentity {
     length: u64,
     modified: Option<SystemTime>,
     created: Option<SystemTime>,
@@ -301,7 +331,7 @@ impl SftpUploadRequest {
             local_path,
             remote_directories,
             total_bytes,
-            local_identity: Arc::new(local_upload_identity(&metadata)),
+            local_identity: Arc::new(local_file_identity(&metadata)),
             conflict_choice: None,
             expected_remote: None,
             execution_id: Uuid::new_v4(),
@@ -316,7 +346,7 @@ impl SftpUploadRequest {
         self.batch_id
     }
 
-    pub(crate) fn set_conflict_choice(&mut self, choice: SftpUploadConflictChoice) {
+    pub(crate) fn set_conflict_choice(&mut self, choice: SftpConflictChoice) {
         self.conflict_choice = Some(choice);
     }
 
@@ -353,6 +383,9 @@ pub(crate) struct SftpDownloadRequest {
     total_bytes: u64,
     expected_size: Option<u64>,
     local_target: Option<LocalDownloadTarget>,
+    conflict_batch: Option<Uuid>,
+    conflict_choice: Option<SftpConflictChoice>,
+    expected_local: Option<LocalDownloadFingerprint>,
 }
 
 pub(crate) enum SftpDiscoveredDownload {
@@ -387,6 +420,9 @@ impl SftpDownloadRequest {
             total_bytes: 0,
             expected_size: None,
             local_target: None,
+            conflict_batch: None,
+            conflict_choice: None,
+            expected_local: None,
         })
     }
 
@@ -407,6 +443,9 @@ impl SftpDownloadRequest {
             total_bytes,
             expected_size: Some(total_bytes),
             local_target: Some(local_target),
+            conflict_batch: None,
+            conflict_choice: None,
+            expected_local: None,
         })
     }
 
@@ -466,6 +505,22 @@ impl SftpDownloadRequest {
             .as_ref()
             .map(LocalDownloadTarget::final_path)
     }
+
+    pub(crate) fn conflict_batch(&self) -> Option<Uuid> {
+        self.conflict_batch
+    }
+
+    pub(crate) fn conflict_choice_is_unset(&self) -> bool {
+        self.conflict_choice.is_none()
+    }
+
+    pub(crate) fn resolve_conflict(&mut self, choice: SftpConflictChoice) {
+        self.conflict_choice = Some(choice);
+    }
+
+    pub(crate) fn set_expected_local(&mut self, local: LocalDownloadFingerprint) {
+        self.expected_local = Some(local);
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -478,6 +533,7 @@ pub(crate) struct SftpDownloadRoot {
     expected_directory: bool,
     allow_existing_local_directories: bool,
     excluded_remote_paths: HashSet<String>,
+    conflict_batch: Option<Uuid>,
 }
 
 impl SftpDownloadRoot {
@@ -498,6 +554,7 @@ impl SftpDownloadRoot {
             0,
         )?;
         request.expected_size = None;
+        request.conflict_batch = self.conflict_batch;
         Ok(Some(request))
     }
 
@@ -575,6 +632,7 @@ impl SftpDownloadRoot {
             expected_directory,
             allow_existing_local_directories,
             excluded_remote_paths,
+            conflict_batch: None,
         })
     }
 
@@ -608,6 +666,19 @@ impl SftpDownloadRoot {
 
     pub(crate) fn excludes_remote_path(&self, path: &str) -> bool {
         self.excluded_remote_paths.contains(path)
+    }
+
+    pub(crate) fn with_optional_conflict_batch(self, batch_id: Option<Uuid>) -> Self {
+        match batch_id {
+            Some(batch) => self.with_conflict_batch(batch),
+            None => self,
+        }
+    }
+
+    pub(crate) fn with_conflict_batch(mut self, batch_id: Uuid) -> Self {
+        self.conflict_batch = Some(batch_id);
+        self.allow_existing_local_directories = true;
+        self
     }
 }
 
@@ -881,6 +952,7 @@ async fn run_download<F, Fut>(
 {
     let transfer_id = request.transfer_id;
     let writes_local_target = request.local_target.is_some();
+    let preserve_published = request.conflict_choice == Some(SftpConflictChoice::Overwrite);
     let mut first_session = Some(session);
     let mut retries = 0;
     let result = loop {
@@ -914,13 +986,13 @@ async fn run_download<F, Fut>(
     };
     let terminal_event = match result {
         Ok((local_path, _total_bytes)) if cancellation.is_cancelled() => {
-            if writes_local_target {
+            if writes_local_target && !preserve_published {
                 remove_local_download_best_effort(
                     local_path,
                     "transfer was cancelled after local publication",
                 )
                 .await;
-            } else {
+            } else if !writes_local_target {
                 remove_cache_file_best_effort(
                     local_path,
                     "transfer was cancelled after cache publication",
@@ -935,6 +1007,30 @@ async fn run_download<F, Fut>(
             total_bytes,
         },
         Err(error) if is_cancelled(&error) => SftpTransferEvent::Cancelled { transfer_id },
+        Err(error) if error.is::<DownloadSkipped>() => SftpTransferEvent::Skipped { transfer_id },
+        Err(error) if request.conflict_batch.is_some() && error.is::<LocalDownloadConflict>() => {
+            match (
+                request.conflict_batch,
+                error.downcast::<LocalDownloadConflict>(),
+            ) {
+                (Some(batch_id), Ok(conflict)) => SftpTransferEvent::DownloadConflict {
+                    transfer_id,
+                    batch_id,
+                    name: request.name,
+                    local: conflict.0,
+                },
+                (_, Err(error)) => SftpTransferEvent::Failed {
+                    transfer_id,
+                    message: bounded_error(&error),
+                    recoverable: false,
+                },
+                _ => SftpTransferEvent::Failed {
+                    transfer_id,
+                    message: "download conflict has no batch".to_owned(),
+                    recoverable: false,
+                },
+            }
+        }
         Err(error) => SftpTransferEvent::Failed {
             transfer_id,
             message: bounded_error(&error),
@@ -957,10 +1053,10 @@ async fn run_download<F, Fut>(
         }
     };
     if !delivered && let Some(path) = cleanup_path {
-        if writes_local_target {
+        if writes_local_target && !preserve_published {
             remove_local_download_best_effort(path, "terminal transfer event was not delivered")
                 .await;
-        } else {
+        } else if !writes_local_target {
             remove_cache_file_best_effort(path, "terminal transfer event was not delivered").await;
         }
     }

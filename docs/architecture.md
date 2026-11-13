@@ -2070,11 +2070,31 @@ or credentials.
 Manual Refresh remains available when a filesystem does not deliver events.
 
 The local writer validates every path component, rejects symlink traversal and
-existing targets, creates a task-specific `0600` `.part` file on Unix, then
-flushes, fsyncs, and atomically publishes the final name without replacing a
-concurrent local file.
-Cancellation and failures remove the partial data; a cancellation observed after
-publication removes the completed target before it can be reported successful.
+non-regular targets, and creates a task-specific `0600` `.part` file on Unix.
+Normal downloads report existing regular files to a worker-owned conflict queue
+and the shared upload/download `ModalFrame` prompt. Each file offers Skip,
+Overwrite, and Keep both. The optional batch choice covers pending and subsequent
+files from that one selection/drop, including recursively discovered children;
+another batch asks again. Runtime reconnect intents retain batch membership,
+but closing or reconnecting discards the worker's decisions and target fingerprints.
+Existing real directory trees are merged for normal downloads so each file can
+receive its own decision; links and file/directory type collisions remain rejected.
+Conflict waits count against bounded queue admission and release their network
+tasks. File, directory, and page cancellation also clear pending decisions. User-skipped files
+finish as Skipped and remain excluded from reconnect replay. Directory summaries
+count those choices separately from discovery errors: all skipped files yield
+a Skipped directory, while mixed completed/skipped files complete successfully.
+
+The writer flushes and fsyncs complete data before publishing. Without an overwrite
+decision it creates the final name without replacing a concurrent local file.
+Keep both chooses a numbered name before the extension and retries when another
+download takes that name. Overwrite checks the observed file identity, size and
+timestamps after the prompt and again immediately before atomic replacement.
+An observed target change fails while retaining the current local file. Incomplete or
+cancelled transfers remove their partial file and leave the original intact.
+After a successful replacement, late cancellation, event-delivery failure, or a
+directory-sync error never deletes the published replacement. Other new-file
+downloads retain their existing cleanup behavior when cancellation follows publication.
 Completed local downloads are retained. Tab shutdown cancels and joins pending
 discovery, subsystem openings, and active transfers. The remote row context
 menu owns bounded Download, single-entry Rename, and Delete intents; the remote
@@ -2167,7 +2187,8 @@ or cancellation, including invalid destinations and late requests. A duplicate
 request fails its own callback without replacing the original callback. Drag
 startup and queue errors appear in the originating SFTP pane's status; late
 errors from an old attempt cannot overwrite a newer connection's status. The
-normal local writer still refuses to overwrite an existing destination.
+explicit native destination retains its no-overwrite behavior and does not open
+the normal download conflict prompt.
 
 
 ### External file editing

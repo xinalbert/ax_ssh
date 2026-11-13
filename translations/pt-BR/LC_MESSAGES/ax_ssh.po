@@ -118,6 +118,9 @@ msgstr "Aplica-se a novas conexões SSH; a gravação começa automaticamente"
 msgid "Apply one color family to both display modes"
 msgstr "Aplicar a mesma família de cores aos dois modos de exibição"
 
+msgid "Apply this choice to this download batch"
+msgstr "Aplicar esta escolha a este lote de downloads"
+
 msgid "Apply this choice to this upload batch"
 msgstr "Aplicar esta opção a este lote de envio"
 
@@ -703,11 +706,17 @@ msgstr "Provedor do servidor X local"
 msgid "Local default directory"
 msgstr "Diretório local padrão"
 
+msgid "Local file already exists"
+msgstr "O arquivo local já existe"
+
 msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
 msgstr "Cópia local antes de abrir; padrão de 512 MiB. 0 remove os limites de tamanho de arquivos e cache e pode usar muito espaço em disco"
 
 msgid "Local file open snapshot (MiB)"
 msgstr "Cópia local para abrir arquivos (MiB)"
+
+msgid "Local file: {0} - Modified: {1}"
+msgstr "Arquivo local: {0} - Modificado: {1}"
 
 msgid "Local files"
 msgstr "Arquivos locais"

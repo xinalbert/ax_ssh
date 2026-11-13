@@ -946,30 +946,31 @@ pub(super) fn apply_sftp_snapshot(ui: &AppWindow, snapshot: SftpBrowserSnapshot)
     ui.set_sftp_has_more(snapshot.has_more);
     ui.set_sftp_truncated(snapshot.truncated);
     ui.set_sftp_status(snapshot.status.into());
-    if let Some(conflict) = snapshot.upload_conflict {
-        ui.set_sftp_upload_conflict_open(true);
-        ui.set_sftp_upload_conflict_id(conflict.transfer_id.to_string().into());
-        ui.set_sftp_upload_conflict_name(conflict.name.into());
-        ui.set_sftp_upload_conflict_size(
+    if let Some(conflict) = snapshot.transfer_conflict {
+        ui.set_sftp_transfer_conflict_upload(conflict.upload);
+        ui.set_sftp_transfer_conflict_open(true);
+        ui.set_sftp_transfer_conflict_id(conflict.transfer_id.to_string().into());
+        ui.set_sftp_transfer_conflict_name(conflict.name.into());
+        ui.set_sftp_transfer_conflict_size(
             conflict
-                .remote_size
+                .target_size
                 .map(|size| format_file_size(size, false))
                 .unwrap_or_else(|| "-".to_owned())
                 .into(),
         );
-        ui.set_sftp_upload_conflict_modified(
+        ui.set_sftp_transfer_conflict_modified(
             conflict
-                .remote_modified
+                .target_modified
                 .map(format_timestamp)
                 .unwrap_or_else(|| "-".to_owned())
                 .into(),
         );
     } else {
-        ui.set_sftp_upload_conflict_open(false);
-        ui.set_sftp_upload_conflict_id("".into());
-        ui.set_sftp_upload_conflict_name("".into());
-        ui.set_sftp_upload_conflict_size("".into());
-        ui.set_sftp_upload_conflict_modified("".into());
+        ui.set_sftp_transfer_conflict_open(false);
+        ui.set_sftp_transfer_conflict_id("".into());
+        ui.set_sftp_transfer_conflict_name("".into());
+        ui.set_sftp_transfer_conflict_size("".into());
+        ui.set_sftp_transfer_conflict_modified("".into());
     }
     ui.set_sftp_can_go_back(snapshot.can_go_back);
     ui.set_sftp_can_go_forward(snapshot.can_go_forward);

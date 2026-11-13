@@ -118,6 +118,9 @@ msgstr "新しいSSH接続に適用；録音は自動的に開始"
 msgid "Apply one color family to both display modes"
 msgstr "両方の表示モードに同じ配色を適用"
 
+msgid "Apply this choice to this download batch"
+msgstr "この選択を今回のダウンロード一括処理に適用"
+
 msgid "Apply this choice to this upload batch"
 msgstr "このアップロード一括処理に適用"
 
@@ -703,11 +706,17 @@ msgstr "ローカルXサーバーのプロバイダー"
 msgid "Local default directory"
 msgstr "ローカルの既定ディレクトリ"
 
+msgid "Local file already exists"
+msgstr "ローカルファイルは既に存在します"
+
 msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
 msgstr "開く前にローカルファイルをコピー；既定は512 MiB。0ではファイルとキャッシュの容量制限を解除し、多くのディスク容量を使用する場合があります"
 
 msgid "Local file open snapshot (MiB)"
 msgstr "ローカルファイルを開く際のコピー上限（MiB）"
+
+msgid "Local file: {0} - Modified: {1}"
+msgstr "ローカルファイル: {0} - 更新日時: {1}"
 
 msgid "Local files"
 msgstr "ローカルファイル"

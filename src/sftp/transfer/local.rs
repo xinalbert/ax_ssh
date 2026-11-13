@@ -90,7 +90,17 @@ impl LocalDownloadTarget {
         Ok(current)
     }
 
+    #[cfg(test)]
     fn prepare(&self) -> Result<LocalPendingFile> {
+        self.prepare_with_choice(None, None, false)
+    }
+
+    fn prepare_with_choice(
+        &self,
+        choice: Option<SftpConflictChoice>,
+        expected: Option<LocalDownloadFingerprint>,
+        interactive: bool,
+    ) -> Result<LocalPendingFile> {
         let root = fs::canonicalize(&self.root)
             .with_context(|| format!("cannot resolve local download directory {:?}", self.root))?;
         Self::validate_directory(&root)?;
@@ -127,12 +137,34 @@ impl LocalDownloadTarget {
             .components
             .last()
             .context("local download target is missing its file name")?;
-        let final_path = canonical_parent.join(name);
-        if final_path.exists() {
-            anyhow::bail!("local download target already exists: {final_path:?}");
-        }
+        let mut final_path = canonical_parent.join(name);
+        let existing = local_download_fingerprint(&final_path)?;
+        let overwrite = match (existing, choice) {
+            (Some(local), None) if interactive => return Err(LocalDownloadConflict(local).into()),
+            (Some(_), None) => {
+                anyhow::bail!("local download target already exists: {final_path:?}")
+            }
+            (Some(_), Some(SftpConflictChoice::Skip)) => return Err(DownloadSkipped.into()),
+            (Some(local), Some(SftpConflictChoice::Overwrite)) => {
+                if expected.as_ref().is_some_and(|expected| *expected != local) {
+                    anyhow::bail!("local download target changed since confirmation");
+                }
+                Some(local)
+            }
+            (Some(_), Some(SftpConflictChoice::KeepBoth)) => {
+                final_path = available_local_download_name(&canonical_parent, name)?;
+                None
+            }
+            (None, Some(SftpConflictChoice::Overwrite)) if expected.is_some() => {
+                anyhow::bail!("local download target disappeared since confirmation");
+            }
+            (None, _) => None,
+        };
         let part_path = canonical_parent.join(format!(".{name}.axssh-{}.part", self.transfer_id));
-        LocalPendingFile::create(root, canonical_parent, part_path, final_path)
+        let mut pending = LocalPendingFile::create(root, canonical_parent, part_path, final_path)?;
+        pending.overwrite = overwrite;
+        pending.keep_both = (choice == Some(SftpConflictChoice::KeepBoth)).then(|| name.clone());
+        Ok(pending)
     }
 }
 
@@ -143,6 +175,8 @@ pub(super) struct LocalPendingFile {
     part_path: PathBuf,
     final_path: PathBuf,
     cleanup_path: Option<PathBuf>,
+    overwrite: Option<LocalDownloadFingerprint>,
+    keep_both: Option<String>,
 }
 
 impl LocalPendingFile {
@@ -169,6 +203,8 @@ impl LocalPendingFile {
             part_path: part_path.clone(),
             final_path,
             cleanup_path: Some(part_path),
+            overwrite: None,
+            keep_both: None,
         })
     }
 
@@ -187,8 +223,41 @@ impl LocalPendingFile {
         file.sync_all().context("cannot sync local download")?;
         drop(file);
         verify_local_download_parent(&self.root, &self.parent)?;
-        publish_local_download_without_overwrite(&self.part_path, &self.final_path)?;
-        self.cleanup_path = Some(self.final_path.clone());
+        if let Some(expected) = &self.overwrite {
+            if local_download_fingerprint(&self.final_path)?.as_ref() != Some(expected) {
+                anyhow::bail!("local download target changed before replacement");
+            }
+            fs::rename(&self.part_path, &self.final_path)
+                .context("cannot atomically replace local download target")?;
+            // Publication is the commit point. Later cancellation or a sync
+            // error must never delete the completed replacement.
+            self.cleanup_path = None;
+        } else {
+            let mut retries = 0;
+            loop {
+                match publish_local_download_without_overwrite(&self.part_path, &self.final_path) {
+                    Err(error)
+                        if self.keep_both.is_some()
+                            && error.downcast_ref::<io::Error>().is_some_and(|error| {
+                                error.kind() == io::ErrorKind::AlreadyExists
+                            })
+                            && retries < 10_000 =>
+                    {
+                        let name = self
+                            .keep_both
+                            .as_deref()
+                            .context("missing keep-both name")?;
+                        self.final_path = available_local_download_name(&self.parent, name)?;
+                        retries += 1;
+                    }
+                    result => {
+                        result?;
+                        break;
+                    }
+                }
+            }
+            self.cleanup_path = Some(self.final_path.clone());
+        }
         sync_local_directory(&self.parent)?;
         self.cleanup_path = None;
         Ok(self.final_path.clone())
@@ -208,10 +277,15 @@ impl Drop for LocalPendingFile {
 
 pub(super) async fn prepare_local_download(
     target: LocalDownloadTarget,
+    choice: Option<SftpConflictChoice>,
+    expected: Option<LocalDownloadFingerprint>,
+    interactive: bool,
     cancellation: &TransferCancellation,
     deadline: Instant,
 ) -> Result<LocalPendingFile> {
-    let task = tokio::task::spawn_blocking(move || target.prepare());
+    let task = tokio::task::spawn_blocking(move || {
+        target.prepare_with_choice(choice, expected, interactive)
+    });
     await_step(
         cancellation,
         deadline,
@@ -271,21 +345,22 @@ pub(super) async fn await_local_writer_success(
     writer: &mut JoinHandle<Result<PathBuf>>,
     cancellation: &TransferCancellation,
     deadline: Instant,
+    preserve_published: bool,
 ) -> Result<PathBuf> {
     if cancellation.is_cancelled() {
-        let _ = await_local_writer_cleanup(writer).await;
+        let _ = await_local_writer_cleanup(writer, preserve_published).await;
         return Err(cancelled_error());
     }
     tokio::select! {
         _ = cancellation.cancelled() => {
-            let _ = await_local_writer_cleanup(writer).await;
+            let _ = await_local_writer_cleanup(writer, preserve_published).await;
             Err(cancelled_error())
         }
         result = timeout_at(deadline, &mut *writer) => match result {
             Ok(joined) => joined.context("local download writer task failed")?,
             Err(_) => {
                 cancellation.cancel();
-                let _ = await_local_writer_cleanup(writer).await;
+                let _ = await_local_writer_cleanup(writer, preserve_published).await;
                 anyhow::bail!("SFTP download exceeded the {}-second overall timeout", DOWNLOAD_TIMEOUT.as_secs())
             }
         },
@@ -294,10 +369,13 @@ pub(super) async fn await_local_writer_success(
 
 pub(super) async fn await_local_writer_cleanup(
     writer: &mut JoinHandle<Result<PathBuf>>,
+    preserve_published: bool,
 ) -> Option<anyhow::Error> {
     match timeout(WRITER_CLEANUP_TIMEOUT, &mut *writer).await {
         Ok(Ok(Ok(path))) => {
-            remove_local_download_best_effort(path, "transfer failed after publication").await;
+            if !preserve_published {
+                remove_local_download_best_effort(path, "transfer failed after publication").await;
+            }
             None
         }
         Ok(Ok(Err(error))) => Some(error),
@@ -327,6 +405,64 @@ pub(super) async fn remove_local_download_best_effort(path: PathBuf, reason: &'s
 
 pub(super) fn is_incomplete_local_write(error: &anyhow::Error) -> bool {
     error.downcast_ref::<IncompleteLocalWrite>().is_some()
+}
+
+#[derive(Debug)]
+pub(super) struct LocalDownloadConflict(pub(super) LocalDownloadFingerprint);
+
+impl fmt::Display for LocalDownloadConflict {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("local download target already exists")
+    }
+}
+
+impl StdError for LocalDownloadConflict {}
+
+#[derive(Debug)]
+pub(super) struct DownloadSkipped;
+
+impl fmt::Display for DownloadSkipped {
+    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+        formatter.write_str("download skipped")
+    }
+}
+
+impl StdError for DownloadSkipped {}
+
+fn local_download_fingerprint(path: &Path) -> Result<Option<LocalDownloadFingerprint>> {
+    let metadata = match fs::symlink_metadata(path) {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(error).context("cannot inspect local download target"),
+    };
+    if metadata.file_type().is_symlink() || !metadata.is_file() {
+        anyhow::bail!("local download target is a symbolic link or non-regular file");
+    }
+    Ok(Some(LocalDownloadFingerprint {
+        identity: local_file_identity(&metadata),
+    }))
+}
+
+fn available_local_download_name(parent: &Path, name: &str) -> Result<PathBuf> {
+    let path = Path::new(name);
+    let stem = path
+        .file_stem()
+        .and_then(|name| name.to_str())
+        .unwrap_or(name);
+    let extension = path.extension().and_then(|name| name.to_str());
+    for index in 1..=10_000 {
+        let name = match extension {
+            Some(extension) => format!("{stem} ({index}).{extension}"),
+            None => format!("{stem} ({index})"),
+        };
+        let candidate = parent.join(name);
+        match fs::symlink_metadata(&candidate) {
+            Ok(_) => continue,
+            Err(error) if error.kind() == io::ErrorKind::NotFound => return Ok(candidate),
+            Err(error) => return Err(error).context("cannot inspect numbered download target"),
+        }
+    }
+    anyhow::bail!("cannot find a free numbered download target")
 }
 
 fn validate_local_components(components: &[String]) -> Result<()> {
@@ -407,6 +543,243 @@ impl StdError for IncompleteLocalWrite {}
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    struct TestDirectory(PathBuf);
+
+    impl TestDirectory {
+        fn new() -> Self {
+            let path = std::env::temp_dir().join(format!("axssh-conflict-{}", Uuid::new_v4()));
+            fs::create_dir(&path).expect("test directory");
+            Self(fs::canonicalize(path).expect("canonical test directory"))
+        }
+
+        fn target(&self) -> LocalDownloadTarget {
+            LocalDownloadTarget::new(self.0.clone(), vec!["report.txt".into()]).expect("target")
+        }
+    }
+
+    impl Drop for TestDirectory {
+        fn drop(&mut self) {
+            fs::remove_dir_all(&self.0).expect("fixture cleanup");
+        }
+    }
+
+    #[test]
+    fn download_conflict_choices_preserve_skip_number_and_replace() {
+        let dir = TestDirectory::new();
+        let path = dir.0.join("report.txt");
+        fs::write(&path, b"original").expect("original");
+        let target = dir.target();
+        let conflict = target
+            .prepare_with_choice(None, None, true)
+            .err()
+            .expect("must ask")
+            .downcast::<LocalDownloadConflict>()
+            .expect("typed conflict");
+        assert_eq!(conflict.0.size(), 8);
+        assert_eq!(fs::read(&path).expect("original"), b"original");
+        let skip = target
+            .prepare_with_choice(Some(SftpConflictChoice::Skip), None, true)
+            .err()
+            .expect("skip");
+        assert!(skip.is::<DownloadSkipped>());
+        fs::write(dir.0.join("report (1).txt"), b"occupied").expect("numbered name");
+        let mut keep = target
+            .prepare_with_choice(Some(SftpConflictChoice::KeepBoth), None, true)
+            .expect("keep both");
+        keep.file_mut()
+            .expect("part")
+            .write_all(b"copy")
+            .expect("write");
+        let kept = keep.finish().expect("publish copy");
+        assert_eq!(kept, dir.0.join("report (2).txt"));
+        assert_eq!(fs::read(&path).expect("original"), b"original");
+        let mut overwrite = target
+            .prepare_with_choice(Some(SftpConflictChoice::Overwrite), Some(conflict.0), true)
+            .expect("overwrite");
+        overwrite
+            .file_mut()
+            .expect("part")
+            .write_all(b"new")
+            .expect("write");
+        assert_eq!(fs::read(&path).expect("original until commit"), b"original");
+        assert_eq!(overwrite.finish().expect("atomic replace"), path);
+        assert_eq!(fs::read(&path).expect("new bytes"), b"new");
+        assert!(fs::read_dir(&dir.0).expect("directory").all(|entry| {
+            !entry
+                .expect("entry")
+                .file_name()
+                .to_string_lossy()
+                .ends_with(".part")
+        }));
+    }
+
+    #[test]
+    fn download_overwrite_rechecks_before_writing_and_publication() {
+        let dir = TestDirectory::new();
+        let path = dir.0.join("report.txt");
+        fs::write(&path, b"original").expect("original");
+        let original = local_download_fingerprint(&path)
+            .expect("metadata")
+            .expect("file");
+        fs::write(&path, b"changed after prompt").expect("change");
+        assert!(
+            dir.target()
+                .prepare_with_choice(Some(SftpConflictChoice::Overwrite), Some(original), true)
+                .is_err()
+        );
+        let current = local_download_fingerprint(&path)
+            .expect("metadata")
+            .expect("file");
+        let mut pending = dir
+            .target()
+            .prepare_with_choice(Some(SftpConflictChoice::Overwrite), Some(current), true)
+            .expect("part");
+        let part = pending.part_path.clone();
+        pending
+            .file_mut()
+            .expect("part")
+            .write_all(b"download")
+            .expect("write");
+        fs::write(&path, b"edited during download").expect("concurrent change");
+        assert!(pending.finish().is_err());
+        assert_eq!(
+            fs::read(path).expect("kept changes"),
+            b"edited during download"
+        );
+        assert!(!part.exists());
+    }
+
+    #[test]
+    fn concurrent_keep_both_downloads_choose_distinct_numbered_names() {
+        let dir = TestDirectory::new();
+        fs::write(dir.0.join("report.txt"), b"original").expect("original");
+        let mut first = dir
+            .target()
+            .prepare_with_choice(Some(SftpConflictChoice::KeepBoth), None, true)
+            .expect("first");
+        let mut second = dir
+            .target()
+            .prepare_with_choice(Some(SftpConflictChoice::KeepBoth), None, true)
+            .expect("second");
+        first
+            .file_mut()
+            .expect("first part")
+            .write_all(b"first")
+            .expect("write");
+        second
+            .file_mut()
+            .expect("second part")
+            .write_all(b"second")
+            .expect("write");
+        assert_eq!(
+            first.finish().expect("first publish"),
+            dir.0.join("report (1).txt")
+        );
+        assert_eq!(
+            second.finish().expect("second publish"),
+            dir.0.join("report (2).txt")
+        );
+        assert_eq!(
+            fs::read(dir.0.join("report (1).txt")).expect("first"),
+            b"first"
+        );
+        assert_eq!(
+            fs::read(dir.0.join("report.txt")).expect("original"),
+            b"original"
+        );
+    }
+
+    #[tokio::test]
+    async fn cancellation_after_overwrite_commit_keeps_the_published_replacement() {
+        let dir = TestDirectory::new();
+        let path = dir.0.join("report.txt");
+        fs::write(&path, b"original").expect("original");
+        let mut pending = dir
+            .target()
+            .prepare_with_choice(Some(SftpConflictChoice::Overwrite), None, true)
+            .expect("part");
+        pending
+            .file_mut()
+            .expect("part")
+            .write_all(b"complete replacement")
+            .expect("write");
+        let published = pending.finish().expect("commit");
+        let mut writer = tokio::task::spawn_blocking(move || Ok(published));
+        let cancellation = TransferCancellation::new();
+        cancellation.cancel();
+        assert!(
+            await_local_writer_success(
+                &mut writer,
+                &cancellation,
+                Instant::now() + REQUEST_TIMEOUT,
+                true
+            )
+            .await
+            .is_err()
+        );
+        assert_eq!(
+            fs::read(path).expect("keep committed replacement"),
+            b"complete replacement"
+        );
+    }
+
+    #[test]
+    fn incomplete_or_cancelled_overwrite_keeps_original_and_removes_partial() {
+        for cancelled in [false, true] {
+            let dir = TestDirectory::new();
+            let path = dir.0.join("report.txt");
+            fs::write(&path, b"original").expect("original");
+            let pending = dir
+                .target()
+                .prepare_with_choice(Some(SftpConflictChoice::Overwrite), None, true)
+                .expect("part");
+            let part = pending.part_path.clone();
+            let (tx, rx) = mpsc::channel(2);
+            tx.try_send(b"short".to_vec()).expect("chunk");
+            drop(tx);
+            let cancellation = TransferCancellation::new();
+            if cancelled {
+                cancellation.cancel();
+            }
+            assert!(write_local_file(pending, rx, 100, &cancellation).is_err());
+            assert_eq!(fs::read(path).expect("kept original"), b"original");
+            assert!(!part.exists());
+        }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn download_conflict_rejects_symlink_targets_and_parents() {
+        let dir = TestDirectory::new();
+        let outside = TestDirectory::new();
+        let path = dir.0.join("report.txt");
+        let original = outside.0.join("original.txt");
+        fs::write(&original, b"outside").expect("original");
+        std::os::unix::fs::symlink(&original, &path).expect("link");
+        for choice in [
+            None,
+            Some(SftpConflictChoice::Skip),
+            Some(SftpConflictChoice::KeepBoth),
+            Some(SftpConflictChoice::Overwrite),
+        ] {
+            assert!(
+                dir.target()
+                    .prepare_with_choice(choice, None, true)
+                    .is_err()
+            );
+        }
+        std::os::unix::fs::symlink(&outside.0, dir.0.join("linked")).expect("parent link");
+        let target =
+            LocalDownloadTarget::new(dir.0.clone(), vec!["linked".into(), "original.txt".into()])
+                .expect("target");
+        assert!(
+            target
+                .prepare_with_choice(Some(SftpConflictChoice::Overwrite), None, true)
+                .is_err()
+        );
+        assert_eq!(fs::read(original).expect("outside unchanged"), b"outside");
+    }
 
     #[test]
     fn local_target_rejects_escape_components() {

@@ -1,6 +1,6 @@
 import { AuthenticationDialog, CredentialAccessDialog, HostKeyDialog } from "security-dialogs.slint";
 import { SessionManagementDialog } from "session-management-dialog.slint";
-import { SftpUploadConflictDialog } from "sftp-upload-conflict-dialog.slint";
+import { SftpTransferConflictDialog } from "sftp-transfer-conflict-dialog.slint";
 import { SftpRenameDialog } from "sftp-rename-dialog.slint";
 import { WorkspaceFileDialog } from "workspace-file-dialog.slint";
 import { TerminalNoticeCard, TerminalNoticeViewState } from "../terminal-pane.slint";
@@ -32,11 +32,12 @@ export component OverlayHost inherits Rectangle {
     in property <TerminalNoticeViewState> terminal-notice;
     in property <string> terminal-notice-pane-id;
     in property <bool> window-active: true;
-    in property <bool> upload-conflict-open: false;
-    in property <string> upload-conflict-id;
-    in property <string> upload-conflict-name;
-    in property <string> upload-conflict-size;
-    in property <string> upload-conflict-modified;
+    in property <bool> transfer-conflict-open: false;
+    in property <bool> transfer-conflict-upload: false;
+    in property <string> transfer-conflict-id;
+    in property <string> transfer-conflict-name;
+    in property <string> transfer-conflict-size;
+    in property <string> transfer-conflict-modified;
 
     callback manage-session-action(string, string, string);
     callback terminal-notice-action(string, string);
@@ -46,12 +47,12 @@ export component OverlayHost inherits Rectangle {
     callback cancel-password-dialog();
     callback resolve-credential-access(bool);
     callback workspace-file-action(string, string);
-    callback resolve-sftp-upload-conflict(string, string, bool);
+    callback resolve-sftp-transfer-conflict(string, string, bool);
     callback rename-remote-sftp(string, string, string);
 
     private property <bool> security-open: root.security.host_key_open || root.security.password_open;
     out property <bool> modal-open: root.security-open
-        || root.workspace-file-open || root.session-management-open || root.upload-conflict-open
+        || root.workspace-file-open || root.session-management-open || root.transfer-conflict-open
         || root.sftp-rename-open;
     private property <bool> workspace-file-open: false;
     private property <string> workspace-file-mode;
@@ -169,12 +170,14 @@ export component OverlayHost inherits Rectangle {
     }
 
     if !root.security-open && !root.workspace-file-open && !root.session-management-open && !root.sftp-rename-open
-        && root.upload-conflict-open : SftpUploadConflictDialog {
-        file-name: root.upload-conflict-name;
-        remote-size: root.upload-conflict-size;
-        remote-modified: root.upload-conflict-modified;
+        && root.transfer-conflict-open : SftpTransferConflictDialog {
+        upload: root.transfer-conflict-upload;
+        conflict-id: root.transfer-conflict-id;
+        file-name: root.transfer-conflict-name;
+        target-size: root.transfer-conflict-size;
+        target-modified: root.transfer-conflict-modified;
         resolve(choice, apply-to-batch) => {
-            root.resolve-sftp-upload-conflict(root.upload-conflict-id, choice, apply-to-batch);
+            root.resolve-sftp-transfer-conflict(root.transfer-conflict-id, choice, apply-to-batch);
         }
     }
 

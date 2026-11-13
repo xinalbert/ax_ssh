@@ -118,6 +118,9 @@ msgstr "새 SSH 연결에 적용되며 녹음이 자동으로 시작됩니다"
 msgid "Apply one color family to both display modes"
 msgstr "두 표시 모드에 동일한 색상 계열 적용"
 
+msgid "Apply this choice to this download batch"
+msgstr "이 다운로드 묶음에 이 선택 적용"
+
 msgid "Apply this choice to this upload batch"
 msgstr "이 업로드 묶음에 선택 사항 적용"
 
@@ -703,11 +706,17 @@ msgstr "로컬 X 서버 공급자"
 msgid "Local default directory"
 msgstr "기본 로컬 디렉터리"
 
+msgid "Local file already exists"
+msgstr "로컬 파일이 이미 있습니다"
+
 msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
 msgstr "열기 전 로컬 사본 생성, 기본 512MiB. 0은 파일 및 캐시 크기 제한을 해제하며 디스크 공간을 많이 사용할 수 있습니다"
 
 msgid "Local file open snapshot (MiB)"
 msgstr "로컬 파일 열기 사본 (MiB)"
+
+msgid "Local file: {0} - Modified: {1}"
+msgstr "로컬 파일: {0} - 수정: {1}"
 
 msgid "Local files"
 msgstr "로컬 파일"

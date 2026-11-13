@@ -118,6 +118,9 @@ msgstr "Для новых подключений SSH; запись начина�
 msgid "Apply one color family to both display modes"
 msgstr "Применить одну цветовую гамму к обоим режимам отображения"
 
+msgid "Apply this choice to this download batch"
+msgstr "Применить этот выбор к текущей группе загрузок"
+
 msgid "Apply this choice to this upload batch"
 msgstr "Применить этот выбор ко всей группе загрузок"
 
@@ -703,11 +706,17 @@ msgstr "Поставщик локального X-сервера"
 msgid "Local default directory"
 msgstr "Локальный каталог по умолчанию"
 
+msgid "Local file already exists"
+msgstr "Локальный файл уже существует"
+
 msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
 msgstr "Локальная копия перед открытием; по умолчанию 512 MiB. 0 снимает ограничения размера файлов и кэша и может занять много места на диске"
 
 msgid "Local file open snapshot (MiB)"
 msgstr "Локальная копия для открытия (MiB)"
+
+msgid "Local file: {0} - Modified: {1}"
+msgstr "Локальный файл: {0} - Изменён: {1}"
 
 msgid "Local files"
 msgstr "Локальные файлы"

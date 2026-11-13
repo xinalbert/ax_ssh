@@ -3,23 +3,26 @@ import { ElidedButton, ElidedLabel } from "elided-controls.slint";
 import { ModalFrame } from "modal-frame.slint";
 import { Theme } from "../theme.slint";
 
-export component SftpUploadConflictDialog inherits ModalFrame {
+export component SftpTransferConflictDialog inherits ModalFrame {
+    in property <bool> upload: true;
+    in property <string> conflict-id;
     in property <string> file-name;
-    in property <string> remote-size;
-    in property <string> remote-modified;
+    in property <string> target-size;
+    in property <string> target-modified;
     callback resolve(string, bool);
 
     private property <bool> apply-to-batch: false;
+    changed conflict-id => { root.apply-to-batch = false; }
 
     dialog-width: Theme.host-dialog-width;
     dialog-height: 278px;
-    dismissed => { root.resolve("skip", root.apply-to-batch); }
+    dismissed => { root.resolve("skip", false); }
 
     VerticalLayout {
         padding: Theme.dialog-padding;
         spacing: Theme.space-xl;
         Text {
-            text: @tr("Remote file already exists");
+            text: root.upload ? @tr("Remote file already exists") : @tr("Local file already exists");
             color: Theme.text;
             font-size: Theme.font-title;
             font-weight: 700;
@@ -32,13 +35,16 @@ export component SftpUploadConflictDialog inherits ModalFrame {
             font-size: Theme.font-body;
         }
         Text {
-            text: @tr("Remote file: {0} - Modified: {1}", root.remote-size, root.remote-modified);
+            text: root.upload
+                ? @tr("Remote file: {0} - Modified: {1}", root.target-size, root.target-modified)
+                : @tr("Local file: {0} - Modified: {1}", root.target-size, root.target-modified);
             color: Theme.muted;
             font-size: Theme.font-body;
             wrap: word-wrap;
         }
         CheckBox {
-            text: @tr("Apply this choice to this upload batch");
+            text: root.upload ? @tr("Apply this choice to this upload batch")
+                : @tr("Apply this choice to this download batch");
             checked <=> root.apply-to-batch;
         }
         Rectangle { vertical-stretch: 1; }

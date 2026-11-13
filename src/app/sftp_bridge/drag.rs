@@ -638,6 +638,7 @@ fn queue_native_remote_directory_download(
                 0,
                 0,
                 0,
+                0,
                 false,
                 Some(error.to_string()),
             );
@@ -645,6 +646,7 @@ fn queue_native_remote_directory_download(
         }
         terminal.sftp.register_download_root_intent(
             transfer_id,
+            None,
             remote_path.clone(),
             local_directory.clone(),
             filter_patterns.clone(),
@@ -659,6 +661,7 @@ fn queue_native_remote_directory_download(
         ) {
             terminal.sftp.finish_download_root(
                 transfer_id,
+                0,
                 0,
                 0,
                 0,

@@ -6,7 +6,10 @@ async fn control_ack(events: &mut mpsc::Receiver<SshSessionEvent>, id: Uuid, pau
     until(events, |event| matches!(event, SshSessionEvent::SftpTransfer(SftpTransferEvent::ControlState { transfer_id, paused: actual, .. }) if *transfer_id == id && *actual == paused)).await;
 }
 
-async fn barrier(worker: &SshSessionHandle, events: &mut mpsc::Receiver<SshSessionEvent>) {
+pub(super) async fn barrier(
+    worker: &SshSessionHandle,
+    events: &mut mpsc::Receiver<SshSessionEvent>,
+) {
     worker
         .request_list_sftp(701, "/remote".into())
         .expect("barrier");

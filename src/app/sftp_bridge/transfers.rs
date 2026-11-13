@@ -85,15 +85,15 @@ pub(super) fn wire_transfers(
     let ui_for_conflict = ui.as_weak();
     let state_for_conflict = state.clone();
     let router_for_conflict = window_router.clone();
-    ui.on_resolve_sftp_upload_conflict(move |id, choice, apply_to_batch| {
-        log_ui_action("sftp.resolve-upload-conflict");
+    ui.on_resolve_sftp_transfer_conflict(move |id, choice, apply_to_batch| {
+        log_ui_action("sftp.resolve-transfer-conflict");
         let Ok(transfer_id) = Uuid::parse_str(id.as_str()) else {
             return;
         };
         let choice = match choice.as_str() {
-            "skip" => ax_ssh::sftp::SftpUploadConflictChoice::Skip,
-            "overwrite" => ax_ssh::sftp::SftpUploadConflictChoice::Overwrite,
-            "keep-both" => ax_ssh::sftp::SftpUploadConflictChoice::KeepBoth,
+            "skip" => ax_ssh::sftp::SftpConflictChoice::Skip,
+            "overwrite" => ax_ssh::sftp::SftpConflictChoice::Overwrite,
+            "keep-both" => ax_ssh::sftp::SftpConflictChoice::KeepBoth,
             _ => return,
         };
         let result = with_window_sftp_terminal(
@@ -103,21 +103,21 @@ pub(super) fn wire_transfers(
             |terminal| {
                 if terminal
                     .sftp
-                    .upload_conflicts
+                    .transfer_conflicts
                     .front()
                     .map(|item| item.transfer_id)
                     != Some(transfer_id)
                 {
-                    anyhow::bail!("upload conflict is no longer active");
+                    anyhow::bail!("file conflict is no longer active");
                 }
                 terminal
                     .worker
                     .as_ref()
                     .context("SFTP tab has no worker")?
-                    .request_resolve_sftp_upload_conflict(transfer_id, choice, apply_to_batch)?;
+                    .request_resolve_sftp_conflict(transfer_id, choice, apply_to_batch)?;
                 terminal
                     .sftp
-                    .resolve_upload_conflict(transfer_id, apply_to_batch);
+                    .resolve_transfer_conflict(transfer_id, apply_to_batch);
                 Ok(())
             },
         );
@@ -125,7 +125,7 @@ pub(super) fn wire_transfers(
             Ok(()) => dispatch_active_snapshot(&ui_for_conflict, &state_for_conflict),
             Err(error) => set_status(
                 &ui_for_conflict,
-                &format!("Cannot resolve upload conflict: {error}"),
+                &format!("Cannot resolve file conflict: {error}"),
             ),
         }
     });
@@ -512,6 +512,7 @@ pub(in crate::app) async fn requeue_transfer_intents(
             let result = match intent {
                 SftpTransferIntent::DownloadRoot {
                     transfer_id,
+                    conflict_batch,
                     remote_path,
                     local_directory,
                     filter_patterns,
@@ -528,6 +529,8 @@ pub(in crate::app) async fn requeue_transfer_intents(
                         })
                         .unwrap_or_default();
                     download
+                        .clone()
+                        .for_batch(conflict_batch)
                         .submit_with_excluded(
                             transfer_id,
                             remote_path,
@@ -669,6 +672,7 @@ fn queue_selected_remote_downloads(
         let mut failed = 0_usize;
         let mut skipped = 0_usize;
         let mut first_issue = None;
+        let batch_id = Uuid::new_v4();
         for entry in entries {
             if submission_generation(&state, tab_id) != Some(generation) {
                 return;
@@ -752,11 +756,12 @@ fn queue_selected_remote_downloads(
                     if let Err(error) = row {
                         terminal
                             .sftp
-                            .finish_download_root(transfer_id, 0, 0, 0, false, None);
+                            .finish_download_root(transfer_id, 0, 0, 0, 0, false, None);
                         return Err(error);
                     }
                     terminal.sftp.register_download_root_intent(
                         transfer_id,
+                        Some(batch_id),
                         remote_path.clone(),
                         local_directory.clone(),
                         filters.clone(),
@@ -817,6 +822,7 @@ fn queue_selected_remote_downloads(
             let result = match submitter {
                 Ok(submitter) => {
                     submitter
+                        .for_batch(Some(batch_id))
                         .submit(
                             transfer_id,
                             remote_path.clone(),
@@ -1271,6 +1277,7 @@ pub(super) fn queue_remote_downloads(
         .context("active SFTP tab has no worker")?;
     let mut accepted = 0_usize;
     let mut filtered = 0_usize;
+    let batch_id = Uuid::new_v4();
     for entry in entries {
         if ax_ssh::sftp::transfer_name_matches_filter(&entry.name, filter_patterns) {
             filtered += 1;
@@ -1290,13 +1297,15 @@ pub(super) fn queue_remote_downloads(
         }
         terminal.sftp.register_download_root_intent(
             transfer_id,
+            Some(batch_id),
             entry.path.clone(),
             local_directory.clone(),
             filter_patterns.to_vec(),
             entry.is_dir,
         );
-        match worker.request_open_sftp_file(
+        match worker.request_open_sftp_file_in_batch(
             transfer_id,
+            batch_id,
             entry.path,
             local_directory.clone(),
             filter_patterns.to_vec(),

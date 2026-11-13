@@ -1,6 +1,8 @@
+mod conflicts;
 mod controls;
 mod operations;
 
+use conflicts::DownloadConflicts;
 use controls::TransferControls;
 
 use operations::SftpWriteWorker;
@@ -14,10 +16,10 @@ use tokio::time::{Duration, Instant, MissedTickBehavior, interval, timeout};
 
 use crate::sftp::{
     SFTP_TRANSFER_EVENT_CAPACITY, SFTP_TRANSFER_QUEUE_WINDOW, SftpBrowserHandle,
-    SftpDiscoveredDownload, SftpDiscoverySummary, SftpDownloadHandle, SftpDownloadRequest,
-    SftpDownloadRoot, SftpTransferAction, SftpUploadConflictChoice, SftpUploadHandle,
-    SftpUploadRequest, SftpWriteEvent, TransferCancellation, TransferRateLimiter,
-    discover_download_requests, execute_sftp_write,
+    SftpConflictChoice, SftpDiscoveredDownload, SftpDiscoverySummary, SftpDownloadHandle,
+    SftpDownloadRequest, SftpDownloadRoot, SftpTransferAction, SftpUploadHandle, SftpUploadRequest,
+    SftpWriteEvent, TransferCancellation, TransferRateLimiter, discover_download_requests,
+    execute_sftp_write,
 };
 
 use super::*;
@@ -40,6 +42,7 @@ struct DirectoryTransferAggregate {
     is_directory: Option<bool>,
     discovered_files: usize,
     skipped_entries: usize,
+    skipped_files: usize,
     failed_files: usize,
     message: Option<String>,
     children: HashSet<Uuid>,
@@ -65,6 +68,7 @@ fn finish_directory_transfer(
         transfer_id,
         discovered_files: transfer.discovered_files,
         skipped_entries: transfer.skipped_entries,
+        skipped_files: transfer.skipped_files,
         failed_files: transfer.failed_files,
         cancelled: transfer.cancelled,
         message: transfer.message,
@@ -84,10 +88,7 @@ fn complete_directory_child(
         match outcome {
             SftpTransferEvent::Completed { .. } => {}
             SftpTransferEvent::Skipped { .. } => {
-                transfer.skipped_entries = transfer.skipped_entries.saturating_add(1);
-                transfer
-                    .message
-                    .get_or_insert_with(|| "One or more files were skipped".to_owned());
+                transfer.skipped_files = transfer.skipped_files.saturating_add(1);
             }
             SftpTransferEvent::Failed { message, .. } => {
                 transfer.failed_files = transfer.failed_files.saturating_add(1);
@@ -147,6 +148,7 @@ struct DirectoryCancellationContext<'a> {
     queued_discovery_roots: &'a mut VecDeque<SftpDownloadRoot>,
     deferred_discovered: &'a mut Option<SftpDiscoveredDownload>,
     queued_requests: &'a mut VecDeque<SftpDownloadRequest>,
+    download_conflicts: &'a mut DownloadConflicts,
     pending_by_transfer: &'a mut HashMap<Uuid, PendingSftpOpen>,
     transfers: &'a [ActiveSftpTransfer],
     event_tx: &'a mpsc::Sender<SshSessionEvent>,
@@ -185,6 +187,19 @@ async fn cancel_directory_download(transfer_id: Uuid, context: DirectoryCancella
         .map(|aggregate| aggregate.children.iter().copied().collect::<Vec<_>>())
         .unwrap_or_default();
     for child_id in children {
+        if context.download_conflicts.cancel(child_id) {
+            let _ = send_transfer_event_with_directory_state(
+                context.event_tx,
+                SftpTransferEvent::Cancelled {
+                    transfer_id: child_id,
+                },
+                context.session_id,
+                context.directory_transfers,
+                context.child_roots,
+            )
+            .await;
+            continue;
+        }
         if context
             .queued_requests
             .iter()
@@ -364,11 +379,12 @@ pub(super) async fn run_sftp_session(
     let mut pending_openings = JoinSet::<Result<SftpChannelStream>>::new();
     let mut pending_by_transfer = HashMap::<Uuid, PendingSftpOpen>::new();
     let mut queued_requests = VecDeque::<SftpDownloadRequest>::new();
+    let mut download_conflicts = DownloadConflicts::default();
     let mut queued_uploads = VecDeque::<SftpUploadRequest>::new();
     let mut active_upload_requests = HashMap::<Uuid, SftpUploadRequest>::new();
     let mut upload_queue_slots = HashMap::<Uuid, OwnedSemaphorePermit>::new();
     let mut pending_upload_conflicts = HashMap::<Uuid, SftpUploadRequest>::new();
-    let mut batch_policies = HashMap::<Uuid, SftpUploadConflictChoice>::new();
+    let mut batch_policies = HashMap::<Uuid, SftpConflictChoice>::new();
     let mut recent_policy_batches = VecDeque::<Uuid>::new();
     let upload_start_context = SftpUploadStartContext {
         connection: &connection,
@@ -397,6 +413,7 @@ pub(super) async fn run_sftp_session(
             .chain(queued_requests.iter().map(SftpDownloadRequest::transfer_id))
             .chain(queued_uploads.iter().map(SftpUploadRequest::transfer_id))
             .chain(pending_upload_conflicts.keys().copied())
+            .chain(download_conflicts.pending_ids())
             .chain(discovery_by_transfer.keys().copied())
             .chain(directory_transfers.keys().copied())
             .chain(
@@ -514,7 +531,7 @@ pub(super) async fn run_sftp_session(
                 &transfers,
                 &pending_by_transfer,
                 &queued_requests,
-            ) > 0 =>
+            ).saturating_sub(download_conflicts.pending_len()) > 0 =>
             {
                 let Some(discovered) = deferred_discovered.take() else { continue; };
                 match discovered {
@@ -584,6 +601,7 @@ pub(super) async fn run_sftp_session(
                                             transfer_id: root_transfer_id,
                                             discovered_files: summary.discovered_files,
                                             skipped_entries: summary.skipped_entries,
+                                            skipped_files: 0,
                                             failed_files: 0,
                                             cancelled: false,
                                             message: summary.first_issue,
@@ -674,7 +692,7 @@ pub(super) async fn run_sftp_session(
                     Ok((task_id, _)) => *task_id,
                     Err(error) => error.id(),
                 };
-                let Some((transfer_id, pending)) = take_pending_sftp_open(
+                let Some((transfer_id, mut pending)) = take_pending_sftp_open(
                     &mut pending_by_transfer,
                     task_id,
                 ) else {
@@ -694,6 +712,7 @@ pub(super) async fn run_sftp_session(
                 }
                 match opening {
                     Ok((_, Ok(stream))) => {
+                        download_conflicts.start(&mut pending.request);
                         let retry_connection = connection.clone();
                         transfers.push(ActiveSftpTransfer::Download(SftpDownloadHandle::spawn(
                             &Handle::current(),
@@ -796,7 +815,8 @@ pub(super) async fn run_sftp_session(
                             || discovery_by_transfer.contains_key(&transfer_id)
                             || directory_transfers.contains_key(&transfer_id)
                             || queued_discovery_roots.iter().any(|queued| queued.transfer_id() == transfer_id)
-                            || queued_requests.iter().any(|request| request.transfer_id() == transfer_id);
+                            || queued_requests.iter().any(|request| request.transfer_id() == transfer_id)
+                            || download_conflicts.contains(transfer_id);
                         if already_active {
                             send_sftp_transfer_event(
                                 &event_tx,
@@ -810,7 +830,8 @@ pub(super) async fn run_sftp_session(
                             .await;
                             Ok(())
                         } else if let Some(request) = single_file_request {
-                            if queued_requests.len() >= SFTP_TRANSFER_QUEUE_WINDOW {
+                            if available_sftp_transfer_slots(&transfers, &pending_by_transfer, &queued_requests)
+                                <= download_conflicts.pending_len() {
                                 send_sftp_transfer_event(&event_tx, SftpTransferEvent::Failed {
                                     transfer_id,
                                     message: "SFTP download queue is full".to_owned(),
@@ -934,7 +955,7 @@ pub(super) async fn run_sftp_session(
                         }
                         Ok(())
                     }
-                    Some(SshCommand::ResolveSftpUploadConflict { transfer_id, choice, apply_to_batch }) => {
+                    Some(SshCommand::ResolveSftpConflict { transfer_id, choice, apply_to_batch }) => {
                         if let Some(mut request) = pending_upload_conflicts.remove(&transfer_id) {
                             let batch_id = request.batch_id();
                             if apply_to_batch {
@@ -966,6 +987,13 @@ pub(super) async fn run_sftp_session(
                                     queued_uploads.push_back(request);
                                 }
                             }
+                        } else {
+                            for request in download_conflicts.resolve(transfer_id, choice, apply_to_batch) {
+                                let root = child_roots.get(&request.transfer_id()).copied();
+                                if send_sftp_transfer_event(&event_tx, download_queued_event(&request, root), session_id).await {
+                                    queued_requests.push_back(request);
+                                }
+                            }
                         }
                         Ok(())
                     }
@@ -981,6 +1009,7 @@ pub(super) async fn run_sftp_session(
                                     queued_discovery_roots: &mut queued_discovery_roots,
                                     deferred_discovered: &mut deferred_discovered,
                                     queued_requests: &mut queued_requests,
+                                    download_conflicts: &mut download_conflicts,
                                     pending_by_transfer: &mut pending_by_transfer,
                                     transfers: &transfers,
                                     event_tx: &event_tx,
@@ -1024,6 +1053,12 @@ pub(super) async fn run_sftp_session(
                                 session_id,
                                 &mut directory_transfers,
                                 &mut child_roots,
+                            ).await;
+                            Ok(())
+                        } else if download_conflicts.cancel(transfer_id) {
+                            send_transfer_event_with_directory_state(
+                                &event_tx, SftpTransferEvent::Cancelled { transfer_id }, session_id,
+                                &mut directory_transfers, &mut child_roots,
                             ).await;
                             Ok(())
                         } else if let Some(index) = queued_uploads.iter().position(|request| request.transfer_id() == transfer_id) {
@@ -1136,11 +1171,24 @@ pub(super) async fn run_sftp_session(
                 if let SftpTransferEvent::Failed { recoverable, .. } = &mut transfer_event {
                     *recoverable &= connection.is_closed();
                 }
+                let conflict_id = match &transfer_event {
+                    SftpTransferEvent::DownloadConflict { transfer_id, .. }
+                    | SftpTransferEvent::UploadConflict { transfer_id, .. } => Some(*transfer_id),
+                    _ => None,
+                };
+                if let Some(transfer_id) = conflict_id
+                    && controls.get(transfer_id).is_cancelled()
+                {
+                    // A decision cannot revive a file cancelled while its
+                    // conflict event was waiting in the bounded channel.
+                    transfer_event = SftpTransferEvent::Cancelled { transfer_id };
+                }
                 let terminal_transfer_id = match &transfer_event {
                     SftpTransferEvent::Completed { transfer_id, .. }
                     | SftpTransferEvent::Cancelled { transfer_id }
                     | SftpTransferEvent::Failed { transfer_id, .. }
                     | SftpTransferEvent::Skipped { transfer_id }
+                    | SftpTransferEvent::DownloadConflict { transfer_id, .. }
                     | SftpTransferEvent::UploadConflict { transfer_id, .. } => Some(*transfer_id),
                     SftpTransferEvent::Queued { .. }
                     | SftpTransferEvent::Started { .. }
@@ -1169,6 +1217,17 @@ pub(super) async fn run_sftp_session(
                     }
                 }
                 let mut forward_event = true;
+                if let SftpTransferEvent::DownloadConflict { transfer_id, local, .. } = &transfer_event {
+                    if let Some(request) = download_conflicts.conflict(*transfer_id, local.clone()) {
+                        let root = child_roots.get(transfer_id).copied();
+                        if send_sftp_transfer_event(&event_tx, download_queued_event(&request, root), session_id).await {
+                            queued_requests.push_back(request);
+                        }
+                        forward_event = false;
+                    }
+                } else if let Some(transfer_id) = terminal_transfer_id {
+                    download_conflicts.finish(transfer_id);
+                }
                 if let SftpTransferEvent::UploadConflict {
                     transfer_id, batch_id, remote_size, remote_modified, ..
                 } = &transfer_event
@@ -1551,6 +1610,21 @@ fn start_queued_sftp_transfers(
             request,
             control,
         );
+    }
+}
+
+fn download_queued_event(
+    request: &SftpDownloadRequest,
+    root_transfer_id: Option<Uuid>,
+) -> SftpTransferEvent {
+    SftpTransferEvent::Queued {
+        transfer_id: request.transfer_id(),
+        root_transfer_id,
+        remote_path: request.remote_path().to_owned(),
+        local_path: request.local_path(),
+        upload: false,
+        name: request.name().to_owned(),
+        total_bytes: request.total_bytes(),
     }
 }
 

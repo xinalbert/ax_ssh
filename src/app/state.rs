@@ -320,7 +320,7 @@ pub(super) struct SftpBrowserState {
     pub(super) transfers: VecDeque<SftpTransferState>,
     pub(super) pending_download_roots: HashSet<Uuid>,
     pub(super) scanning_download_roots: HashSet<Uuid>,
-    pub(super) upload_conflicts: VecDeque<PendingUploadConflict>,
+    pub(super) transfer_conflicts: VecDeque<PendingSftpConflict>,
     pub(super) selected_transfers: HashSet<Uuid>,
     pub(super) rename_name: String,
     pub(super) external_edits: super::remote_edit::RemoteEdits,
@@ -337,6 +337,7 @@ pub(super) struct SftpBrowserState {
 pub(super) enum SftpTransferIntent {
     DownloadRoot {
         transfer_id: Uuid,
+        conflict_batch: Option<Uuid>,
         remote_path: String,
         local_directory: PathBuf,
         filter_patterns: Vec<String>,
@@ -403,7 +404,7 @@ pub(super) struct SftpBrowserSnapshot {
     pub(super) selected: HashSet<String>,
     pub(super) local: LocalDirectorySnapshot,
     pub(super) transfers: Vec<SftpTransferSnapshot>,
-    pub(super) upload_conflict: Option<PendingUploadConflict>,
+    pub(super) transfer_conflict: Option<PendingSftpConflict>,
     pub(super) transfers_paused: bool,
     pub(super) transfer_selected_active_count: usize,
     pub(super) transfer_selected_pausable_count: usize,
@@ -458,12 +459,13 @@ pub(super) enum SftpTransferPhase {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
-pub(super) struct PendingUploadConflict {
+pub(super) struct PendingSftpConflict {
+    pub(super) upload: bool,
     pub(super) transfer_id: Uuid,
     pub(super) batch_id: Uuid,
     pub(super) name: String,
-    pub(super) remote_size: Option<u64>,
-    pub(super) remote_modified: Option<u32>,
+    pub(super) target_size: Option<u64>,
+    pub(super) target_modified: Option<u32>,
 }
 
 pub(super) struct SftpTransferState {

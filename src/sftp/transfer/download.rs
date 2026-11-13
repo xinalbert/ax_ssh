@@ -102,7 +102,16 @@ pub(super) async fn download_open_local_handle(
         .local_target
         .clone()
         .context("local SFTP download is missing its target")?;
-    let pending = prepare_local_download(target, cancellation, deadline).await?;
+    let preserve_published = request.conflict_choice == Some(SftpConflictChoice::Overwrite);
+    let pending = prepare_local_download(
+        target,
+        request.conflict_choice,
+        request.expected_local.clone(),
+        request.conflict_batch.is_some(),
+        cancellation,
+        deadline,
+    )
+    .await?;
     let (chunk_tx, chunk_rx) = mpsc::channel(WRITER_QUEUE_CAPACITY);
     // Abort only this writer on an invalid stream. User cancellation belongs
     // to the transfer and must remain independent of an attempt's cleanup.
@@ -135,11 +144,12 @@ pub(super) async fn download_open_local_handle(
     match stream_result {
         Ok(()) => {
             let local_path =
-                await_local_writer_success(&mut writer, cancellation, deadline).await?;
+                await_local_writer_success(&mut writer, cancellation, deadline, preserve_published)
+                    .await?;
             Ok((local_path, initial.size))
         }
         Err(stream_error) => {
-            let writer_error = await_local_writer_cleanup(&mut writer).await;
+            let writer_error = await_local_writer_cleanup(&mut writer, preserve_published).await;
             if is_cancelled(&stream_error) {
                 return Err(stream_error);
             }

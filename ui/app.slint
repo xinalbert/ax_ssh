@@ -136,11 +136,12 @@ export component AppWindow inherits Window {
     in property <bool> sftp-has-more: false;
     in property <bool> sftp-truncated: false;
     in property <string> sftp-status: "";
-    in property <bool> sftp-upload-conflict-open: false;
-    in property <string> sftp-upload-conflict-id: "";
-    in property <string> sftp-upload-conflict-name: "";
-    in property <string> sftp-upload-conflict-size: "";
-    in property <string> sftp-upload-conflict-modified: "";
+    in property <bool> sftp-transfer-conflict-open: false;
+    in property <bool> sftp-transfer-conflict-upload: false;
+    in property <string> sftp-transfer-conflict-id: "";
+    in property <string> sftp-transfer-conflict-name: "";
+    in property <string> sftp-transfer-conflict-size: "";
+    in property <string> sftp-transfer-conflict-modified: "";
     in property <bool> sftp-can-go-back: false;
     in property <bool> sftp-can-go-forward: false;
     in property <bool> sftp-can-go-up: false;
@@ -611,7 +612,7 @@ export component AppWindow inherits Window {
     callback sftp-drag-diagnostic(string, bool);
     callback begin-native-remote-file-drag-sftp(string);
     callback upload-selected-local-sftp();
-    callback resolve-sftp-upload-conflict(string, string, bool);
+    callback resolve-sftp-transfer-conflict(string, string, bool);
     callback rename-remote-sftp(string, string, string);
     callback edit-remote-sftp();
     callback terminal-key(TerminalKeyboardEvent) -> bool;
@@ -1206,13 +1207,14 @@ export component AppWindow inherits Window {
         terminal-notice-pane-id: root.active-pane-id;
         window-active: root.window-active;
         monospace-font-family: root.application-font-family;
-        upload-conflict-open: root.sftp-upload-conflict-open;
-        upload-conflict-id: root.sftp-upload-conflict-id;
-        upload-conflict-name: root.sftp-upload-conflict-name;
-        upload-conflict-size: root.sftp-upload-conflict-size;
-        upload-conflict-modified: root.sftp-upload-conflict-modified;
-        resolve-sftp-upload-conflict(id, choice, apply-to-batch) => {
-            root.resolve-sftp-upload-conflict(id, choice, apply-to-batch);
+        transfer-conflict-open: root.sftp-transfer-conflict-open;
+        transfer-conflict-upload: root.sftp-transfer-conflict-upload;
+        transfer-conflict-id: root.sftp-transfer-conflict-id;
+        transfer-conflict-name: root.sftp-transfer-conflict-name;
+        transfer-conflict-size: root.sftp-transfer-conflict-size;
+        transfer-conflict-modified: root.sftp-transfer-conflict-modified;
+        resolve-sftp-transfer-conflict(id, choice, apply-to-batch) => {
+            root.resolve-sftp-transfer-conflict(id, choice, apply-to-batch);
         }
         terminal-notice-action(id, command) => {
             root.terminal-pane-command(id, command);

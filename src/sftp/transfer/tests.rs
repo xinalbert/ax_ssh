@@ -584,7 +584,7 @@ async fn upload_conflict_choices_preserve_or_publish_the_expected_remote_file() 
         UploadOutcome::Conflict(_)
     ));
     let mut skip = request.clone();
-    skip.set_conflict_choice(SftpUploadConflictChoice::Skip);
+    skip.set_conflict_choice(SftpConflictChoice::Skip);
     assert!(matches!(
         run_upload_test(&skip, &files, &cancellation, &event_tx)
             .await
@@ -597,7 +597,7 @@ async fn upload_conflict_choices_preserve_or_publish_the_expected_remote_file() 
     );
 
     let mut keep_both = request.clone();
-    keep_both.set_conflict_choice(SftpUploadConflictChoice::KeepBoth);
+    keep_both.set_conflict_choice(SftpConflictChoice::KeepBoth);
     assert!(matches!(
         run_upload_test(&keep_both, &files, &cancellation, &event_tx)
             .await
@@ -610,7 +610,7 @@ async fn upload_conflict_choices_preserve_or_publish_the_expected_remote_file() 
     );
 
     let mut overwrite = request;
-    overwrite.set_conflict_choice(SftpUploadConflictChoice::Overwrite);
+    overwrite.set_conflict_choice(SftpConflictChoice::Overwrite);
     overwrite.set_expected_remote(Some(4), Some(1234));
     assert!(
         run_upload_test(&overwrite, &files, &cancellation, &event_tx)

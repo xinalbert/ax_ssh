@@ -336,6 +336,7 @@ fn global_transfer_actions_only_mutate_the_target_page_and_invalidate_old_batche
     let terminal = app.terminal_mut(first).expect("first");
     terminal.sftp.register_download_root_intent(
         id,
+        None,
         "/file".into(),
         std::env::temp_dir(),
         Vec::new(),

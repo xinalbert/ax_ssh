@@ -118,6 +118,9 @@ msgstr "新 SSH 連線生效；錄音自動接入"
 msgid "Apply one color family to both display modes"
 msgstr "為兩種顯示模式應用同一配色系列"
 
+msgid "Apply this choice to this download batch"
+msgstr "將此選擇套用至本次下載批次"
+
 msgid "Apply this choice to this upload batch"
 msgstr "對本次上傳批次應用此選擇"
 
@@ -703,11 +706,17 @@ msgstr "本地 X server 提供程式"
 msgid "Local default directory"
 msgstr "本地預設目錄"
 
+msgid "Local file already exists"
+msgstr "本機檔案已存在"
+
 msgid "Local file copy before opening; default 512 MiB, 0 removes file and cache byte limits and may use substantial disk space"
 msgstr "開啟前複製的本地檔案；預設上限 512 MiB，0 取消檔案和快取位元組限制，可能佔用大量磁碟空間"
 
 msgid "Local file open snapshot (MiB)"
 msgstr "本地檔案開啟快照（MiB）"
+
+msgid "Local file: {0} - Modified: {1}"
+msgstr "本機檔案：{0} - 修改時間：{1}"
 
 msgid "Local files"
 msgstr "本地檔案"

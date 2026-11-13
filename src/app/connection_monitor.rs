@@ -340,11 +340,12 @@ pub(super) fn spawn_session_monitor(
                         SftpTransferEvent::DiscoveryFinished {
                             transfer_id,
                             skipped_entries,
+                            skipped_files,
                             failed_files,
                             cancelled,
                             ..
                         } => {
-                            let succeeded = !cancelled && *skipped_entries == 0 && *failed_files == 0;
+                            let succeeded = !cancelled && *skipped_entries == 0 && *skipped_files == 0 && *failed_files == 0;
                             let _ = super::macos_file_drag::complete_file_promise_transfer(
                                 *transfer_id,
                                 succeeded,
@@ -450,6 +451,7 @@ pub(super) fn spawn_session_monitor(
                                 transfer_id,
                                 discovered_files,
                                 skipped_entries,
+                                skipped_files,
                                 failed_files,
                                 cancelled,
                                 message,
@@ -458,6 +460,7 @@ pub(super) fn spawn_session_monitor(
                                     transfer_id,
                                     discovered_files,
                                     skipped_entries,
+                                    skipped_files,
                                     failed_files,
                                     cancelled,
                                     message,
@@ -466,11 +469,18 @@ pub(super) fn spawn_session_monitor(
                             SftpTransferEvent::UploadConflict {
                                 transfer_id, batch_id, name, remote_size, remote_modified,
                             } => {
-                                terminal.sftp.record_upload_conflict(
-                                    super::state::PendingUploadConflict {
-                                        transfer_id, batch_id, name, remote_size, remote_modified,
+                                terminal.sftp.record_transfer_conflict(
+                                    super::state::PendingSftpConflict {
+                                        upload: true,
+                                        transfer_id, batch_id, name, target_size: remote_size, target_modified: remote_modified,
                                     },
                                 );
+                            }
+                            SftpTransferEvent::DownloadConflict { transfer_id, batch_id, name, local } => {
+                                terminal.sftp.record_transfer_conflict(super::state::PendingSftpConflict {
+                                    upload: false, transfer_id, batch_id, name,
+                                    target_size: Some(local.size()), target_modified: local.modified(),
+                                });
                             }
                             SftpTransferEvent::Skipped { transfer_id } => {
                                 terminal.sftp.finish_transfer(

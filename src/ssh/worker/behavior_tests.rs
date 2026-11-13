@@ -17,6 +17,7 @@ use tokio::task::JoinSet;
 
 const CONTENT: &[u8] = b"worker download preserves every byte\n";
 
+mod download_conflicts;
 mod session_reuse;
 mod transfer_controls;
 
@@ -1596,9 +1597,9 @@ async fn sftp_worker_conflict_decisions_and_guarded_edits_preserve_remote_conten
     let local = fixture.directory.join("upload.txt");
     std::fs::write(&local, b"replacement").expect("isolated upload bytes");
     for choice in [
-        SftpUploadConflictChoice::Skip,
-        SftpUploadConflictChoice::Overwrite,
-        SftpUploadConflictChoice::KeepBoth,
+        SftpConflictChoice::Skip,
+        SftpConflictChoice::Overwrite,
+        SftpConflictChoice::KeepBoth,
     ] {
         let id = Uuid::new_v4();
         worker
@@ -1610,10 +1611,10 @@ async fn sftp_worker_conflict_decisions_and_guarded_edits_preserve_remote_conten
             .expect("conflicting upload");
         until(&mut events, |event| matches!(event, SshSessionEvent::SftpTransfer(SftpTransferEvent::UploadConflict { transfer_id, .. }) if *transfer_id == id)).await;
         worker
-            .request_resolve_sftp_upload_conflict(id, choice, true)
+            .request_resolve_sftp_conflict(id, choice, true)
             .expect("explicit conflict decision");
         let outcome = until(&mut events, |event| matches!(event, SshSessionEvent::SftpTransfer(SftpTransferEvent::Completed { transfer_id, .. } | SftpTransferEvent::Skipped { transfer_id }) if *transfer_id == id)).await;
-        if choice == SftpUploadConflictChoice::Skip {
+        if choice == SftpConflictChoice::Skip {
             assert!(matches!(
                 outcome,
                 SshSessionEvent::SftpTransfer(SftpTransferEvent::Skipped { .. })
@@ -1739,7 +1740,10 @@ async fn sftp_worker_conflict_decisions_and_guarded_edits_preserve_remote_conten
 #[tokio::test]
 async fn sftp_download_submitter_waits_for_worker_queue_capacity() {
     let (command_tx, mut command_rx) = mpsc::channel(1);
-    let submitter = SftpDownloadSubmitter { command_tx };
+    let submitter = SftpDownloadSubmitter {
+        command_tx,
+        batch_id: Some(Uuid::new_v4()),
+    };
     submitter
         .submit(
             Uuid::new_v4(),

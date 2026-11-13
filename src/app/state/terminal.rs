@@ -702,6 +702,7 @@ impl TerminalWorker {
         }
     }
 
+    #[cfg(target_os = "macos")]
     pub(in crate::app) fn request_open_sftp_file(
         &self,
         transfer_id: Uuid,
@@ -713,6 +714,31 @@ impl TerminalWorker {
         match self {
             Self::Ssh(worker) => worker.request_open_sftp_file(
                 transfer_id,
+                path,
+                local_directory,
+                filter_patterns,
+                expected_directory,
+            ),
+            Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
+                anyhow::bail!("SFTP is available only for SSH sessions")
+            }
+        }
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    pub(in crate::app) fn request_open_sftp_file_in_batch(
+        &self,
+        transfer_id: Uuid,
+        batch_id: Uuid,
+        path: String,
+        local_directory: std::path::PathBuf,
+        filter_patterns: Vec<String>,
+        expected_directory: bool,
+    ) -> Result<()> {
+        match self {
+            Self::Ssh(worker) => worker.request_open_sftp_file_in_batch(
+                transfer_id,
+                batch_id,
                 path,
                 local_directory,
                 filter_patterns,
@@ -745,15 +771,15 @@ impl TerminalWorker {
         }
     }
 
-    pub(in crate::app) fn request_resolve_sftp_upload_conflict(
+    pub(in crate::app) fn request_resolve_sftp_conflict(
         &self,
         transfer_id: Uuid,
-        choice: ax_ssh::sftp::SftpUploadConflictChoice,
+        choice: ax_ssh::sftp::SftpConflictChoice,
         apply_to_batch: bool,
     ) -> Result<()> {
         match self {
             Self::Ssh(worker) => {
-                worker.request_resolve_sftp_upload_conflict(transfer_id, choice, apply_to_batch)
+                worker.request_resolve_sftp_conflict(transfer_id, choice, apply_to_batch)
             }
             Self::Telnet(_) | Self::Serial(_) | Self::Local(_) => {
                 anyhow::bail!("SFTP is available only for SSH sessions")

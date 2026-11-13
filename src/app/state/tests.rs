@@ -1516,6 +1516,7 @@ fn sftp_reconnect_preserves_download_upload_and_conflict_intents() {
     sftp.update_transfer_progress(download, 40, 100);
     sftp.register_download_root_intent(
         download,
+        None,
         "/remote/report.txt".to_owned(),
         "/tmp".into(),
         vec![],
@@ -1552,18 +1553,19 @@ fn sftp_reconnect_preserves_download_upload_and_conflict_intents() {
         "conflict.txt".to_owned(),
         10,
     );
-    sftp.record_upload_conflict(PendingUploadConflict {
+    sftp.record_transfer_conflict(PendingSftpConflict {
+        upload: true,
         transfer_id: conflict,
         batch_id: batch,
         name: "conflict.txt".to_owned(),
-        remote_size: Some(4),
-        remote_modified: Some(2),
+        target_size: Some(4),
+        target_modified: Some(2),
     });
 
     sftp.prepare_for_reconnect();
 
     assert_eq!(sftp.transfer_intents().len(), 3);
-    assert!(sftp.upload_conflicts.is_empty());
+    assert!(sftp.transfer_conflicts.is_empty());
     assert!(sftp.transfers.iter().all(|transfer| {
         transfer.phase == SftpTransferPhase::Queued
             && transfer.status == "Waiting for reconnection"
@@ -1616,6 +1618,7 @@ fn reconnect_restarts_directory_discovery_and_discards_stale_children() {
     .expect("directory should queue");
     sftp.register_download_root_intent(
         root,
+        None,
         "/remote/directory".to_owned(),
         "/tmp".into(),
         vec![],
@@ -1653,6 +1656,7 @@ fn reconnect_preserves_completed_directory_children_as_discovery_exclusions() {
     .expect("directory should queue");
     sftp.register_download_root_intent(
         root,
+        None,
         "/remote/directory".to_owned(),
         "/tmp".into(),
         vec![],
@@ -1743,7 +1747,7 @@ fn reconnect_intent_revision_changes_when_a_transfer_is_registered_or_cancelled(
 }
 
 #[test]
-fn upload_conflicts_resolve_only_the_selected_batch_and_retry_as_uploads() {
+fn transfer_conflicts_resolve_only_the_selected_batch_and_retry_as_uploads() {
     let mut sftp = SftpBrowserState::default();
     let batch = Uuid::new_v4();
     let other_batch = Uuid::new_v4();
@@ -1763,26 +1767,27 @@ fn upload_conflicts_resolve_only_the_selected_batch_and_retry_as_uploads() {
             format!("file-{index}.txt"),
             10,
         );
-        sftp.record_upload_conflict(PendingUploadConflict {
+        sftp.record_transfer_conflict(PendingSftpConflict {
+            upload: true,
             transfer_id: id,
             batch_id: if index < 2 { batch } else { other_batch },
             name: format!("file-{index}.txt"),
-            remote_size: Some(5),
-            remote_modified: Some(42),
+            target_size: Some(5),
+            target_modified: Some(42),
         });
     }
 
     assert_eq!(
         sftp.snapshot(true)
-            .upload_conflict
+            .transfer_conflict
             .as_ref()
             .map(|item| item.transfer_id),
         Some(ids[0])
     );
-    sftp.resolve_upload_conflict(ids[0], true);
+    sftp.resolve_transfer_conflict(ids[0], true);
     assert_eq!(
         sftp.snapshot(true)
-            .upload_conflict
+            .transfer_conflict
             .as_ref()
             .map(|item| item.transfer_id),
         Some(ids[2])
@@ -1809,6 +1814,131 @@ fn upload_conflicts_resolve_only_the_selected_batch_and_retry_as_uploads() {
 }
 
 #[test]
+fn download_conflict_batches_preserve_direction_pause_and_reconnect_identity() {
+    let mut sftp = SftpBrowserState::default();
+    let batch = Uuid::new_v4();
+    let ids = [Uuid::new_v4(), Uuid::new_v4(), Uuid::new_v4()];
+    for (index, id) in ids.into_iter().enumerate() {
+        let upload = index == 2;
+        sftp.queue_transfer_event(
+            id,
+            format!("file-{index}.txt"),
+            10,
+            upload,
+            Some(format!("/tmp/file-{index}.txt").into()),
+            Some(format!("/remote/file-{index}.txt")),
+        )
+        .expect("queue");
+        if !upload {
+            sftp.register_download_root_intent(
+                id,
+                Some(batch),
+                format!("/remote/file-{index}.txt"),
+                "/tmp".into(),
+                Vec::new(),
+                false,
+            );
+        }
+        sftp.record_transfer_conflict(PendingSftpConflict {
+            upload,
+            transfer_id: id,
+            batch_id: batch,
+            name: format!("file-{index}.txt"),
+            target_size: Some(4),
+            target_modified: Some(42),
+        });
+    }
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::AwaitingConflict);
+    sftp.apply_transfer_control(ids[1], true, false);
+    sftp.resolve_transfer_conflict(ids[0], true);
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Queued);
+    assert_eq!(sftp.transfers[1].phase, SftpTransferPhase::Paused);
+    assert_eq!(
+        sftp.transfer_conflicts
+            .front()
+            .expect("upload remains")
+            .transfer_id,
+        ids[2]
+    );
+    sftp.apply_transfer_control(ids[1], false, false);
+    assert_eq!(sftp.transfers[1].phase, SftpTransferPhase::Queued);
+    sftp.prepare_for_reconnect();
+    assert!(sftp.transfer_conflicts.is_empty());
+    let intents = sftp.transfer_intents();
+    assert!(
+        intents.iter().all(|intent| matches!(intent,
+        SftpTransferIntent::DownloadRoot { conflict_batch: Some(actual), .. } if *actual == batch))
+    );
+    assert_eq!(intents.len(), 2);
+}
+
+#[test]
+fn skipped_downloads_finish_from_active_states_and_are_excluded_on_replay() {
+    for paused in [false, true] {
+        let mut sftp = SftpBrowserState::default();
+        let root = Uuid::new_v4();
+        let id = Uuid::new_v4();
+        sftp.begin_download_discovery(
+            root,
+            "root".into(),
+            "/tmp/root".into(),
+            "/remote/root".into(),
+        )
+        .expect("root");
+        sftp.register_download_root_intent(
+            root,
+            Some(root),
+            "/remote/root".into(),
+            "/tmp".into(),
+            Vec::new(),
+            true,
+        );
+        sftp.queue_transfer_event(
+            id,
+            "root/file.txt".into(),
+            4,
+            false,
+            Some("/tmp/root/file.txt".into()),
+            Some("/remote/root/file.txt".into()),
+        )
+        .expect("child");
+        sftp.register_discovered_download_intent(root, id);
+        sftp.start_transfer(
+            id,
+            "/remote/root/file.txt".into(),
+            "root/file.txt".into(),
+            4,
+        );
+        if paused {
+            sftp.apply_transfer_control(id, true, false);
+        }
+        sftp.finish_transfer(id, SftpTransferPhase::Skipped, "Skipped".into());
+        assert_eq!(
+            sftp.transfers
+                .iter()
+                .find(|row| row.id == id)
+                .expect("child")
+                .phase,
+            SftpTransferPhase::Skipped
+        );
+        assert!(
+            sftp.completed_directory_child_paths(root)
+                .contains("/remote/root/file.txt")
+        );
+        sftp.finish_download_root(root, 1, 0, 1, 0, false, None);
+        assert_eq!(
+            sftp.transfers
+                .iter()
+                .find(|row| row.id == root)
+                .expect("root")
+                .phase,
+            SftpTransferPhase::Skipped
+        );
+        assert!(sftp.transfer_intents().is_empty());
+    }
+}
+
+#[test]
 fn upload_retry_acknowledgement_clears_a_late_conflict_event() {
     let mut sftp = SftpBrowserState::default();
     let id = Uuid::new_v4();
@@ -1826,18 +1956,19 @@ fn upload_retry_acknowledgement_clears_a_late_conflict_event() {
         "report.txt".to_owned(),
         10,
     );
-    sftp.record_upload_conflict(PendingUploadConflict {
+    sftp.record_transfer_conflict(PendingSftpConflict {
+        upload: true,
         transfer_id: id,
         batch_id: Uuid::new_v4(),
         name: "report.txt".to_owned(),
-        remote_size: Some(5),
-        remote_modified: Some(42),
+        target_size: Some(5),
+        target_modified: Some(42),
     });
 
     sftp.queue_transfer(id, "report.txt".to_owned(), 10)
         .expect("worker retry acknowledgement should be accepted");
 
-    assert!(sftp.upload_conflicts.is_empty());
+    assert!(sftp.transfer_conflicts.is_empty());
     assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Queued);
 }
 
@@ -3600,7 +3731,7 @@ fn sftp_inherited_pause_prevents_per_row_resume_and_new_tasks_inherit_page_pause
 }
 
 #[test]
-fn sftp_upload_conflict_arriving_during_resume_keeps_the_decision_visible() {
+fn sftp_transfer_conflict_arriving_during_resume_keeps_the_decision_visible() {
     let mut sftp = SftpBrowserState::default();
     let id = Uuid::new_v4();
     sftp.queue_upload_transfer(
@@ -3615,14 +3746,15 @@ fn sftp_upload_conflict_arriving_during_resume_keeps_the_decision_visible() {
     sftp.request_transfer_pause(id);
     sftp.apply_transfer_control(id, true, false);
     assert!(sftp.request_transfer_resume(id));
-    sftp.record_upload_conflict(PendingUploadConflict {
+    sftp.record_transfer_conflict(PendingSftpConflict {
+        upload: true,
         transfer_id: id,
         batch_id: Uuid::new_v4(),
         name: "file.bin".into(),
-        remote_size: Some(10),
-        remote_modified: Some(1),
+        target_size: Some(10),
+        target_modified: Some(1),
     });
     sftp.apply_transfer_control(id, false, false);
     assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::AwaitingConflict);
-    assert_eq!(sftp.upload_conflicts[0].transfer_id, id);
+    assert_eq!(sftp.transfer_conflicts[0].transfer_id, id);
 }
