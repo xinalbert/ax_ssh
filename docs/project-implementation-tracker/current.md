@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20261113-tab-window-drag
-- 目标：排查并修复 Tab 与窗口拖动的命中、坐标换算和手势冲突，保留原生 macOS 标题栏。
-- 交付物：可复现的拖动回归、最小修复、双语说明、验证记录和本地提交。
+- 目标 ID：20261113-sftp-windows-paths
+- 目标：Windows 远端地址使用原生盘符格式显示，并接受从系统复制的路径。
+- 交付物：远端路径展示、导航输入转换、主/独立窗口回归及双语说明。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：WorkspaceTitlebar 的指针与滚动坐标、macOS 拖窗命中、窗口动作 bridge、回归及架构/tracker。
-- 不在本轮范围内：SSH/凭据/配置 schema、依赖升级、发布/推送/tag、GUI 启动或自制截图。
+- 当前范围：SFTP 路径展示、应用导航状态、共享 Slint 路径栏与两处复制、架构/tracker；按用户授权归档下载冲突与 Windows 路径两项本地提交。
+- 不在本轮范围内：SSH 信任/凭据/配置 schema、框架升级、推送/tag/发布、GUI 启动或自制截图。
 
 ## 当前状态
 
@@ -23,35 +23,34 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| D1 | completed | Tab 与原生拖窗事件/坐标审查和复现 | 真实 Slint 指针事件、静态平台审查 | 用户确认部分 Tab 拖动触发整窗移动 |
-| D2 | completed | 最小拖动修复及双语说明 | 两项定向回归通过 | 保留原生红绿灯，不扩展应用边界 |
-| D3 | completed | 完整验证与实施记录 | Rust 门禁、原生 macOS target、文档/tracker/diff 全部通过 | 实际 GUI 行为由用户确认 |
-| D4 | completed | 按用户要求归档本地提交 | 实现提交 08f2325，记录随独立文档提交归档 | 未推送、tag 或发布 |
+| P1 | completed | 定位 Windows 远端路径显示与粘贴链路 | 远端原样显示，盘符输入被当成相对路径 | 本地已有扩展路径展示 |
+| P2 | completed | 显示/复制及导航输入转换 | 盘符、空格、中文、引号和 POSIX 隔离回归 | 保留 canonical 路径与文件身份 |
+| P3 | completed | 完整门禁与双语记录 | Rust、Slint 重编译、Markdown/tracker/diff | 原生 Windows 交互由用户确认 |
+| P4 | completed | 按功能拆分并创建本地提交 | 暂存 diff、提交范围和最终工作区检查 | 用户授权提交，保留原有历史 |
 
 ## 已完成
 
-- 开工时工作区干净，基线为 47d2d01；主窗口使用原生标题栏，标题隐藏/透明属性在创建时生效。
-- 原生命中固定使用 80x32 AppKit 点，而 UI 以 Theme 和 Slint 逻辑坐标布局；已审查 Tab 滚动/按下/释放与实际重排。
-- 新增实际按下/移动/释放回归：Mac/非 Mac、1x/2x 和滚动后的 Tab 重排坐标在旧实现通过；左侧空白只能依赖原生自动拖窗的情况在新增明确路由测试中失败。
-- 原生 mouseDownCanMoveWindow 依据 currentEvent 的当前位置动态重判，未绑定手势初始命中；修复为主客户区一律禁止原生自动接管，由 Slint 实际空白区域显式发起系统拖窗。删除固定 32 点拖动高度，独立窗口原生标题栏不变。
-- 左侧留空的 x/y 显式固定在左上角，避免 Slint 对固定尺寸子项的默认居中；双语架构与项目地图已同步，历史追加验证证据。
-- 用户授权本地提交；实现、回归与双语架构归档为 08f2325，项目地图和验证记录单独归档。
+- 已读取路径展示、共享路径栏、两处复制及应用/transport 导航链路。
+- 截图格式为 Windows SFTP 的 `/G:/...`；远端显示未转换，粘贴 `G:\...` 会按相对路径解析。
+- 下载冲突实现与双语说明提交为 `bb18608`；Windows 远端路径展示/粘贴与双语说明提交为 `5d07e61`，共用文件按 hunk 拆分。
+- 远端地址展示/复制/编辑共用 Windows 盘符格式；应用只在 current/home 具有盘符约定时转换粘贴值，支持成对引号、空格/中文和跨盘符。
+- 主/独立窗口 headless 回归验证真实剪贴板粘贴、两处复制及编辑/刷新，应用导航回归验证 canonical 历史、前进和父目录；没有启动真实 GUI。
+- 完整跟踪记录独立归档；仅创建本地提交，没有推送、创建 tag 或改写已有历史。
 
 ## 验证
 
-- 已完成：两项 titlebar_drag 定向回归、fmt、Slint 重编译及 locked/offline check、严格 all-target Clippy、1009 项 Rust 测试（461 library + 548 binary）、本机 build；精确 CI 命令 `cargo check --locked --target aarch64-apple-darwin` 和 `cargo clippy --all-targets --locked --target aarch64-apple-darwin -- -D warnings`；11 目录各 694 条翻译与生成一致性、56 份 Markdown/入口、tracker/diff 检查通过。
-- 构建产物：`target/debug/ax_ssh`，未启动 GUI。
-- 未完成：用户 macOS 实际 Tab/窗口拖动、原生红绿灯和冷启动验收；其它平台原生 CI 未在本机运行。headless 回归验证逻辑坐标和事件，不能复现 AppKit 的原生接管。
+- 已完成：10 项 windows_ 定向回归及全量 1026 项 Rust 测试（471 library + 555 binary）；fmt、Slint 重编译、locked/offline check、严格 all-target Clippy、精确 aarch64-apple-darwin CI check/Clippy、本机 debug build、56 份 Markdown/源入口、tracker 和 diff 检查通过。提交阶段未修改源码，重新复核 11 目录各 697 条翻译/生成一致性、文档与暂存范围。
+- 未完成：用户真实 Windows SFTP 显示/粘贴交互；其它平台原生 CI 未在本机运行。`target/debug/ax_ssh` 已构建，未启动 GUI。
 
 ## 风险与阻塞
 
-- 原生自动拖窗与 Slint 显式拖窗应具有清晰且一致的命中边界，Tab 必须持有自身手势。
-- 所有工作限于 UI/application/macOS 平台层；不触碰 transport、秘密和持久化。
+- 仅识别明确的 Windows 盘符远端路径；POSIX 名称中的反斜杠和引号不得改写。
+- UI 可读字符串不得替代目录历史、刷新、条目及传输中的原始路径；不改变 SSH 信任或凭据契约。
 
 ## 下一步
 
-- 用户使用新构建确认部分 Tab 是否还会带动整窗，以及左侧/右侧空白区拖窗。修复已本地提交为 08f2325，本记录随独立文档提交归档；未推送、tag 或发布。
+- 用户用新构建确认重复下载冲突选择和 Windows 远端路径的原生显示、复制/粘贴与导航；本地提交已归档，未推送/tag/发布。
 
 ## 最后更新时间
 
-- 2026-11-13 13:26 +0800
+- 2026-11-13 16:22 +0800
