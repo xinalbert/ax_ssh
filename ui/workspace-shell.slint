@@ -1361,6 +1361,21 @@ export component WorkspaceShell inherits Rectangle {
         }
     }
 
+    if root.apple-platform && !root.detached-window : TouchArea {
+        // Share the Tab row's live logical geometry. AppKit's automatic
+        // client-area dragging is disabled so it cannot steal a Tab gesture.
+        x: 0px;
+        y: 0px;
+        width: min(parent.width, Theme.macos-titlebar-leading-clearance);
+        height: Theme.tab-height;
+        pointer-event(event) => {
+            if event.kind == PointerEventKind.down
+                    && event.button == PointerEventButton.left {
+                root.start-native-window-drag();
+            }
+        }
+    }
+
     workspace-titlebar := WorkspaceTitlebar {
         visible: !root.detached-window;
         x: root.apple-platform

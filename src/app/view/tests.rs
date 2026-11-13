@@ -12,6 +12,7 @@ mod terminal_notices;
 mod terminal_typography;
 mod text_editing;
 mod text_overflow;
+mod titlebar_drag;
 
 #[test]
 fn bundled_ui_languages_select_on_a_headless_component() {

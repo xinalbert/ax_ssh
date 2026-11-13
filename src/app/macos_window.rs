@@ -106,11 +106,8 @@ impl NativeMenuTarget {
 }
 
 const TITLE_BAR_BUTTON_TRAILING_MARGIN: f64 = 12.0;
-// Matches Theme.macos-titlebar-leading-clearance. Keep native drag hit testing
-// aligned with the visual gap before the first workspace Tab.
-const TITLE_BAR_LEADING_CLEARANCE: f64 = 80.0;
-// Matches Theme.tab-height's current maximum in the main title-bar layout.
-const TITLE_BAR_ROW_HEIGHT: f64 = 32.0;
+// Place detached identity after the native traffic-light controls.
+const TITLE_BAR_SYSTEM_ICON_LEADING_MARGIN: f64 = 80.0;
 // Matches Theme.tab-platform-icon-size; the larger raster supports HiDPI.
 const TITLE_BAR_SYSTEM_ICON_SIZE: f64 = 16.0;
 const TITLE_BAR_SYSTEM_ICON_RASTER_SIZE: u32 = 64;
@@ -129,27 +126,13 @@ pub(super) struct DetachedTitlebarStyle {
     pub(super) return_icon: slint::Image,
 }
 
-fn in_native_drag_clearance(x: f64, y_from_top: f64) -> bool {
-    (0.0..TITLE_BAR_LEADING_CLEARANCE).contains(&x)
-        && (0.0..TITLE_BAR_ROW_HEIGHT).contains(&y_from_top)
-}
-
-extern "C-unwind" fn content_mouse_down_can_move_window(view: &NSView, _cmd: Sel) -> Bool {
-    let Some(mtm) = MainThreadMarker::new() else {
-        return Bool::NO;
-    };
-    let Some(event) = NSApplication::sharedApplication(mtm).currentEvent() else {
-        return Bool::NO;
-    };
-    let point = view.convertPoint_fromView(event.locationInWindow(), None);
-    let bounds = view.bounds();
-    let x = point.x - bounds.origin.x;
-    let y_from_top = if view.isFlipped() {
-        point.y - bounds.origin.y
-    } else {
-        bounds.size.height - (point.y - bounds.origin.y)
-    };
-    Bool::new(in_native_drag_clearance(x, y_from_top))
+extern "C-unwind" fn content_mouse_down_can_move_window(_view: &NSView, _cmd: Sel) -> Bool {
+    // Slint owns every client-area pointer grab, including Tab reordering.
+    // Rechecking currentEvent's position here can let AppKit take over a Tab
+    // drag when the pointer crosses into a blank titlebar region. Slint's
+    // actual blank-area TouchAreas explicitly request Winit's window drag;
+    // native traffic-light controls remain AppKit-owned sibling views.
+    Bool::NO
 }
 
 fn keep_tab_gestures_out_of_window_drag(view: &NSView) -> Result<()> {
@@ -397,7 +380,7 @@ pub(super) fn update_detached_system_icon(
         let bounds = title_bar.bounds();
         icon.setFrame(NSRect::new(
             NSPoint::new(
-                TITLE_BAR_LEADING_CLEARANCE,
+                TITLE_BAR_SYSTEM_ICON_LEADING_MARGIN,
                 ((bounds.size.height - TITLE_BAR_SYSTEM_ICON_SIZE) / 2.0).max(0.0),
             ),
             NSSize::new(TITLE_BAR_SYSTEM_ICON_SIZE, TITLE_BAR_SYSTEM_ICON_SIZE),
@@ -846,16 +829,6 @@ mod tests {
         assert_eq!(decoded.dimensions(), (64, 16));
         assert_eq!(decoded.get_pixel(32, 8).0, [255, 0, 0, 255]);
         assert!(titlebar_icon_png(&slint::Image::default()).is_err());
-    }
-
-    #[test]
-    fn native_drag_clearance_excludes_sidebar_and_tab_strip() {
-        assert!(in_native_drag_clearance(48.0, 16.0));
-        assert!(!in_native_drag_clearance(-1.0, 16.0));
-        assert!(in_native_drag_clearance(79.0, 16.0));
-        assert!(!in_native_drag_clearance(80.0, 16.0));
-        assert!(!in_native_drag_clearance(48.0, -1.0));
-        assert!(!in_native_drag_clearance(48.0, 32.0));
     }
 
     #[test]

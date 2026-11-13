@@ -1100,13 +1100,13 @@ tab-local terminal connection notice deliberately remains non-blocking.
    right edge, below the application menu titlebar. The Tab row owns only Tab
    selection and reorder gestures; its uncovered space never starts a window
    move.
-   AppKit still treats uncovered title-bar content as a window drag region even
-   when movable-window-background is disabled. The main Winit content view
-   therefore permits native dragging only in the traffic-light clearance and
-   only within the title-bar row. Slint hit areas behind the Tabs and in the
-   gap before the terminal split controls explicitly start Winit's native
-   window drag on a left press. Tabs and title-bar buttons keep their own click
-   and reorder gestures. macOS detached windows retain their native title bar;
+   AppKit's automatic client-area title-bar dragging is disabled on the main
+   Winit content view. Slint hit areas in the traffic-light clearance, behind
+   the Tabs, and before the terminal split controls explicitly start Winit's
+   native window drag on a left press. These use the live Theme row geometry
+   in Slint logical coordinates; no AppKit point rectangle reclassifies a
+   captured gesture as the pointer moves. Tabs and title-bar buttons keep their
+   own click and reorder gestures. macOS detached windows retain their native title bar;
    Windows/Linux detached windows use the compact frameless Return/control row.
 10. Platform-menu Settings and About intents open one singleton Settings
     workbench tab at General or About respectively. It remains in the visible
