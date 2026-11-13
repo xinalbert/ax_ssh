@@ -580,7 +580,8 @@ export component SftpDirectoryPane inherits Rectangle {
                     enabled: root.interactive && !root.path.is-empty;
                     clicked => {
                         root.copy-path(root.local-actions
-                            ? PathPresentation.local-path(root.path) : root.path);
+                            ? PathPresentation.local-path(root.path)
+                            : PathPresentation.remote-path(root.path));
                     }
                 }
                 if root.allow-refresh : SftpIconButton {

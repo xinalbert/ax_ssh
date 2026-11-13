@@ -96,6 +96,7 @@ mod serial_bridge;
 mod session_groups;
 mod settings_bridge;
 mod sftp_bridge;
+mod sftp_paths;
 #[cfg(target_os = "macos")]
 mod software_presentation;
 mod state;
@@ -476,6 +477,8 @@ fn wire_path_presentation(ui: &AppWindow) {
         .on_elide(|path, budget| view::elide_path(path.as_str(), budget).into());
     ui.global::<PathPresentation>()
         .on_local_path(|path| view::local_display_path(path.as_str()).into());
+    ui.global::<PathPresentation>()
+        .on_remote_path(|path| sftp_paths::remote_display_path(path.as_str()).into());
 }
 
 fn wire_text_editing(ui: &AppWindow) {

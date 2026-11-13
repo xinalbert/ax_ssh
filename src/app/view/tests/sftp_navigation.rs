@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn windows_local_path_presentation_keeps_original_state_and_remote_path_routes() {
+fn windows_path_presentation_keeps_canonical_identity_and_supports_remote_paste() {
     for detached in [false, true] {
         std::thread::spawn(move || {
             use i_slint_core::accessibility::AccessibleStringProperty;
@@ -22,18 +22,31 @@ fn windows_local_path_presentation_keeps_original_state_and_remote_path_routes()
             let navigated = Rc::new(RefCell::new(Vec::new()));
             let received = navigated.clone();
             ui.on_list_local_sftp_directory(move |path| received.borrow_mut().push(path));
+            let remote_navigated = Rc::new(RefCell::new(Vec::new()));
+            let received = remote_navigated.clone();
+            ui.on_list_sftp_directory(move |path| received.borrow_mut().push(path));
             let copied = Rc::new(RefCell::new(Vec::new()));
             let received = copied.clone();
             ui.on_write_clipboard(move |path| received.borrow_mut().push(path));
             ui.show().expect("headless Windows path window");
             harness.window.set_size(slint::PhysicalSize::new(1800, 740));
 
-            for (raw, readable) in [
-                (r"\\?\D:\software\Xming", r"D:\software\Xming"),
-                (r"\\?\UNC\server\share\研究", r"\\server\share\研究"),
+            for (raw, readable, remote_raw, remote_readable) in [
+                (
+                    r"\\?\D:\software\Xming",
+                    r"D:\software\Xming",
+                    "/G:/albertxin/2026/mol_dock",
+                    r"G:\albertxin\2026\mol_dock",
+                ),
+                (
+                    r"\\?\UNC\server\share\研究",
+                    r"\\server\share\研究",
+                    "/c:/Program Files/研究 📁",
+                    r"c:\Program Files\研究 📁",
+                ),
             ] {
                 ui.set_local_sftp_path(raw.into());
-                ui.set_sftp_path(raw.into());
+                ui.set_sftp_path(remote_raw.into());
                 harness.settle();
                 let local = ui.invoke_native_sftp_local_drop_region();
                 let action = |label: &str, local_action: bool| {
@@ -57,7 +70,7 @@ fn windows_local_path_presentation_keeps_original_state_and_remote_path_routes()
                     let point = item.map_to_window(item.geometry().center());
                     harness.click(slint::LogicalPosition::new(point.x, point.y));
                 };
-                for expected in [raw, readable] {
+                for expected in [remote_readable, readable] {
                     let found = ItemRc::new_root(WindowInner::from_pub(ui.window()).component())
                         .visit_descendants(|item| {
                             if item.is_visible()
@@ -104,8 +117,54 @@ fn windows_local_path_presentation_keeps_original_state_and_remote_path_routes()
                 );
                 assert_eq!(ui.get_local_sftp_path(), raw);
                 click(action("Copy current path", false));
-                assert_eq!(copied.borrow().last().map(SharedString::as_str), Some(raw));
-                assert_eq!(ui.get_sftp_path(), raw);
+                assert_eq!(
+                    copied.borrow().last().map(SharedString::as_str),
+                    Some(remote_readable)
+                );
+                click(action(&format!("Edit path: {remote_readable}"), false));
+                harness.press_key(slint::platform::Key::Return);
+                assert_eq!(
+                    remote_navigated.borrow().last().map(SharedString::as_str),
+                    Some(remote_readable)
+                );
+                click(action("Path: Settings", false));
+                harness.press_key(slint::platform::Key::DownArrow);
+                harness.press_key(slint::platform::Key::Return);
+                assert_eq!(
+                    copied.borrow().last().map(SharedString::as_str),
+                    Some(remote_readable)
+                );
+
+                // Exercise real clipboard paste into the complete path editor,
+                // including Explorer's quoted "Copy as path" value.
+                click(action(&format!("Edit path: {remote_readable}"), false));
+                let pasted = r#""D:\Other folder\结果""#;
+                harness.clipboard.borrow_mut()[0] = Some(pasted.to_owned());
+                for text in ["a", "v"] {
+                    use slint::platform::{Key, WindowEvent};
+                    ui.window().dispatch_event(WindowEvent::KeyPressed {
+                        text: Key::Control.into(),
+                    });
+                    ui.window()
+                        .dispatch_event(WindowEvent::KeyPressed { text: text.into() });
+                    ui.window()
+                        .dispatch_event(WindowEvent::KeyReleased { text: text.into() });
+                    ui.window().dispatch_event(WindowEvent::KeyReleased {
+                        text: Key::Control.into(),
+                    });
+                }
+                harness.press_key(slint::platform::Key::Return);
+                assert_eq!(
+                    remote_navigated.borrow().last().map(SharedString::as_str),
+                    Some(pasted)
+                );
+
+                click(action("Refresh", false));
+                assert_eq!(
+                    remote_navigated.borrow().last().map(SharedString::as_str),
+                    Some(remote_raw)
+                );
+                assert_eq!(ui.get_sftp_path(), remote_raw);
             }
             ui.hide().expect("headless Windows path window");
         })

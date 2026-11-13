@@ -155,13 +155,20 @@ runtime API or move domain/transport ownership into the UI.
 `CredentialStore::with_entry_factory` and `PasswordEntry` form the intentional library boundary for protected providers and isolated application tests. The adapter returns owned values and generic errors; platform errors stay inside credentials. This avoids real keyring access or process-global backend replacement in tests. Private persistence restricts temporary-file permissions before replacement and reports directory-sync failures with context. A sync failure after replacement means the new file may already be published; it does not report durable success. Upload publication requires successful writes, source validation and remote CLOSE, and cancellation observed before publication cannot report `Published`.
 
 SFTP filesystem state retains the original canonical path for directory history,
-refresh, file identity and transfers. Only the local address bar uses the stateless
+refresh, file identity and transfers. The local address bar uses the stateless
 `PathPresentation.local-path` formatter: ordinary Windows extended drive paths
 become `D:\...`, and extended UNC paths become `\\server\share\...`. This complete
 readable value also seeds editing, accessibility and both copy actions. Device or
-volume namespaces and components with verbatim-only semantics retain their prefix;
-remote paths are unchanged. Editing submits the complete value through the existing
-validated directory request. No filesystem access occurs in the formatter.
+volume namespaces and components with verbatim-only semantics retain their prefix.
+The remote bar uses `PathPresentation.remote-path` to present Windows SFTP drive
+addresses such as `/G:/work` as `G:\work`, including editing, accessibility and both
+copy actions. `src/app/sftp_paths.rs` owns this pure presentation and input mapping.
+When the server's current or home directory establishes the `/X:/` convention,
+direct navigation accepts absolute Windows drive paths with either separator,
+including Explorer's quoted Copy as path values, and submits `/X:/...` through the
+existing validated request. POSIX sessions retain literal quotes and backslashes;
+UNC addresses are not mapped to remote drive paths. Formatting performs no
+filesystem access and does not change the original operational paths.
 
 Slint measures bounded display candidates with the same font as the visible text
 and performs a bounded binary search outside layout bindings. Middle elision

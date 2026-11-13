@@ -2283,6 +2283,47 @@ fn sftp_transfer_selection_counts_only_actionable_active_rows() {
 }
 
 #[test]
+fn windows_sftp_navigation_converts_pasted_paths_and_preserves_canonical_history() {
+    let mut sftp = SftpBrowserState {
+        path: "/G:/work".to_owned(),
+        home: "/C:/Users/alice".to_owned(),
+        ..SftpBrowserState::default()
+    };
+    let (_, requested) = sftp
+        .begin_navigation(
+            SftpNavigation::Direct,
+            Some(r#" "D:\Other folder\结果" "#.to_owned()),
+        )
+        .expect("Windows pasted directory should be accepted");
+    assert_eq!(requested, "/D:/Other folder/结果");
+    assert_eq!(sftp.path, "/G:/work");
+    sftp.complete_navigation(requested);
+    let (_, previous) = sftp
+        .begin_navigation(SftpNavigation::Back, None)
+        .expect("canonical history");
+    assert_eq!(previous, "/G:/work");
+    sftp.complete_navigation(previous);
+    let (_, next) = sftp
+        .begin_navigation(SftpNavigation::Forward, None)
+        .expect("canonical forward history");
+    assert_eq!(next, "/D:/Other folder/结果");
+    sftp.cancel_navigation();
+    let (_, parent) = sftp
+        .begin_navigation(SftpNavigation::Up, None)
+        .expect("canonical parent");
+    assert_eq!(parent, "/G:");
+    sftp.cancel_navigation();
+
+    sftp.path = "/srv/app".to_owned();
+    sftp.home = "/home/alice".to_owned();
+    let literal = r#""D:\literal\POSIX name""#;
+    let (_, requested) = sftp
+        .begin_navigation(SftpNavigation::Direct, Some(literal.to_owned()))
+        .expect("POSIX literal name");
+    assert_eq!(requested, literal);
+}
+
+#[test]
 fn sftp_navigation_history_survives_failures_and_resets_forward_branch() {
     let mut sftp = SftpBrowserState {
         path: "/home/alice".to_owned(),

@@ -19,7 +19,7 @@ export component SftpPathBar inherits FocusScope {
     private property <bool> editing: false;
     private property <bool> return-focus: false;
     private property <string> presented-path: root.local-path
-        ? PathPresentation.local-path(root.path) : root.path;
+        ? PathPresentation.local-path(root.path) : PathPresentation.remote-path(root.path);
     private property <string> draft: root.presented-path;
     changed path => { root.draft = root.presented-path; root.editing = false; }
     changed enabled => {

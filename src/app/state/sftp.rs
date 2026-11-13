@@ -1133,10 +1133,11 @@ impl SftpBrowserState {
             anyhow::bail!("SFTP directory request already in progress");
         }
         let requested = match kind {
-            SftpNavigation::Direct => path
-                .context("SFTP directory path is missing")?
-                .trim()
-                .to_owned(),
+            SftpNavigation::Direct => super::super::sftp_paths::remote_directory_input(
+                path.context("SFTP directory path is missing")?.trim(),
+                &self.path,
+                &self.home,
+            ),
             SftpNavigation::Back => self
                 .back_history
                 .back()
