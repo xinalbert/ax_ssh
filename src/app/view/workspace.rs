@@ -113,12 +113,6 @@ fn schedule_pending_ui_refresh(
             ui.set_settings_tab_id(settings_tab_id.into());
             apply_active_session_icon(&ui, view.active_session);
             apply_active_snapshot(&ui, view.snapshot, view.active_tab_id);
-            #[cfg(target_os = "macos")]
-            if ui.get_detached_window()
-                && let Err(error) = update_macos_detached_system_icon(&ui)
-            {
-                warn!(%error, "failed to update detached macOS system icon");
-            }
             apply_terminal_panes(&ui, view.terminal_panes, view.terminal_dividers);
             applied_view_count = applied_view_count.saturating_add(1);
         }

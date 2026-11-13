@@ -661,7 +661,6 @@ export component WorkspaceShell inherits Rectangle {
     callback move-tab(string, int);
     callback detach-workspace(string);
     callback return-workspace(string);
-    callback start-native-window-drag();
     callback save-settings(
         string, string, string, string, string, int, int, int, float, bool, bool, bool, bool, bool, int, int, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
@@ -1010,14 +1009,13 @@ export component WorkspaceShell inherits Rectangle {
             background: Theme.panel;
 
             session-navigation := SessionNavigation {
-                y: root.apple-platform ? Theme.tab-height : 0px;
-                height: parent.height - self.y;
+                height: parent.height;
                 sessions: root.view.sessions;
                 search-query: root.view.session_filter;
                 local-shell-platform: root.view.local_shell_platform;
                 sidebar-width: root.view.sidebar_width;
                 active-profile-id: root.view.active_profile_id;
-                divider-top-offset: root.apple-platform ? 0px : workspace-titlebar.height;
+                divider-top-offset: workspace-titlebar.height;
                 collapsed <=> root.sidebar-collapsed;
                 search-changed(value) => { root.session-filter-changed(value); }
                 open-local-shell => { root.open-local-shell(); }
@@ -1363,9 +1361,7 @@ export component WorkspaceShell inherits Rectangle {
 
     workspace-titlebar := WorkspaceTitlebar {
         visible: !root.detached-window;
-        x: root.apple-platform
-            ? Theme.macos-titlebar-leading-clearance
-            : session-navigation.width;
+        x: session-navigation.width;
         y: 0px;
         width: max(0px, parent.width - self.x);
         tabs: root.view.workspace_tabs;
@@ -1374,8 +1370,6 @@ export component WorkspaceShell inherits Rectangle {
         tab-width: root.view.tab_width;
         connection-picker-open: root.connection-picker-open;
         detached-window: root.detached-window;
-        apple-platform: root.apple-platform;
-        start-native-window-drag => { root.start-native-window-drag(); }
         activate-tab(id) => {
             root.connection-picker-open = false;
             root.activate-tab(id);
@@ -1403,10 +1397,10 @@ export component WorkspaceShell inherits Rectangle {
         }
     }
 
-    // The native title-bar clearance and Slint Tab row share one bottom edge.
+    // The Tab row begins beside the sidebar below the application title bar.
     Rectangle {
         visible: !root.detached-window;
-        x: root.apple-platform ? 0px : session-navigation.width;
+        x: session-navigation.width;
         y: workspace-titlebar.height - Theme.hairline;
         width: max(0px, parent.width - self.x);
         height: Theme.hairline;

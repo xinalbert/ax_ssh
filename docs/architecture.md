@@ -111,13 +111,13 @@ Process startup (src/main.rs)
 | `ui/` | Main composition, feature components, Settings category pages, visual states, user gestures, generated callback contracts | Filesystem access, Tokio tasks, russh handles |
 | `src/app.rs` | Generated Slint type declaration, process-level UI startup, and callback composition | Renderer/runtime configuration, window lifecycle, platform helpers, feature implementations, SSH protocol details, or JSON schema details |
 | `src/app/runtime.rs` | Renderer selection, bounded Tokio runtime/thread configuration, and startup bundled-font loading | Generated Slint types, feature callbacks, transport, or persistence |
-| `src/app/window_bridge.rs` | Detached workspace creation/restore/return/close, window activation hook, native titlebar actions, and explicit Slint window-resource release | Transport ownership, persistence schema, or worker internals |
+| `src/app/window_bridge.rs` | Detached workspace creation/restore/return/close, window activation hook, native-ready initialization, and explicit Slint window-resource release | Transport ownership, persistence schema, or worker internals |
 | `src/app/platform_support.rs` | Clipboard access, build-only diagnostics, external opener calls, and macOS application-menu wiring | Secrets, session state persistence, or SSH/worker state |
 | `src/app/window_state.rs` | UI-thread normal window geometry capture, monitor/DPI fitting and maximized restoration | Filesystem, workers, credentials or generated component declarations |
 | `src/app/workspace_autosave.rs` | Debounced checkpoints, one latest pending snapshot and serialized background writes with shutdown drain | Native window ownership, credentials or SSH state |
 | `src/app/worker_shutdown.rs` | Worker cleanup task ownership, completion receipts and deadline-based exit drain | Slint types, visible Tab state, transport implementation or persistence |
 | `src/app/window_router.rs` | Private multi-window route, detached-transfer and pane-tree ownership | Generated type declaration, feature implementations, SSH protocol details, or JSON schema details |
-| `src/app/macos_window.rs` | Main-thread AppKit title-bar setup, running-application icon, and standard application-menu action binding | Generated Slint types, persisted settings, SSH or worker state |
+| `src/app/macos_window.rs` | Main-thread AppKit input/window queries, running-application icon, and standard application-menu action binding | Generated Slint types, persisted settings, SSH or worker state |
 | `src/app/native_file_drop.rs` | Windows and Linux native cursor lookup for external file-manager drops, with logical-coordinate conversion and safe fallback boundaries | Filesystem access, SFTP state, transfer queue, or target selection |
 | `src/app/workspace.rs` and `src/app/workspace/` | Private workspace facade plus focused Tab lifecycle, Session Editor transaction, and profile/group management wiring | Generated type declaration, transport implementation, persistence schema, or broader public API |
 | `src/app/{connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs`, `src/app/{connection,view,sftp_bridge,terminal_bridge}/` | Private application-bridge feature wiring and cohesive snapshot/Slint mapping modules, including protocol dispatch, SSH trust/authentication, direct workers, serial discovery, SFTP intents, detached opener dispatch, pane models and settings/options mapping | Generated type declaration, transport implementation, or persistence schema |
@@ -1079,28 +1079,17 @@ tab-local terminal connection notice deliberately remains non-blocking.
    coalesced by the focused adaptive, configured visible-unfocused FPS, or hidden
    policy described above. Errors, disconnect, shutdown, and worker cleanup never
    wait for a presentation deadline.
-9. On macOS, the main window keeps the standard traffic-light controls, hides
-   the native title text, and extends Slint content into a transparent native
-   title bar. The workspace Tab strip occupies that title-bar row with a fixed
-   80px leading clearance for the traffic lights, independent of sidebar width.
-   A separate 36px trailing gap remains immediately before the terminal split
-   controls.
-   The sidebar and its collapse control start below the title-bar row.
-   One bottom separator spans the full main-window title-bar row, including
-   the traffic-light clearance; other platforms keep the separator to the
-   right of the sidebar.
-   On Windows and Linux, the main-window title-bar row begins at the sidebar's
-   right edge, below the application menu titlebar. The Tab row owns only Tab
-   selection and reorder gestures; its uncovered space never starts a window
-   move.
-   AppKit still treats uncovered title-bar content as a window drag region even
-   when movable-window-background is disabled. The main Winit content view
-   therefore permits native dragging only in the traffic-light clearance and
-   only within the title-bar row. Slint hit areas behind the Tabs and in the
-   gap before the terminal split controls explicitly start Winit's native
-   window drag on a left press. Tabs and title-bar buttons keep their own click
-   and reorder gestures. macOS detached windows retain their native title bar;
-   Windows/Linux detached windows use the compact frameless Return/control row.
+9. Main and detached windows use Slint's frameless window declaration on all
+   desktop platforms. `DesktopMenuTitlebar` owns the application menus, window
+   drag area, and minimize/maximize/restore/close controls. macOS has no native
+   title-bar row, traffic-light controls, FullSizeContentView mutation, or
+   AppKit title-bar buttons. The Tab strip starts at the sidebar's right edge
+   below the application title bar, with no platform-specific leading gap.
+   Its blank space does not drag the window; Tab selection/reorder and window
+   dragging have separate hit areas. macOS retains its screen menu and Command
+   shortcut semantics. Native application-icon/menu setup and main/detached
+   placement restoration run once at the first actual native window event,
+   before geometry capture, without a fixed startup delay.
 10. Platform-menu Settings and About intents open one singleton Settings
     workbench tab at General or About respectively. It remains in the visible
     workspace-tab model alongside running SSH and local-terminal tabs, so
@@ -1123,9 +1112,8 @@ tab-local terminal connection notice deliberately remains non-blocking.
     credential fields to Slint.
    The session sidebar does not duplicate Settings
    or About. It spans the workspace height below the platform window chrome.
-   On macOS, the title-bar Tab strip keeps its fixed leading clearance as
-   the sidebar expands or collapses; on Windows/Linux it begins at the
-   sidebar's right edge below the application menu titlebar.
+   The Tab strip begins at the sidebar's right edge below the application
+   menu titlebar on every desktop platform.
    Its `+` is pinned to the outer right edge and opens a Slint-local picker containing a
    masked, read-only snapshot of every saved connection profile. `ConnectableSessionRow`
    also carries the bounded canonical platform ID; the application shares profile
@@ -1144,21 +1132,23 @@ tab-local terminal connection notice deliberately remains non-blocking.
     menu shortcuts also provide Slint's normal fallback before focused-widget
     dispatch; no parallel global keyboard listener is installed. Menu callbacks
     and the terminal's local key handler consume an action once. The menu is
-    visible in the macOS screen menu and hidden on Windows/Linux, where
-    `DesktopMenuTitlebar` renders File/Edit/View/Pane/Window/Help across the
+    visible in the macOS screen menu and hidden on Windows/Linux.
+    On all desktop platforms `DesktopMenuTitlebar` also renders
+    File/Edit/View/Pane/Window/Help across the
     top of the frameless client window. Each top-level button opens a themed
     `FlatActionMenu` popup; both menu surfaces call the same `execute-menu-command`
     function, so dynamic enabled states and actions keep one application
-    route. The six-pixel winit resize border, a menu-titlebar blank-area
-    `TouchArea`, and minimize/maximize/close controls replace native frame
-    interactions. A left press in that blank area routes through AppWindow to
+    route. Windows/Linux use the six-pixel winit resize border; macOS retains
+    AppKit's resizable borderless window. A menu-titlebar blank-area `TouchArea`
+    and minimize/maximize/close controls replace native title-bar interactions.
+    A left press in that blank area routes through AppWindow to
     `drag_window()` for the current main or detached Winit window; menus,
     Return, and window controls keep their own actions.
     Window controls use fixed, centered vector paths rather than font glyphs;
     maximized state selects the overlapping-window restore icon. Shared Theme
     tokens reserve each control's full hit area. Tooltips, keyboard focus,
     Enter/Space, and the accessibility default action expose the same command.
-    Detached Windows/Linux windows show a Return control instead of the main
+    Detached windows show a Return control instead of the main
     business menus; their close control still invokes Slint's normal
     close-requested route and merges the workspace. The AppWindow boundary adds
     the header height to terminal presentation coordinates and exported SFTP
@@ -1357,48 +1347,29 @@ tab-local terminal connection notice deliberately remains non-blocking.
 
 The inline action on each SSH Terminal/SFTP Tab and the Window menu can detach
 that workspace into a second native Slint window. A detached window retains the
-active connection title as system window metadata. On macOS, it displays that
-title in a transparent native title bar over the active client surface:
-Terminal background for a Terminal view and application background for SFTP.
-The native title bar also shows the connection's 16px system icon after the
-traffic-light controls. Windows/Linux show the same icon and connection name
-in their frameless control row. `WindowView.active_session` carries one existing
-Tab summary for the focused pane, including hidden split panes, rather than
-using the root Tab's identity. The view maps this through the same manual/cache/
-local/release priority as the Tab strip and publishes only an icon ID and release.
-Slint reuses the sidebar platform glyph and `SystemPlatformIcon`; unknown systems
-use a generic server glyph, with a bundled monochrome SVG for native rendering.
-macOS consumes the bundled image source, encodes an aspect-preserving raster of
-at most 64x64 pixels, and retains one
-`NSImageView` and source cache under the native title-bar view. Full workspace
-refreshes update identity; terminal-only output does not rasterize icons.
-Theme preview/save also refreshes native template tint using the existing
-`system_icons_follow_theme` value. Original colors remain the default. Native
-window destruction releases the image view and cache; no server discovery,
-credentials, represented file URL, or application icon is involved.
-Its macOS icon-only return button consumes the same bundled overlapping-window
-SVG as the Slint Tab action; move and return reverse the foreground window.
-Theme supplies the 14px transfer icon, 16px split icons, 26px button width, 4px
-spacing, and muted foreground color. Native button height fits the title bar
-up to 26px so the icons stay centered. AppKit decodes bounded rasters once when
-installing borderless buttons and assigns the matching logical image sizes;
-it does not select SF Symbols or a system image fallback. Windows/Linux
-provide the shared Return SVG in the frameless control row. The client content contains only the active
-`TerminalPaneGroup` or `SftpPane`: it has no Tab strip, session sidebar, saved-
-connection picker, Settings, session editor, or client menu. `AppState` remains
-the sole owner of the Tab
-runtime objects, terminal models, pending trust/authentication phases, and
-transport workers. The `WorkspaceTransfer` payload contains only the source
-window ID, terminal-pane UUIDs with their SSH/SFTP companions, and the active
-Tab UUID; it never
-contains a Slint component, russh handle, Tokio receiver, terminal buffer, or
-secret.
-Theme preview and save propagate the existing `AppSettings` value to each live
-detached UI, then update its AppKit title-bar background from that UI's resolved
-client surface color and action-icon tint. This appearance-only path keeps each window's local
-Slint theme coherent without routing AppKit state through `AppState`.
-Detached Terminal panes keep the same direct Copy/Paste/Select All keyboard
-handling even though no client menu is added.
+active connection title as system window metadata. All desktop platforms show
+that name and its 16px system icon in the shared Slint title bar, alongside a
+Return control and standard application window controls. Detached Terminal
+windows also expose vertical/horizontal split buttons there; SFTP omits them.
+`WindowView.active_session` carries one existing Tab summary for the focused
+pane, including hidden split panes, rather than using the root Tab's identity.
+The view uses the same manual/cache/local/release priority as the Tab strip and
+publishes only an icon ID and release. Slint resolves the bundled image source,
+preserves original colors by default, and follows `system_icons_follow_theme`
+when requested; an unknown system uses the shared server icon. Theme preview
+and save update each live Slint component through the existing settings path.
+The Return and split buttons share Theme's SVG assets, dimensions, tooltips,
+keyboard focus, and accessibility actions. No AppKit title-bar view, image
+raster cache, or title-bar tint callback is retained.
+The content below this header contains only the active `TerminalPaneGroup` or
+`SftpPane`: it has no Tab strip, session sidebar, saved-connection picker,
+Settings, session editor, or client menu. `AppState` remains the sole owner of
+Tab runtime objects, terminal models, pending trust/authentication phases, and
+transport workers. `WorkspaceTransfer` contains only the source window ID,
+terminal-pane UUIDs with their SSH/SFTP companions, and the active Tab UUID;
+it never contains a Slint component, russh handle, Tokio receiver, terminal
+buffer, or secret. Detached Terminal panes keep the same direct
+Copy/Paste/Select All keyboard handling.
 The main layout instantiates its `TerminalPaneGroup` only when the window is
 not detached. Hiding that layout alone leaves terminal timers active, allowing
 its narrower geometry (after subtracting the sidebar) to overwrite the visible
@@ -1453,13 +1424,12 @@ The main workspace Tab toolbar places one fixed-size, keyboard-accessible pair
 of vertical and horizontal split controls beside the saved-connection button.
 They emit the active pane UUID with `split-right` or `split-down` through
 the same `pane-command` callback as the keyboard route; Slint does not create a
-worker, mutate the layout, or add another top-level Tab. On macOS, a detached
-Terminal places the same image-only pair in its native title bar immediately
-before the Return icon, while its client area remains a full-height pane
-surface. Both paths use Theme's images from `ui/icons/`; theme preview/save
-updates native tint without re-encoding the icons. AppKit retains native button
-keyboard, focus, and accessibility behavior. Each native action captures only a weak `AppWindow` and invokes the
-same callback, so `WindowRouter` continues to validate the focused pane. Terminal panes also use `Alt+H/J/K/L` to focus the left/down/up/right
+worker, mutate the layout, or add another top-level Tab. A detached Terminal
+places the same image-only pair in its Slint title bar on every desktop
+platform. Both paths use Theme's images from `ui/icons/` and emit the active
+pane UUID through the same callback, so `WindowRouter` validates the focused
+pane. Standard Slint controls retain keyboard, focus, and accessibility
+behavior. Terminal panes also use `Alt+H/J/K/L` to focus the left/down/up/right
 neighbor and `Alt+Shift+H/J/K/L` to create a fresh terminal session on that
 side. A split of a local shell creates a new PTY; a split of SSH, Telnet, or
 Serial repeats the normal profile connection flow. A split SSH child repeats
@@ -2324,8 +2294,9 @@ position, falls back to the primary/current monitor when needed, and fits size
 and position within its bounds with room for platform window chrome and desktop
 bars. Logical sizes account for the target display scale; the application's
 520x360 minimum still applies. Wayland absolute placement remains compositor
-owned. On macOS the main window restores after its FullSizeContentView titlebar
-configuration, so capture and restore use the same client-size convention.
+owned. macOS main and detached windows restore at their first native window
+event, before geometry capture. The frameless content-size convention is fixed
+at creation, so no later title-bar change shifts the restored dimensions.
 No monitor identity or native handle enters the snapshot.
 
 A 500 ms UI timer compares layout metadata without copying terminal text.

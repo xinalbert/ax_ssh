@@ -123,6 +123,7 @@ pub(in crate::app) fn install_native_window_input_hook(
     runtime: Handle,
     window_router: WindowRouter,
     window_id: Uuid,
+    #[cfg(target_os = "macos")] on_native_ready: Box<dyn FnOnce()>,
 ) {
     let modifiers = Rc::new(Cell::new(ModifiersState::default()));
     let modifiers_for_event = modifiers.clone();
@@ -134,7 +135,15 @@ pub(in crate::app) fn install_native_window_input_hook(
     let ui_for_drop = ui.as_weak();
     let native_file_drop_pointer = Rc::new(RefCell::new(NativeFileDropPointer::default()));
     let native_file_drop_pointer_for_event = native_file_drop_pointer.clone();
+    #[cfg(target_os = "macos")]
+    let mut on_native_ready = Some(on_native_ready);
     ui.window().on_winit_window_event(move |_window, event| {
+        // This filter only runs after Winit has created and registered the
+        // native window. A startup timer can run before that point.
+        #[cfg(target_os = "macos")]
+        if let Some(initialize) = on_native_ready.take() {
+            initialize();
+        }
         if matches!(
             event,
             WindowEvent::Moved(_)

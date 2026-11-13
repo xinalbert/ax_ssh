@@ -86,13 +86,13 @@ Slint UI（.slint）
 | `ui/` | 主窗口组合、功能组件、Settings 分类页面、视觉状态、用户手势和生成的 callback 契约 | 文件系统、Tokio task、russh handle |
 | `src/app.rs` | 生成 Slint 类型声明、进程级 UI 启动和 callback 编排 | renderer/runtime 配置、窗口生命周期、平台辅助、功能实现、SSH 协议细节或 JSON schema 细节 |
 | `src/app/runtime.rs` | renderer 选择、有界 Tokio runtime/thread 配置和启动自带字体读取 | 生成 Slint 类型、功能 callback、传输或持久化 |
-| `src/app/window_bridge.rs` | detached workspace 创建/恢复/返回/关闭、窗口激活 hook、原生标题栏动作和显式 Slint 窗口资源释放 | transport 所有权、持久化 schema 或 worker 内部实现 |
+| `src/app/window_bridge.rs` | detached workspace 创建/恢复/返回/关闭、窗口激活 hook、原生就绪初始化和显式 Slint 窗口资源释放 | transport 所有权、持久化 schema 或 worker 内部实现 |
 | `src/app/platform_support.rs` | 剪贴板、仅构建元数据诊断、外部打开器和 macOS application menu 接线 | 秘密、session 持久化或 SSH/worker 状态 |
 | `src/app/window_state.rs` | UI 线程普通窗口几何采集、屏幕/DPI 适配和最大化恢复 | 文件系统、worker、凭据或生成组件声明 |
 | `src/app/workspace_autosave.rs` | 防抖快照、单槽最新待写状态、后台串行写盘与退出排空 | 原生窗口所有权、凭据或 SSH 状态 |
 | `src/app/worker_shutdown.rs` | worker 清理任务所有权、完成通知和有总期限的退出 drain | Slint 类型、可见 Tab 状态、transport 实现或持久化 |
 | `src/app/window_router.rs` | 私有多窗口路由、detached transfer 与 pane tree 所有权 | 生成类型声明、功能实现、SSH 协议细节或 JSON schema 细节 |
-| `src/app/macos_window.rs` | 主线程 AppKit 标题栏、运行中应用图标和标准应用菜单 action 绑定 | 生成的 Slint 类型、持久化设置、SSH 或 worker 状态 |
+| `src/app/macos_window.rs` | 主线程 AppKit 输入/窗口查询、运行中应用图标和标准应用菜单 action 绑定 | 生成的 Slint 类型、持久化设置、SSH 或 worker 状态 |
 | `src/app/native_file_drop.rs` | Windows 与 Linux 系统文件管理器拖入时的原生光标查询、逻辑坐标转换和安全回退边界 | 文件系统访问、SFTP 状态、transfer queue 或目标选择 |
 | `src/app/workspace.rs` 与 `src/app/workspace/` | 私有 workspace facade，以及按职责拆分的 Tab 生命周期、Session Editor 事务和 profile/group 管理接线 | 生成类型声明、传输实现、持久化 schema 或更宽的公共 API |
 | `src/app/{connection,connection_monitor,terminal_bridge,settings_bridge,view,serial_bridge,sftp_bridge}.rs`、`src/app/{connection,view,sftp_bridge,terminal_bridge}/` | 私有 application bridge 功能接线与内聚的 snapshot/Slint 映射模块，包括协议分发、SSH 信任/认证、直连 worker、串口发现、SFTP 意图、detached opener 调度、pane model 和 settings/options 映射 | 生成类型声明、传输实现或持久化 schema |
@@ -651,17 +651,12 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    唤醒路径。Local、Serial、SSH 与 Telnet monitor 都会立即解析每个 worker 事件并回送终端
    协议应答；只有 UI publication 按上述 focused 自适应、配置后的可见未聚焦 FPS 或 hidden 策略合并。
    错误、断开、shutdown 和 worker 清理不会等待呈现 deadline。
-9. macOS 主窗口保留原生红绿灯控件，隐藏原生标题文字，并将 Slint 内容延伸到透明的
-   原生标题栏。工作区 Tab 条占用这一行，在红绿灯旁保留固定 80px 前沿，不随侧栏宽度改变；
-   另外保留 36px 尾部间距，位于终端分栏按钮之前。
-   侧栏和收起控件从标题栏下方开始。标题栏底部分隔线横贯主窗口，包括红绿灯留空；
-   其他平台的分隔线仍从侧栏右侧开始。关闭 AppKit 的整窗背景拖动后，原生标题栏
-   仍会把未覆盖的客户区当成窗口拖动区域；因此主窗口 Winit 内容视图只允许标题栏
-   高度内的红绿灯留空执行原生拖窗。Tab 下层空白区和分栏按钮前的间距在按下左键时
-   都会通过 Slint 命中区显式调用 Winit 系统拖窗；Tab 与标题栏按钮仍独占各自的点击和重排手势。
-   Windows 和 Linux 的主窗口 Tab 条位于应用菜单顶栏下方并从侧栏右缘开始；其未覆盖空白区
-   只处理 Tab 选择和重排，不会移动窗口。
-   macOS 独立窗口保留原有的原生标题栏布局；Windows/Linux 独立窗口使用紧凑的无边框返回/窗口控件行。
+9. 所有桌面平台的主窗口和独立窗口均由 Slint 声明为无边框，`DesktopMenuTitlebar` 拥有
+   应用菜单、拖窗空白区和最小化/最大化/还原/关闭控件。macOS 不再创建原生标题栏行、
+   红绿灯控件、FullSizeContentView 修改或 AppKit 标题栏按钮。Tab 条在应用顶栏下方从
+   侧栏右缘开始，不保留平台专用前沿；Tab 空白区不拖窗，选择/重排与拖窗使用独立命中区。
+   macOS 保留系统屏幕菜单和 Command 快捷键语义。原生应用图标/菜单初始化及主/独立窗口
+   位置恢复在首个真实原生窗口事件内、几何采集前执行一次，不依赖固定启动延迟。
 10. 平台菜单的 Settings 和 About 意图分别把同一个单例 Settings 工作台 Tab 打开到
     General 或 About。它与正在运行的 SSH/本地终端 Tab 一起留在可见工作区 Tab model
     中，因此激活 Settings 不会移除返回活动终端的路径。Settings Tab 已存在时再次按其快捷键，
@@ -673,7 +668,7 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     滚动日志目录，Copy diagnostics 只把版本、revision、系统、架构和构建类型写入剪贴板。
     不上传数据，也不把配置、主机、路径或凭据字段暴露给 Slint。会话侧边栏不再重复 Settings/About，
    并从平台窗口顶栏下方贯穿工作区高度；
-   macOS 标题栏内的 Tab 条不随侧栏展开或收起移动；Windows/Linux 的 Tab 条在应用菜单顶栏下方从侧栏右缘开始。
+   所有桌面平台的 Tab 条均在应用菜单顶栏下方从侧栏右缘开始。
    `+` 固定在最右边缘，打开由 Slint 本地持有的
     选择器，显示全部已保存连接 profile 的遮蔽只读快照。`ConnectableSessionRow` 同时携带有界的规范
     平台标识，应用与侧栏共用手动指定、有效缓存、运行时 release、通用图标的解析优先级。
@@ -685,15 +680,16 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
 11. 每个 `AppWindow`（包括独立窗口）无条件声明一份 Slint `MenuBar`。
     后端随窗口激活切换 macOS 屏幕菜单，并把原生菜单事件派发给所属窗口；生成菜单快捷键
     同时提供焦点控件派发前的 Slint 标准兜底，不另设全局键盘监听。菜单回调和终端局部
-    按键处理只消费一次动作。菜单在 macOS 屏幕菜单栏可见，在 Windows/Linux 隐藏；这两个平台由 `DesktopMenuTitlebar` 在无边框客户区顶部绘制 File/Edit/View/Pane/Window/Help。
+    按键处理只消费一次动作。菜单在 macOS 屏幕菜单栏可见，在 Windows/Linux 隐藏；所有桌面平台还由 `DesktopMenuTitlebar` 在无边框客户区顶部绘制 File/Edit/View/Pane/Window/Help。
     每个菜单按钮用主题化 `FlatActionMenu` 弹层展开，两个菜单表面共同调用
-    `execute-menu-command`，使动态启用状态和动作保持同一应用路由。六像素 winit 缩放边缘、
-    菜单顶栏空白区的 `TouchArea` 和最小化/最大化/关闭按钮替代原生窗口边框交互。
+    `execute-menu-command`，使动态启用状态和动作保持同一应用路由。Windows/Linux 使用六像素
+    winit 缩放边缘，macOS 保留 AppKit 的可缩放无边框窗口。菜单顶栏空白区的 `TouchArea`
+    和最小化/最大化/关闭按钮替代原生标题栏交互。
     该空白区的左键按下经 AppWindow 路由到当前主窗口或独立窗口的 Winit `drag_window()`；菜单、
     Return 与窗口按钮保留各自动作。
     窗口控件使用固定且居中的矢量路径，不依赖字体字形；最大化后显示双窗口还原图标。
     共用 Theme token 为每个控件保留完整点击区域，Tooltip、键盘焦点、Enter/Space 和
-    无障碍默认动作都触发同一个命令。Windows/Linux 的
+    无障碍默认动作都触发同一个命令。所有桌面平台的
     独立窗口显示 Return 按钮而非主窗口业务菜单；其关闭按钮仍走 Slint 常规
     close-requested 路由并合并工作区。AppWindow 边界为终端呈现坐标和导出的 SFTP 拖放区域加上
     顶栏高度，并在原生拖放命中检测中减去该高度。macOS 的 `src/app/macos_window.rs` 复用后端已创建的标准
@@ -826,8 +822,9 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
 缺少可选 placement 的旧版 v1 快照仍可加载。全屏、最小化和零尺寸事件不覆盖普通几何，
 重启时不自动进入全屏或最小化。UI bridge 根据旧坐标选择当前显示器；副屏拔出时回退到主屏/
 当前屏，并按屏幕范围限制尺寸和位置，给平台窗口顶栏和桌面栏留出空间。逻辑尺寸适配显示器缩放，
-应用最小尺寸仍为 520x360。Wayland 的绝对定位交给 compositor；macOS 主窗口在设置
-FullSizeContentView 标题栏后再恢复尺寸，保证采集与恢复的客户区尺寸口径一致。快照不保存
+应用最小尺寸仍为 520x360。Wayland 的绝对定位交给 compositor；macOS 主窗口和独立窗口
+均在首个原生窗口事件内、几何采集前恢复位置与尺寸。无边框客户区尺寸口径从创建时固定，
+不会再因后续标题栏修改而偏移恢复尺寸。快照不保存
 显示器身份或原生句柄。
 
 500ms UI timer 仅比较布局元数据，不反复复制终端文本。变化停止一秒后保存，连续拖动时最多
@@ -855,31 +852,19 @@ File 菜单通过用户指定的 workspace 路径复用同一契约。Slint 只�
 ## 多窗口工作区转移
 
 SSH Terminal/SFTP Tab 上的内联按钮和 Window 菜单都可以把对应工作区转移到第二个原生
-Slint 窗口。detached 窗口保留活动连接名作为系统窗口元数据；macOS 还将其显示在原生标题栏，并将该栏设为透明、使用当前
-客户区表面色：Terminal 使用终端背景，SFTP 使用应用背景，使两者保持连续。macOS 同一行的仅图标返回按钮
-与 Slint Tab 动作共用内置重叠窗口 SVG，移出和返回通过交换前景窗口表达。
-Theme 提供 14px 转移图标、16px 分屏图标、26px 按钮宽度、4px 间距和 muted 前景色。
-原生按钮高度按标题栏限制为最多 26px，保证图标保持居中。
-AppKit 只在安装无底座按钮时解码有界 raster，并设置相同逻辑图像尺寸；不选择 SF Symbols 或系统图像 fallback。
-Windows/Linux 在无边框控件行使用同一 Return SVG。按钮通过 Tooltip 或无障碍描述说明返回主窗口的用途。
-macOS 在红绿灯控件后显示连接的 16px 系统图标，Windows/Linux 无边框顶栏显示同一图标和连接名称。
-`WindowView.active_session` 只携带当前聚焦 pane 的已有 Tab summary（包括标签栏隐藏的子 pane），
-不使用根 Tab 的身份替代活动连接；view 共用标签栏的手动/缓存/本机/release 优先级，仅发布图标 ID 和 release。
-Slint 复用侧栏平台 glyph 和 `SystemPlatformIcon`；未知系统使用通用服务器符号，并以同类内置单色 SVG 供原生绘制。
-macOS 使用内置图像源，按比例编码最大 64x64 的 raster，
-原生标题栏拥有单个 `NSImageView` 和 source cache。完整 workspace 刷新更新身份，terminal-only 输出不转换图标。
-主题预览/保存同时按既有 `system_icons_follow_theme` 更新原生 template tint，默认保持资源彩色。
-原生窗口销毁时释放图像控件与缓存；不重新探测服务器，不访问凭据，不伪造 represented file URL，不修改应用图标。
-其客户区使用专门的精简组合，只含当前 `TerminalPaneGroup`
-或 `SftpPane`，不包含 Tab 条、
-会话 sidebar、已保存连接选择器、Settings、会话编辑器或客户区菜单。`AppState` 仍是 Tab 运行对象、终端模型、待处理的
-信任/认证阶段和 transport worker 的唯一 owner。`WorkspaceTransfer` 只携带源窗口 ID、
-终端 pane UUID、其 SSH/SFTP companion 与活动 Tab UUID；不会携带 Slint component、russh handle、
-Tokio receiver、终端缓冲区或秘密。
-主题预览和保存会把既有 `AppSettings` 值同步到每个仍存活的 detached UI，再从该 UI 已解析的
-客户区表面色和动作图标颜色更新其 AppKit 标题栏。此纯外观路径保持各窗口本地 Slint theme 一致，
-不会把 AppKit 状态写入 `AppState`。
-独立 Terminal 虽然不增加客户区菜单，仍保留相同的 Copy/Paste/Select All 直接键盘处理。
+Slint 窗口。detached 窗口保留活动连接名作为系统窗口元数据；所有桌面平台均在共用 Slint
+顶栏显示连接名称、16px 系统图标、Return 和应用窗口控件。独立 Terminal 同时显示纵向/横向
+分屏按钮，SFTP 不显示它们。`WindowView.active_session` 只携带当前聚焦 pane 的已有 Tab
+summary（包括标签栏隐藏的子 pane），不使用根 Tab 的身份替代活动连接；view 共用标签栏的
+手动/缓存/本机/release 优先级，仅发布图标 ID 和 release。Slint 解析内置图像源，默认保留彩色，
+按既有 `system_icons_follow_theme` 选择主题着色，未知系统使用共享服务器图标。主题预览和保存
+通过既有设置路径更新每个存活 Slint 组件。Return 和分屏按钮共用 Theme SVG、尺寸、Tooltip、
+键盘焦点和无障碍动作，不再保留 AppKit 标题栏视图、图像 raster cache 或标题栏 tint callback。
+顶栏下方仅包含当前 `TerminalPaneGroup` 或 `SftpPane`，不包含 Tab 条、会话 sidebar、
+已保存连接选择器、Settings、会话编辑器或客户区菜单。`AppState` 仍是 Tab 运行对象、终端模型、
+待处理的信任/认证阶段和 transport worker 的唯一 owner。`WorkspaceTransfer` 只携带源窗口 ID、
+终端 pane UUID、其 SSH/SFTP companion 与活动 Tab UUID，不携带 Slint component、russh handle、
+Tokio receiver、终端缓冲区或秘密。独立 Terminal 仍保留相同的 Copy/Paste/Select All 直接键盘处理。
 主布局仅在非 detached 窗口创建自己的 `TerminalPaneGroup`。仅隐藏布局不会停止终端计时器，
 其扣除侧栏后的较窄几何仍可能按同一个 UUID 覆盖可见子窗口终端的尺寸。因此每个窗口只为
 当前工作区创建一份终端组，由它负责尺寸、焦点和几何回调。Slint 数值回归通过调整窗口与
@@ -915,11 +900,9 @@ divider 会把局部 drag 状态保持到 pointer release 或 cancel，随后只
 
 主窗口 Tab 顶部管理栏、保存连接按钮旁放置一组固定尺寸且可键盘聚焦的纵向/横向分屏控件。
 它们通过既有 `pane-command` callback 携带当前活动 pane UUID 并发出 `split-right` 或 `split-down`；
-Slint 不创建 worker、不直接修改布局，也不会新增顶部 Tab。macOS 的独立 Terminal 将同一组仅图标控件
-放在原生标题栏、紧邻返回图标左侧，客户区保持为全高 pane 表面。每个原生动作只捕获 weak `AppWindow`
-并调用同一 callback，仍由 `WindowRouter` 校验当前 focused pane。
-两条路径都使用 Theme 中的 `ui/icons/` 图像；主题预览/保存只更新原生 tint，不重新编码图标。
-AppKit 保留原生按钮的键盘、焦点和无障碍行为。
+Slint 不创建 worker、不直接修改布局，也不会新增顶部 Tab。所有桌面平台的独立 Terminal
+在 Slint 顶栏放置同一组仅图标分屏控件，均使用 Theme 中的 `ui/icons/` 图像并经相同 callback
+发送活动 pane UUID，仍由 `WindowRouter` 校验 focused pane。Slint 控件保留键盘、焦点和无障碍行为。
 终端 pane 还可用 `Alt+H/J/K/L` 聚焦左/下/上/右相邻 pane，用
 `Alt+Shift+H/J/K/L` 在对应方向创建新的独立终端会话。Local Shell 会创建新的 PTY；SSH、Telnet 和
 Serial 会重新走对应 profile 的常规连接流程。SSH child 会重新执行 host-key/认证，绝不继承一次性密码或

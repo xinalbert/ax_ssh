@@ -361,6 +361,8 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         runtime.handle().clone(),
         window_router.clone(),
         MAIN_WINDOW_ID,
+        #[cfg(target_os = "macos")]
+        macos_window_ready_callback(&ui, &window_router, MAIN_WINDOW_ID, main_placement),
     );
     if let Some(snapshot) = workspace_snapshot.as_ref() {
         restore_detached_workspaces(
@@ -382,26 +384,6 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         });
         timer
     };
-    #[cfg(target_os = "macos")]
-    {
-        let ui_for_window = ui.as_weak();
-        let router_for_window = window_router.clone();
-        slint::Timer::single_shot(Duration::from_millis(100), move || {
-            let Some(ui) = ui_for_window.upgrade() else {
-                return;
-            };
-            if let Err(error) = macos_window::configure_application_icon() {
-                warn!(%error, "failed to configure the macOS application icon");
-            }
-            if let Err(error) = macos_window::configure(ui.window()) {
-                warn!(%error, "failed to configure the standard macOS title bar");
-            }
-            // FullSizeContentView changes the client-size convention. Restore
-            // only after configuring it, matching the geometry we capture.
-            window_state::restore(&ui, main_placement, &router_for_window, MAIN_WINDOW_ID);
-            schedule_macos_application_menu_configuration(&ui);
-        });
-    }
     let autosave = workspace_autosave::WorkspaceAutosave::start(
         state.clone(),
         window_router.clone(),
