@@ -1362,7 +1362,10 @@ tab-local terminal connection notice deliberately remains non-blocking.
     a profile removes only its persisted definition and credential. The
     collapsed rail and expanded rows use the same 20px icon box for Group folders,
     servers, and Local Shell; indentation, disclosure arrows and spacing express
-    hierarchy. Tab icons retain their 16px box. The application
+    hierarchy. Tab icons retain their 16px box. The Settings Tab uses the bundled
+    outline gear shared with SFTP through `Theme.workspace-settings-icon`, tinted
+    with the active or inactive Tab foreground. Its shape is independent of system
+    fonts and emoji presentation. The application
     formatter masks usernames and IPv4 middle octets before data enters the
     Slint model. Static geometry is in `ui/theme.slint`; the persisted
     single-character mask setting is owned by `WorkspaceSettings`.

@@ -66,14 +66,12 @@ component TabKindGlyph inherits Rectangle {
             background: root.glyph-color;
         }
     }
-    if root.system-platform.is-empty && root.kind == "settings" : Text {
+    if root.system-platform.is-empty && root.kind == "settings" : Image {
         width: parent.width;
         height: parent.height;
-        text: "⚙";
-        color: root.glyph-color;
-        font-size: Theme.tab-platform-icon-size;
-        horizontal-alignment: center;
-        vertical-alignment: center;
+        source: Theme.workspace-settings-icon;
+        colorize: root.glyph-color;
+        image-fit: contain;
     }
 }
 

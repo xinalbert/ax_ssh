@@ -816,7 +816,9 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     `SessionStore` 前再次清除凭据/信任字段。Group Duplicate 与现有 Server Duplicate 保持一致：
     profile ID 全部更新、已记住密码引用被清除，但同一 endpoint 的信任指纹保留。删除 Group
     会把 profile 移入 Ungrouped；删除 profile 只移除持久化定义和凭据。展开/收起态的 Group 文件夹、
-    服务器和 Local Shell 共用 20px 图标占位框，通过缩进、展开箭头和间距表达层级；标签栏保持 16px。应用层
+    服务器和 Local Shell 共用 20px 图标占位框，通过缩进、展开箭头和间距表达层级；标签栏保持 16px。
+    Settings 标签通过 `Theme.workspace-settings-icon` 复用 SFTP 的内置描边齿轮 SVG，颜色跟随标签的
+    选中/未选中前景色；形状不依赖系统字体或 Emoji 呈现。应用层
     formatter 会在数据进入 Slint model
     前遮蔽用户名和 IPv4 的中间段。静态尺寸进入 `ui/theme.slint`，持久化的单字符遮蔽设置
     由 `WorkspaceSettings` 持有；旧收起组名字符数字段仅用于存储兼容。
