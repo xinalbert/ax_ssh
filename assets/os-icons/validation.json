@@ -1,18 +1,18 @@
 {
   "schema_version": 2,
-  "checked_at": "2026-10-09T02:10:00+00:00",
+  "checked_at": "2026-11-16T02:41:00+00:00",
   "status": "passed",
   "counts": {
-    "systems": 178,
-    "assets": 328,
+    "systems": 179,
+    "assets": 329,
     "formats": {
-      "svg": 312,
+      "svg": 313,
       "png": 16
     },
     "platforms": {
       "linux": 114,
       "macos": 1,
-      "windows": 5,
+      "windows": 6,
       "appliances": 15,
       "platforms": 14,
       "bsd": 7,
@@ -24,13 +24,13 @@
       "color": 152,
       "light": 74,
       "dark": 71,
-      "original": 29,
+      "original": 30,
       "black": 1,
       "inverted": 1
     }
   },
   "original_assets_unchanged": 135,
-  "checked_assets": 328,
+  "checked_assets": 329,
   "checks": [
     {
       "path": "linux/generic/selfhst-linux.svg",
@@ -3951,6 +3951,19 @@
         "local-rendering-references",
         "no-script-text-font-or-embedded-raster"
       ]
+    },
+    {
+      "path": "windows/classic/simple-icons-windowsxp.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "original-iconify-body-and-viewbox; blue currentColor wrapper default",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ],
+      "render_check": "passed: ImageMagick 16x16 and 64x64, alpha_max=1; Slint intrinsic 24x24 decode regression"
     }
   ],
   "rendering": {
@@ -3958,10 +3971,11 @@
       16,
       64
     ],
-    "successful_renders": 656,
-    "nonempty_renders": 656,
+    "successful_renders": 658,
+    "nonempty_renders": 658,
     "tool": "ImageMagick",
-    "source_artwork_unmodified": true
+    "source_artwork_unmodified": false,
+    "source_artwork_note": "Existing files unchanged; classic Simple Icons currentColor path/viewBox unchanged with a blue wrapper default."
   },
   "visual_review": {
     "new_asset_count": 193,
@@ -3980,15 +3994,16 @@
       "White/light ink can vanish on white and black/dark ink can vanish on dark backgrounds; choose the matching background.",
       "Wordmarks and fine-detail marks remain legible only at larger sizes; nonempty rendering does not guarantee small-size readability.",
       "Windows Server Microsoft wordmark is retained as a wordmark because no dedicated Iconify symbol was found; the unofficial Windows Server 2025 candidate was excluded."
-    ]
+    ],
+    "scope": "Previous 193 assets; the added classic flag received numerical nonempty checks only, not visual acceptance."
   },
   "licenses": {
-    "collection_notices": 9,
+    "collection_notices": 10,
     "official_assets_have_explicit_publisher_status": true
   },
   "observed_svg_tags": {
-    "svg": 312,
-    "path": 1121,
+    "svg": 313,
+    "path": 1122,
     "g": 78,
     "rect": 43,
     "defs": 37,

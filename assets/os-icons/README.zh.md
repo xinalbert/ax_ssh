@@ -2,9 +2,9 @@
 
 [English](README.md) · [名称索引](names.zh.md) · [离线预览](preview.html) · [来源清单](manifest.json) · [检索覆盖/缺口](search-coverage.json) · [检查结果](validation.json)
 
-共 **328 个文件**（312 SVG, 16 PNG），覆盖 **178 个系统/平台条目**。本轮补充 193 个图标、122 个条目，原先 135 个 SVG 完整保留。打开 `preview.html` 可离线比较每个文件在白色和深色背景下的显示。
+共 **329 个文件**（313 SVG, 16 PNG），覆盖 **179 个系统/平台条目**。本轮补充 193 个图标、122 个条目，原先 135 个 SVG 完整保留。另新增一个经典 Windows 旗帜。打开 `preview.html` 可离线比较每个文件在白色和深色背景下的显示。
 
-图标来源包括 [Iconify](https://icon-sets.iconify.design/?query=Linux)、项目官网/品牌页/官方仓库、[Papirus](https://github.com/PapirusDevelopmentTeam/papirus-icon-theme) 和 [Font Logos](https://github.com/lukas-w/font-logos)。优先符号，保留必要的字母徽记；只找到带完整名称的标志时，原样保留并标记。原生 SVG/PNG 字节未改动；Iconify 图形只添加 SVG 外壳，没有裁字、裁图或自行配色。
+图标来源包括 [Iconify](https://icon-sets.iconify.design/?query=Linux)、项目官网/品牌页/官方仓库、[Papirus](https://github.com/PapirusDevelopmentTeam/papirus-icon-theme) 和 [Font Logos](https://github.com/lukas-w/font-logos)。优先符号，保留必要的字母徽记；只找到带完整名称的标志时，原样保留并标记。原生 SVG/PNG 字节未改动；Iconify 图形只添加 SVG 外壳，没有裁字或裁图。新增 Simple Icons 历史旗帜保留 currentColor 路径，SVG 外壳提供蓝色默认值；此前资源原色保持。
 
 ## 分类和变体
 
@@ -12,7 +12,7 @@
 | --- | --- | --- |
 | `linux/` | 114 | Linux / GNU 系统 |
 | `macos/` | 1 | macOS |
-| `windows/` | 5 | Windows、Windows Server 和历史变体 |
+| `windows/` | 6 | Windows、Windows Server 和历史变体 |
 | `bsd/` | 7 | BSD 系统 |
 | `appliances/` | 15 | NAS / 路由 / 家庭服务器 / 媒体系统 |
 | `platforms/` | 14 | 云 / 容器 / 虚拟化 / 管理平台 |
@@ -22,10 +22,12 @@
 
 `linux/generic/` 为 Tux；Windows 子目录保留 Windows Server、Windows 8/11 和旧版旗帜。`licenses/` 保存来源集合许可、官网品牌说明和政策。目录不代表所有条目都是发行版，准确类型见清单的 `kind`。
 
-[catalog.json](catalog.json) 统一定义应用使用的 116 个图标标识、显示名称、识别别名及资源路径，
-包括三类系统家族和 113 个 Linux 条目。[名称索引](names.zh.md) 提供可检索表格和生成命令。
+[catalog.json](catalog.json) 统一定义应用使用的 128 个图标标识、显示名称、识别别名及资源路径，
+包括三类系统家族、113 个 Linux 条目和 12 个 Windows 版本/世代选项。[名称索引](names.zh.md) 提供可检索表格和生成命令。
 Rust 识别表及侧栏/标签共用的 Slint 图标组件均由此目录生成；已识别发行版使用自己的图标，
 `linux` 使用 Tux 兜底。默认保留资源原色，既有 `system_icons_follow_theme` 配置可启用主题着色。
+
+Windows 自动映射区分 XP、Vista、7、8、8.1、10、11 与 Server。XP/Vista/7 和 Server 2003/2008 共用历史旗帜轮廓；8/8.1/10 与现代 Server 使用透视窗格；11 使用方形窗格。Windows 95/98/Me/2000 保留更早的旗帜。同一图形世代共用资源，保留具体产品名。未知版本仍用 `windows`，不按内核 `10.0` 猜测桌面版本。本机 Windows 未探测版本时继续通用图标，可手动指定。自动检测的旧 `windows` 缓存按已存 release 细化展示，手动选择仍优先。
 
 只有上游实际存在的变体才保存；缺少 light/dark 表示检查的来源未发现该变体。
 
@@ -56,6 +58,7 @@ Rust 识别表及侧栏/标签共用的 Slint 图标组件均由此目录生成�
 | --- | --- | --- | --- |
 | `selfhst` | [selfh.st](https://github.com/selfhst/icons) | CC-BY-4.0 | [LICENSE-selfhst.txt](licenses/LICENSE-selfhst.txt) |
 | `thesvg-color` | [thesvg.org](https://github.com/glincker/thesvg) | MIT | [LICENSE-thesvg-color.txt](licenses/LICENSE-thesvg-color.txt) |
+| `simple-icons` | [Simple Icons contributors](https://github.com/simple-icons/simple-icons) | CC0-1.0 | [NOTICE-simple-icons.txt](licenses/NOTICE-simple-icons.txt)、[CC0 完整文本](licenses/LICENSE-logos.txt) |
 | `logos` | [Gil Barbara](https://github.com/gilbarbara/logos) | CC0-1.0 | [LICENSE-logos.txt](licenses/LICENSE-logos.txt) |
 | `skill-icons` | [tandpfun](https://github.com/tandpfun/skill-icons) | MIT | [LICENSE-skill-icons.txt](licenses/LICENSE-skill-icons.txt) |
 | `papirus` | [Papirus Development Team](https://github.com/PapirusDevelopmentTeam/papirus-icon-theme) | GPL-3.0-only | [LICENSE-papirus.txt](licenses/LICENSE-papirus.txt) |
@@ -68,7 +71,7 @@ Rust 识别表及侧栏/标签共用的 Slint 图标组件均由此目录生成�
 
 ## 检查
 
-SVG 的 XML、viewBox 或明确尺寸、文件哈希、内部引用和无脚本/文字标签/字体/嵌入位图均已检查；PNG 检查签名、尺寸、块 CRC 和完整性。所有文件按 16px/64px 渲染，并检查非空显示；新增资源联系表检查浅色/深色背景。官网/社区原始字节、Iconify body/viewBox 和既有 135 个 SVG 的未改动状态均有核对。结果见 [validation.json](validation.json)。只检查下载的资源，没有应用截图。
+SVG 的 XML、viewBox 或明确尺寸、文件哈希、内部引用和无脚本/文字标签/字体/嵌入位图均已检查；PNG 检查签名、尺寸、块 CRC 和完整性。所有文件按 16px/64px 渲染，并检查非空显示；此前扩展通过联系表检查浅色/深色背景；新增经典旗帜完成数值非空检查并有 Slint 解码回归，视觉效果仍由用户验收。官网/社区原始字节、Iconify body/viewBox 和既有 135 个 SVG 的未改动状态均有核对。结果见 [validation.json](validation.json)。只检查下载的资源，没有应用截图。
 
 ## Linux / GNU 系统
 
@@ -202,6 +205,7 @@ SVG 的 XML、viewBox 或明确尺寸、文件哈希、内部引用和无脚本/
 | Windows | operating-system | [selfhst-microsoft-windows.svg](windows/selfhst-microsoft-windows.svg) | color, light, dark, light (badge), dark (badge) | symbol |
 | Windows Server | operating-system | [commons-windows-server.svg](windows/server/commons-windows-server.svg) | color | wordmark |
 | Windows (legacy flag) | operating-system | [selfhst-windows-retro.svg](windows/retro/selfhst-windows-retro.svg) | color, light, dark | symbol |
+| Windows XP / Vista / 7 (经典旗帜) | operating-system | [simple-icons-windowsxp.svg](windows/classic/simple-icons-windowsxp.svg) | original（外壳默认蓝色） | symbol |
 | Windows 11 | operating-system | [thesvg-color-windows11.svg](windows/windows-11/thesvg-color-windows11.svg) | color | symbol |
 | Windows 8 | operating-system | [thesvg-color-windows8.svg](windows/windows-8/thesvg-color-windows8.svg) | color | symbol |
 

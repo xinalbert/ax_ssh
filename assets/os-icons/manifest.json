@@ -207,6 +207,25 @@
         "type": "commons-file",
         "description": "The file page records Microsoft Corporation as artist and the 2017 Windows Server artwork as public domain."
       }
+    },
+    "simple-icons": {
+      "name": "Simple Icons",
+      "author": {
+        "name": "Simple Icons contributors",
+        "url": "https://github.com/simple-icons/simple-icons"
+      },
+      "license": {
+        "title": "CC0 1.0 Universal",
+        "spdx": "CC0-1.0",
+        "url": "https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md"
+      },
+      "license_file": "licenses/LICENSE-logos.txt",
+      "notice_file": "licenses/NOTICE-simple-icons.txt",
+      "data_source": {
+        "type": "iconify-api",
+        "url": "https://api.iconify.design/simple-icons.json?icons=windowsxp",
+        "last_modified": 1794291564
+      }
     }
   },
   "systems": [
@@ -3380,6 +3399,23 @@
       "preferred_asset": "linux/funtoo/official-funtoo.png",
       "saved_text_kinds": [
         "wordmark"
+      ]
+    },
+    {
+      "id": "windows-classic",
+      "name": "Windows XP / Vista / 7 (classic flag)",
+      "platform": "windows",
+      "directory": "windows/classic",
+      "text_kind": "symbol",
+      "notes_en": "Historical monochrome Windows XP flag from Simple Icons, reused for the XP/Vista/7 generation. The unchanged currentColor path uses a blue SVG wrapper default; theme tinting remains available. This historical icon is hidden upstream.",
+      "notes_zh": "Simple Icons 历史 Windows XP 单色旗帜，用于 XP/Vista/7 世代。保留 currentColor 路径，SVG 外壳默认蓝色，仍支持主题着色；上游将此历史图标标记为 hidden。",
+      "assets": [
+        "windows/classic/simple-icons-windowsxp.svg"
+      ],
+      "preferred_asset": "windows/classic/simple-icons-windowsxp.svg",
+      "kind": "operating-system",
+      "saved_text_kinds": [
+        "symbol"
       ]
     }
   ],
@@ -9781,9 +9817,27 @@
       "branding_terms_url": "https://www.funtoo.org/Artwork",
       "asset_license_status": "not-explicitly-stated",
       "copyright_holder": "Funtoo Linux project / brand owner"
+    },
+    {
+      "path": "windows/classic/simple-icons-windowsxp.svg",
+      "system_id": "windows-classic",
+      "iconify_id": "simple-icons:windowsxp",
+      "collection": "simple-icons",
+      "variant": "original",
+      "presentation": "mark",
+      "text_kind": "symbol",
+      "iconify_url": "https://icon-sets.iconify.design/simple-icons/windowsxp/",
+      "svg_download_url": "https://api.iconify.design/simple-icons/windowsxp.svg",
+      "width": 24,
+      "height": 24,
+      "sha256": "bc4c391e057f5ce0724b970a93a2c25987084607eab22503fdcd2eeee2618ead",
+      "upstream_hidden": true,
+      "source_class": "iconify",
+      "format": "svg",
+      "wrapper_color": "#00adef"
     }
   ],
-  "updated_at": "2026-10-09T02:10:00+00:00",
+  "updated_at": "2026-11-16T02:41:00+00:00",
   "search_urls": [
     "https://icon-sets.iconify.design/?query=Linux",
     "https://icon-sets.iconify.design/?query=macOS",
@@ -9792,16 +9846,16 @@
   ],
   "coverage_report": "search-coverage.json",
   "counts": {
-    "systems": 178,
-    "assets": 328,
+    "systems": 179,
+    "assets": 329,
     "formats": {
-      "svg": 312,
+      "svg": 313,
       "png": 16
     },
     "platforms": {
       "linux": 114,
       "macos": 1,
-      "windows": 5,
+      "windows": 6,
       "appliances": 15,
       "platforms": 14,
       "bsd": 7,
@@ -9813,7 +9867,7 @@
       "color": 152,
       "light": 74,
       "dark": 71,
-      "original": 29,
+      "original": 30,
       "black": 1,
       "inverted": 1
     }

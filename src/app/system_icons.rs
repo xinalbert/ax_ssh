@@ -66,6 +66,11 @@ fn read_release(source: impl Read) -> std::io::Result<String> {
 }
 
 fn normalized(value: &str) -> String {
+    let value = value
+        .replace("(R)", "")
+        .replace("(r)", "")
+        .replace("(TM)", "")
+        .replace("(tm)", "");
     value
         .chars()
         .map(|character| {
@@ -128,6 +133,22 @@ pub(super) fn platform_for_release(release: &str) -> &'static str {
         return platform;
     }
     // A Linux kernel label can contain "microsoft" under WSL.
+    if !contains("linux") {
+        let windows = ax_ssh::config::system_icon_choices()
+            .iter()
+            .filter(|icon| {
+                icon.family == "windows" && icon.id != "windows" && icon.id != "windows-server"
+            })
+            .flat_map(|icon| icon.aliases.iter().map(move |alias| (icon.id, *alias)))
+            .filter(|(_, alias)| contains(alias))
+            .max_by_key(|(_, alias)| alias.len());
+        if let Some((platform, _)) = windows {
+            return platform;
+        }
+        if contains("windows server") {
+            return "windows-server";
+        }
+    }
     PLATFORM_FAMILIES
         .iter()
         .filter(|(key, _)| *key == "linux")
@@ -135,6 +156,21 @@ pub(super) fn platform_for_release(release: &str) -> &'static str {
         .find(|(_, aliases)| aliases.iter().any(|alias| contains(alias)))
         .map(|(platform, _)| *platform)
         .unwrap_or("")
+}
+
+// Reinterpret only old automatic Windows cache entries; callers retain manual
+// override priority and no persisted destination or discovery data is changed.
+pub(super) fn platform_for_detection(
+    system: &ax_ssh::config::SystemDetection,
+) -> Option<&'static str> {
+    let icon = system.icon_id().and_then(ax_ssh::config::system_icon_id)?;
+    if icon == "windows" {
+        let refined = platform_for_release(system.release());
+        if refined.starts_with("windows-") {
+            return Some(refined);
+        }
+    }
+    Some(icon)
 }
 
 #[cfg(test)]
@@ -169,11 +205,60 @@ mod tests {
             ("Linux 6.6.87.2-microsoft-standard-WSL2", "linux"),
             ("FreeBSD 14.3", ""),
             ("Archival Server", ""),
-            ("Microsoft Windows Server 2022", "windows"),
+            ("Microsoft Windows Server 2022", "windows-server"),
             ("macOS 15.5", "macos"),
         ] {
             assert_eq!(platform_for_release(release), expected, "{release}");
         }
+    }
+
+    #[test]
+    fn windows_products_use_explicit_versions_without_guessing_kernel_numbers() {
+        for (release, expected) in [
+            ("Microsoft Windows 11 Pro", "windows-11"),
+            ("Microsoft Windows 10 Enterprise LTSC", "windows-10"),
+            ("Microsoft Windows 8.1 Pro", "windows-8-1"),
+            ("Microsoft Windows 8", "windows-8"),
+            ("Microsoft Windows 7 Professional", "windows-7"),
+            ("Microsoft Windows Vista Home Premium", "windows-vista"),
+            ("Microsoft Windows XP Professional", "windows-xp"),
+            ("Windows 98 Second Edition", "windows-retro"),
+            ("Microsoft Windows 2000 Professional", "windows-retro"),
+            ("Windows NT 4.0", "windows-retro"),
+            ("WINDOWS-11 Enterprise", "windows-11"),
+            ("Windows Server 2025 Datacenter", "windows-server"),
+            ("Microsoft Windows Server 2019 Standard", "windows-server"),
+            ("Microsoft Windows Server 2012 R2", "windows-server"),
+            ("Windows Server 2008 R2 Standard", "windows-server-2008-r2"),
+            (
+                "Microsoft Windows Server 2008 Standard",
+                "windows-server-2008",
+            ),
+            ("Windows Server 2003 R2", "windows-server-2003"),
+            (
+                "Microsoft(R) Windows(R) Server 2003, Standard Edition",
+                "windows-server-2003",
+            ),
+            ("Microsoft Windows [Version 10.0.26100.1]", "windows"),
+            ("Microsoft Windows NT 10.0", "windows"),
+            ("Windows 12", "windows"),
+            ("Windows 110", "windows"),
+            ("Linux 6.6.87.2-microsoft-windows-11-WSL2", "linux"),
+            ("Ubuntu on Windows 11", "ubuntu"),
+        ] {
+            assert_eq!(platform_for_release(release), expected, "{release}");
+        }
+    }
+
+    #[test]
+    fn classic_windows_flag_decodes_without_fonts_or_a_native_window() {
+        let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("assets/os-icons/windows/classic/simple-icons-windowsxp.svg");
+        let image = slint::Image::load_from_path(&path).expect("bundled classic flag SVG");
+        let pixels = image.to_rgba8().expect("classic flag raster");
+        assert_eq!((pixels.width(), pixels.height()), (24, 24));
+        assert!(pixels.as_slice().iter().any(|pixel| pixel.a > 0));
+        assert!(pixels.as_slice().iter().any(|pixel| pixel.a == 0));
     }
 
     #[test]

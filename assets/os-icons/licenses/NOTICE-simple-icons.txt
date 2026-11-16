@@ -1,0 +1,14 @@
+Historical Windows XP flag by Simple Icons contributors
+
+Icon source: https://api.iconify.design/simple-icons.json?icons=windowsxp
+Project: https://github.com/simple-icons/simple-icons
+License: CC0 1.0 Universal
+License source: https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md
+The full CC0 legal text is already bundled in LICENSE-logos.txt.
+
+The upstream currentColor path and 24x24 viewport are preserved. AxSSH supplies
+a blue default color on the SVG wrapper for visibility on both application
+themes; its existing optional theme tint still applies. The upstream historical
+icon is marked hidden. The same flag shape represents the XP/Vista/7 generation;
+it does not imply those products have different artwork or current support.
+Microsoft trademarks remain with Microsoft Corporation.

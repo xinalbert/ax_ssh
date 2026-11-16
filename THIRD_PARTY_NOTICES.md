@@ -57,6 +57,8 @@ The collection authors and licenses are:
 
 - selfh.st/icons by selfh.st: CC BY 4.0.
 - theSVG by thesvg.org: MIT.
+- Simple Icons by Simple Icons contributors: CC0 1.0 Universal; the historical
+  Windows XP flag is attributed in `assets/os-icons/licenses/NOTICE-simple-icons.txt`.
 - SVG Logos by Gil Barbara: CC0 1.0 Universal.
 - Skill Icons by tandpfun: MIT.
 - Papirus icon theme by the Papirus Development Team: GNU GPL version 3.
@@ -78,7 +80,8 @@ An unspecified asset license is explicitly recorded rather than replaced by
 MIT, CC0, or a software repository's code license.
 
 Original publisher/community files are unmodified; Iconify bodies only receive
-an SVG wrapper. Collection attribution,
+an SVG wrapper. The historical Simple Icons flag preserves its currentColor path
+and viewport, with a blue default supplied by that wrapper. Collection attribution,
 original license notices, per-icon source links, source revisions/package
 integrity, and hashes are preserved in the
 [resource catalog](assets/os-icons/README.md),

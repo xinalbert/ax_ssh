@@ -105,7 +105,11 @@ fn profile_system_platform<'a>(
         .system_icon_override
         .as_deref()
         .and_then(ax_ssh::config::system_icon_id)
-        .or_else(|| profile.cached_system().and_then(|system| system.icon_id()))
+        .or_else(|| {
+            profile
+                .cached_system()
+                .and_then(system_icons::platform_for_detection)
+        })
         .or_else(|| {
             profile_releases
                 .get(&profile.id)

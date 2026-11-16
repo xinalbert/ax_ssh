@@ -3,19 +3,19 @@
   "retrieved_at": "2026-10-09T02:10:00+00:00",
   "scope": "Follow-up missing-icon audit plus BSD, appliances, platforms and desktop environments; not an exhaustive list of every operating system.",
   "original_asset_count": 135,
-  "new_asset_count": 193,
-  "new_system_count": 122,
+  "new_asset_count": 194,
+  "new_system_count": 123,
   "counts": {
-    "systems": 178,
-    "assets": 328,
+    "systems": 179,
+    "assets": 329,
     "formats": {
-      "svg": 312,
+      "svg": 313,
       "png": 16
     },
     "platforms": {
       "linux": 114,
       "macos": 1,
-      "windows": 5,
+      "windows": 6,
       "appliances": 15,
       "platforms": 14,
       "bsd": 7,
@@ -27,7 +27,7 @@
       "color": 152,
       "light": 74,
       "dark": 71,
-      "original": 29,
+      "original": 30,
       "black": 1,
       "inverted": 1
     }
@@ -3349,6 +3349,33 @@
       "notes_zh": "本轮选取厂商品牌并明确标注，未将其称为 DSM 专用图标。"
     },
     {
+      "id": "windows-classic",
+      "name": "Windows XP / Vista / 7 (classic flag)",
+      "kind": "operating-system",
+      "status": "collected",
+      "queries": [
+        "Windows XP Vista 7 flag icon",
+        "Simple Icons windowsxp"
+      ],
+      "source_classes": [
+        "iconify"
+      ],
+      "source_urls": [
+        "https://icon-icons.com/zh/icons/windows",
+        "https://api.iconify.design/simple-icons.json?icons=windowsxp",
+        "https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md"
+      ],
+      "assets": [
+        "windows/classic/simple-icons-windowsxp.svg"
+      ],
+      "preferred_asset": "windows/classic/simple-icons-windowsxp.svg",
+      "native_variants": [
+        "original"
+      ],
+      "notes_en": "Icon-Icons is a design reference; the bundled artwork comes from Simple Icons via Iconify under CC0. This hidden historical monochrome flag is shared by XP/Vista/7 and Server 2003/2008. Its path and viewport are preserved with a blue currentColor wrapper default; no separate light/dark copies are manufactured.",
+      "notes_zh": "Icon-Icons 仅作样式参考；实际资源来自 Iconify 的 Simple Icons，许可为 CC0。此上游 hidden 历史单色旗帜供 XP/Vista/7 和 Server 2003/2008 共用。保留路径与视口，外壳提供蓝色 currentColor 默认值，没有另造 light/dark 副本。"
+    },
+    {
       "id": "windows-server",
       "name": "Windows Server",
       "kind": "operating-system",
@@ -3391,5 +3418,6 @@
       "reason": "Cryptocurrency token; not UnionTech UOS."
     }
   ],
-  "variant_policy": "Save available native artwork; absence means no matching native variant was identified in the inspected source. Do not manufacture recolored copies."
+  "variant_policy": "Save available native artwork; absence means no matching native variant was identified in the inspected source. Do not manufacture recolored copies.",
+  "updated_at": "2026-11-16T02:41:00+00:00"
 }

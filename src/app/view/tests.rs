@@ -1472,7 +1472,7 @@ fn workspace_tabs_expose_release_and_platform_with_safe_fallbacks() {
         rows[0].system_release.as_str(),
         "Microsoft Windows Server 2022"
     );
-    assert_eq!(rows[0].system_platform.as_str(), "windows");
+    assert_eq!(rows[0].system_platform.as_str(), "windows-server");
     assert!(rows[1].system_release.is_empty());
     assert!(rows[1].system_platform.is_empty());
 }
@@ -1625,7 +1625,74 @@ fn session_rows_derive_system_icons_from_each_profiles_release() {
         .iter()
         .map(|profile| profile.system_platform.to_string())
         .collect::<Vec<_>>();
-    assert_eq!(platforms, ["windows", "ubuntu", "macos", "", ""]);
+    assert_eq!(platforms, ["windows-server", "ubuntu", "macos", "", ""]);
+}
+
+#[test]
+fn windows_version_icons_refine_old_detection_without_overriding_manual_choices() {
+    for (release, expected) in [
+        ("Microsoft Windows 11 Pro", "windows-11"),
+        ("Microsoft Windows 10 Enterprise", "windows-10"),
+        ("Microsoft Windows 8.1", "windows-8-1"),
+        ("Microsoft Windows 7 Professional", "windows-7"),
+        ("Microsoft Windows Vista Ultimate", "windows-vista"),
+        ("Microsoft Windows XP Professional", "windows-xp"),
+        ("Microsoft Windows Server 2008 R2", "windows-server-2008-r2"),
+        ("Microsoft Windows Server 2022", "windows-server"),
+        ("Microsoft Windows NT 10.0", "windows"),
+    ] {
+        let mut profile = SessionProfile::new("Windows", "windows.example", "alice");
+        profile.detected_system =
+            ax_ssh::config::SystemDetection::new(&profile, release, "windows").map(Box::new);
+        let mut sessions = SessionStore::default();
+        sessions.upsert(profile.clone());
+        let mut state = AppState::new(ConfigStore::new("/unused/windows-icons.json"), sessions);
+        state.open_terminal_tab(&profile);
+        state.open_sftp_tab(&profile);
+
+        for (manual, expected) in [
+            (None, expected),
+            (Some("windows"), "windows"),
+            (Some("windows-10"), "windows-10"),
+            (Some("debian"), "debian"),
+        ] {
+            state.sessions.sessions[0].system_icon_override = manual.map(str::to_owned);
+            let releases = state.profile_system_releases();
+            let sidebar = session_group_rows(&state.sessions, "", &releases);
+            assert_eq!(
+                sidebar[0].profiles.row_data(0).unwrap().system_platform,
+                expected,
+                "{release}, {manual:?}"
+            );
+            assert_eq!(
+                connection_option_rows(&state.sessions, &releases)[0].system_platform,
+                expected
+            );
+            let tabs = visible_workspace_tab_rows(state.tab_summaries());
+            assert_eq!(tabs.len(), 2);
+            for tab in tabs {
+                assert_eq!(tab.system_platform, expected);
+                assert_eq!(tab.system_release, release);
+            }
+        }
+        assert_eq!(
+            state.sessions.sessions[0]
+                .cached_system()
+                .unwrap()
+                .icon_id(),
+            Some("windows")
+        );
+        state.sessions.sessions[0].system_icon_override = None;
+        assert!(state.open_session_editor_for_profile(profile.id));
+        assert_eq!(
+            state
+                .active_snapshot()
+                .editor
+                .unwrap()
+                .automatic_system_icon,
+            expected
+        );
+    }
 }
 
 #[test]
@@ -1762,7 +1829,7 @@ fn connection_options_share_sidebar_icon_priority_and_reject_stale_detection() {
         .iter()
         .map(|option| option.system_platform.as_str())
         .collect::<Vec<_>>();
-    assert_eq!(platforms, ["ubuntu", "debian", "windows", "", ""]);
+    assert_eq!(platforms, ["ubuntu", "debian", "windows-server", "", ""]);
     let sidebar = session_group_rows(&sessions, "", &releases);
     for option in &options {
         let profile = sidebar

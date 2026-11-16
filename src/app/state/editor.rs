@@ -135,7 +135,7 @@ impl SessionEditorState {
             system_icon_override: profile.system_icon_override.clone().unwrap_or_default(),
             automatic_system_icon: profile
                 .cached_system()
-                .and_then(|system| system.icon_id())
+                .and_then(super::super::system_icons::platform_for_detection)
                 .unwrap_or("server")
                 .to_owned(),
             detected_system_release: profile

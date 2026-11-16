@@ -12,6 +12,90 @@
       "icon": "windows/selfhst-microsoft-windows.svg"
     },
     {
+      "id": "windows-xp",
+      "name": "Windows XP",
+      "family": "windows",
+      "aliases": ["windows xp", "windowsxp", "winxp"],
+      "icon": "windows/classic/simple-icons-windowsxp.svg"
+    },
+    {
+      "id": "windows-vista",
+      "name": "Windows Vista",
+      "family": "windows",
+      "aliases": ["windows vista", "windowsvista", "winvista"],
+      "icon": "windows/classic/simple-icons-windowsxp.svg"
+    },
+    {
+      "id": "windows-7",
+      "name": "Windows 7",
+      "family": "windows",
+      "aliases": ["windows 7", "windows7", "win7"],
+      "icon": "windows/classic/simple-icons-windowsxp.svg"
+    },
+    {
+      "id": "windows-retro",
+      "name": "Windows 95 / 98 / Me / 2000",
+      "family": "windows",
+      "aliases": ["windows 95", "windows 98", "windows me", "windows 2000", "windows nt 4", "windows retro"],
+      "icon": "windows/retro/selfhst-windows-retro.svg"
+    },
+    {
+      "id": "windows-server-2003",
+      "name": "Windows Server 2003",
+      "family": "windows",
+      "aliases": ["windows server 2003"],
+      "icon": "windows/classic/simple-icons-windowsxp.svg"
+    },
+    {
+      "id": "windows-server-2008",
+      "name": "Windows Server 2008",
+      "family": "windows",
+      "aliases": ["windows server 2008"],
+      "icon": "windows/classic/simple-icons-windowsxp.svg"
+    },
+    {
+      "id": "windows-server-2008-r2",
+      "name": "Windows Server 2008 R2",
+      "family": "windows",
+      "aliases": ["windows server 2008 r2"],
+      "icon": "windows/classic/simple-icons-windowsxp.svg"
+    },
+    {
+      "id": "windows-8",
+      "name": "Windows 8",
+      "family": "windows",
+      "aliases": ["windows 8", "windows8", "win8"],
+      "icon": "windows/windows-8/thesvg-color-windows8.svg"
+    },
+    {
+      "id": "windows-8-1",
+      "name": "Windows 8.1",
+      "family": "windows",
+      "aliases": ["windows 8 1", "windows8 1", "win8 1"],
+      "icon": "windows/windows-8/thesvg-color-windows8.svg"
+    },
+    {
+      "id": "windows-10",
+      "name": "Windows 10",
+      "family": "windows",
+      "aliases": ["windows 10", "windows10", "win10"],
+      "icon": "windows/windows-8/thesvg-color-windows8.svg"
+    },
+    {
+      "id": "windows-11",
+      "name": "Windows 11",
+      "family": "windows",
+      "aliases": ["windows 11", "windows11", "win11"],
+      "icon": "windows/windows-11/thesvg-color-windows11.svg"
+    },
+    {
+      "id": "windows-server",
+      "name": "Windows Server",
+      "family": "windows",
+      "aliases": ["windows server", "microsoft windows server"],
+      "icon": "windows/windows-8/thesvg-color-windows8.svg"
+    },
+    {
       "id": "macos",
       "name": "macOS",
       "family": "macos",

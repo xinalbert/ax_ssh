@@ -1,5 +1,25 @@
 # 项目研究记录
 
+## 2026-11-16 Windows 经典旗帜资源与许可
+
+- 时间：2026-11-16 10:55 +0800
+- 检索问题：加入经典版本后，哪些小尺寸旗帜资源有明确来源和许可？
+- 检索原因：用户确认经典 Windows 也需覆盖；现有 retro 资源与 XP/Vista/7 的旗帜世代不同。
+- 来源列表：[Simple Icons 经 Iconify 返回的 windowsxp](https://api.iconify.design/simple-icons.json?icons=windowsxp)、[Simple Icons CC0 许可](https://github.com/simple-icons/simple-icons/blob/develop/LICENSE.md)、[Icon-Icons 样式参考](https://icon-icons.com/zh/icons/windows)。
+- 关键结论：Simple Icons 历史 windowsxp 是 24×24 单色旗帜，上游标记 hidden；CC0 许可明确。保留 currentColor 路径/视口并由 SVG 外壳提供蓝色默认值；XP/Vista/7 与 Server 2003/2008 共享此轮廓，不宣称不同版本有独立原图或四色旗帜。
+- 对实施计划的影响：经典范围已由用户确认，加入 XP/Vista/7、retro 和早期 Server；资产记录来源、隐藏状态、哈希与蓝色外壳说明。原有 8/11/retro 原图不改。
+- 未解决问题：未进行应用截图或用户视觉验收；本机 macOS 编译/数值回归不能替代 Windows/Linux 原生显示确认。
+
+## 2026-11-16 Windows 产品身份与图标版本
+
+- 时间：2026-11-16 10:33 +0800
+- 检索问题：Windows 是否应按版本选图，怎样避免误把 Server 或 Windows 11 归入 Windows 10？
+- 检索原因：用户提供图标参考并要求区分 Windows 版本。
+- 来源列表：[用户参考 Icon-Icons](https://icon-icons.com/zh/icons/windows)、[Microsoft 操作系统版本表](https://learn.microsoft.com/en-us/windows/win32/sysinfo/operating-system-version)、[Win32_OperatingSystem](https://learn.microsoft.com/en-us/windows/win32/cimwin32prov/win32-operatingsystem)、仓库 `assets/os-icons/manifest.json` 和 `src/ssh/system_release.rs`。
+- 关键结论：Windows 10、11 和多个 Server 产品共用 10.0 版本号，不能单凭该值区分；现有探测返回 Caption 并保留首行，可直接按明确产品名称映射。现有 Windows 8/11 矢量可复用；Server 长名称资源不适合作为 16px 图标。
+- 对实施计划的影响：目录接入现代桌面和 Server，未知版本兜底，手动选择优先；自动检测的旧通用 Windows 缓存按已有 release 细化，不新增远端探测。
+- 未解决问题：经典版本范围等待用户偏好；本机是 macOS，真实 Windows 和跨平台视觉仍需对应环境验收。
+
 ## 2026-11-11 原生 OpenSSH 复现与会话复用边界
 
 - 时间：2026-11-11 10:53 +0800

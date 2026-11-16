@@ -773,8 +773,13 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     Local Shell 入口及全部路由窗口的标签。无需 shell 命令或合成 release；本机发行版按
     `ID` 识别，不按 `ID_LIKE` 继承母发行版图标。远端 release 中可识别的发行版/版本名
     优先选择自己的图标，已知 Linux 但无法识别专用图标时才使用 Tux。
-    `assets/os-icons/catalog.json` 统一保存三类系统家族和 113 个 Linux 条目的规范标识、
-    显示名称、识别别名及图标路径。离线 `scripts/generate_system_icons.py` 生成私有 Rust
+    `assets/os-icons/catalog.json` 统一保存三类系统家族、113 个 Linux 条目和 12 个 Windows
+    版本/世代选项的规范标识、显示名称、识别别名及图标路径。Windows 根据明确产品名区分
+    XP、Vista、7、8、8.1、10、11 与 Server；Server 2003/2008 使用经典旗帜。
+    同一图形世代共用资源并保留具体 release。未知版本和本机尚未探测版本时使用通用标识，
+    不根据内核 `10.0` 猜测桌面版本，Linux/WSL 身份优先。自动检测的旧 `windows` 缓存按
+    已保存 release 细化侧栏、标签、聚焦会话摘要和编辑器预览，手动选择仍优先，不改写缓存。
+    离线 `scripts/generate_system_icons.py` 生成私有 Rust
     识别常量、config 校验与有界可搜索选择器共用的领域选择表、侧栏/标签共用的 `SystemPlatformIcon`
     和双语名称索引；`--check` 校验资源
     存在、别名唯一及生成结果一致。运行时不读取该目录，原图和归属记录保持不变。

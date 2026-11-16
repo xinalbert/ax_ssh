@@ -2,9 +2,9 @@
 
 [中文说明](README.zh.md) · [Name index](names.md) · [Offline preview](preview.html) · [Source manifest](manifest.json) · [Search coverage / gaps](search-coverage.json) · [Checks](validation.json)
 
-**328 files** (312 SVG, 16 PNG) cover **178 system/platform entries**. This expansion adds 193 icons and 122 entries; the original 135 SVGs are unchanged. Open `preview.html` locally to compare every file on white and dark backgrounds.
+**329 files** (313 SVG, 16 PNG) cover **179 system/platform entries**. This expansion adds 193 icons and 122 entries; the original 135 SVGs are unchanged. One additional classic Windows flag is now included. Open `preview.html` locally to compare every file on white and dark backgrounds.
 
-Sources include [Iconify](https://icon-sets.iconify.design/?query=Linux), project websites/brand pages/official repositories, [Papirus](https://github.com/PapirusDevelopmentTeam/papirus-icon-theme), and [Font Logos](https://github.com/lukas-w/font-logos). Symbols are preferred, with native letter emblems retained. Full-name exceptions are explicitly marked. Native SVG/PNG bytes are unchanged; Iconify bodies only receive an SVG wrapper. No logo was cropped or recolored.
+Sources include [Iconify](https://icon-sets.iconify.design/?query=Linux), project websites/brand pages/official repositories, [Papirus](https://github.com/PapirusDevelopmentTeam/papirus-icon-theme), and [Font Logos](https://github.com/lukas-w/font-logos). Symbols are preferred, with native letter emblems retained. Full-name exceptions are explicitly marked. Native SVG/PNG bytes are unchanged; Iconify bodies only receive an SVG wrapper. No logo was cropped. The new historical Simple Icons flag retains its currentColor path with a blue SVG wrapper default; the previous source-colored artwork is unchanged.
 
 ## Categories and variants
 
@@ -12,7 +12,7 @@ Sources include [Iconify](https://icon-sets.iconify.design/?query=Linux), projec
 | --- | --- | --- |
 | `linux/` | 114 | Linux / GNU systems |
 | `macos/` | 1 | macOS |
-| `windows/` | 5 | Windows, Windows Server and historical variants |
+| `windows/` | 6 | Windows, Windows Server and historical variants |
 | `bsd/` | 7 | BSD systems |
 | `appliances/` | 15 | NAS / router / server / media systems |
 | `platforms/` | 14 | Cloud / container / virtualization / management platforms |
@@ -22,13 +22,15 @@ Sources include [Iconify](https://icon-sets.iconify.design/?query=Linux), projec
 
 `linux/generic/` contains Tux; Windows subdirectories preserve Windows Server, Windows 8/11 and the legacy flag. `licenses/` contains collection licenses and publisher notices/policies. Entries are not all distributions; the manifest `kind` records their actual category.
 
-[catalog.json](catalog.json) defines 116 application icon IDs, display names,
-recognition aliases and asset paths: three system families and 113 Linux entries.
+[catalog.json](catalog.json) defines 128 application icon IDs, display names,
+recognition aliases and asset paths: three system families, 113 Linux entries, and 12 Windows version/generation choices.
 The [name index](names.md) provides a searchable table and generation commands.
 Rust recognition and the shared Slint icon component are generated from this
 catalog. Known Linux distributions use their own artwork; `linux` uses Tux as
 the fallback. Default display preserves source colors, while the existing
 `system_icons_follow_theme` configuration enables theme tinting.
+
+Windows automatic mapping distinguishes XP, Vista, 7, 8, 8.1, 10, 11 and Server. XP/Vista/7 and Server 2003/2008 use a shared historical flag silhouette; 8/8.1/10 and modern Server use the perspective window; 11 uses square panes. Windows 95/98/Me/2000 retain the older flag. Versions within an artwork generation share art and keep their product names. Unknown versions retain `windows`; no desktop version is inferred from kernel `10.0`. Local Windows stays generic unless manually selected. Existing automatic `windows` caches are refined from their stored release for display; manual choices retain priority.
 
 Only native upstream variants are saved. A missing light/dark entry means no matching variant was found in the inspected source.
 
@@ -59,6 +61,7 @@ See [search-coverage.json](search-coverage.json) for individual outcomes. This i
 | --- | --- | --- | --- |
 | `selfhst` | [selfh.st](https://github.com/selfhst/icons) | CC-BY-4.0 | [LICENSE-selfhst.txt](licenses/LICENSE-selfhst.txt) |
 | `thesvg-color` | [thesvg.org](https://github.com/glincker/thesvg) | MIT | [LICENSE-thesvg-color.txt](licenses/LICENSE-thesvg-color.txt) |
+| `simple-icons` | [Simple Icons contributors](https://github.com/simple-icons/simple-icons) | CC0-1.0 | [NOTICE-simple-icons.txt](licenses/NOTICE-simple-icons.txt), [CC0 legal text](licenses/LICENSE-logos.txt) |
 | `logos` | [Gil Barbara](https://github.com/gilbarbara/logos) | CC0-1.0 | [LICENSE-logos.txt](licenses/LICENSE-logos.txt) |
 | `skill-icons` | [tandpfun](https://github.com/tandpfun/skill-icons) | MIT | [LICENSE-skill-icons.txt](licenses/LICENSE-skill-icons.txt) |
 | `papirus` | [Papirus Development Team](https://github.com/PapirusDevelopmentTeam/papirus-icon-theme) | GPL-3.0-only | [LICENSE-papirus.txt](licenses/LICENSE-papirus.txt) |
@@ -71,7 +74,7 @@ Collection licenses apply only to the corresponding source files. Publisher bran
 
 ## Checks
 
-SVG XML, viewBoxes or explicit dimensions, hashes, internal references and absence of scripts/text tags/fonts/embedded raster are checked. PNG signatures, dimensions, chunk CRCs and completeness are checked. Every file is rendered at 16px/64px and checked for nonempty output; new asset contact sheets compare light/dark backgrounds. Original publisher/community bytes, Iconify body/viewBox and preservation of the first 135 SVGs are verified. See [validation.json](validation.json). This reviews downloaded artwork, without application screenshots.
+SVG XML, viewBoxes or explicit dimensions, hashes, internal references and absence of scripts/text tags/fonts/embedded raster are checked. PNG signatures, dimensions, chunk CRCs and completeness are checked. Every file is rendered at 16px/64px and checked for nonempty output; the previous expansion has contact sheets on light/dark backgrounds. The added classic flag has numerical nonempty checks plus a Slint decode regression; its visual acceptance remains with the user. Original publisher/community bytes, Iconify body/viewBox and preservation of the first 135 SVGs are verified. See [validation.json](validation.json). This reviews downloaded artwork, without application screenshots.
 
 ## Linux / GNU systems
 
@@ -205,6 +208,7 @@ SVG XML, viewBoxes or explicit dimensions, hashes, internal references and absen
 | Windows | operating-system | [selfhst-microsoft-windows.svg](windows/selfhst-microsoft-windows.svg) | color, light, dark, light (badge), dark (badge) | symbol |
 | Windows Server | operating-system | [commons-windows-server.svg](windows/server/commons-windows-server.svg) | color | wordmark |
 | Windows (legacy flag) | operating-system | [selfhst-windows-retro.svg](windows/retro/selfhst-windows-retro.svg) | color, light, dark | symbol |
+| Windows XP / Vista / 7 (classic flag) | operating-system | [simple-icons-windowsxp.svg](windows/classic/simple-icons-windowsxp.svg) | original (blue wrapper default) | symbol |
 | Windows 11 | operating-system | [thesvg-color-windows11.svg](windows/windows-11/thesvg-color-windows11.svg) | color | symbol |
 | Windows 8 | operating-system | [thesvg-color-windows8.svg](windows/windows-8/thesvg-color-windows8.svg) | color | symbol |
 

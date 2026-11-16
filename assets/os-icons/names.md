@@ -132,3 +132,15 @@ python3 scripts/generate_system_icons.py --check
 | `zorin-os` | Zorin OS | linux | `zorin os`, `zorin` | [linux/zorin-os/selfhst-zorin-os.svg](linux/zorin-os/selfhst-zorin-os.svg) |
 | `macos` | macOS | macos | `macos`, `mac os`, `darwin` | [macos/selfhst-apple-retro.svg](macos/selfhst-apple-retro.svg) |
 | `windows` | Windows | windows | `windows`, `microsoft` | [windows/selfhst-microsoft-windows.svg](windows/selfhst-microsoft-windows.svg) |
+| `windows-10` | Windows 10 | windows | `windows 10`, `windows10`, `win10` | [windows/windows-8/thesvg-color-windows8.svg](windows/windows-8/thesvg-color-windows8.svg) |
+| `windows-11` | Windows 11 | windows | `windows 11`, `windows11`, `win11` | [windows/windows-11/thesvg-color-windows11.svg](windows/windows-11/thesvg-color-windows11.svg) |
+| `windows-7` | Windows 7 | windows | `windows 7`, `windows7`, `win7` | [windows/classic/simple-icons-windowsxp.svg](windows/classic/simple-icons-windowsxp.svg) |
+| `windows-8` | Windows 8 | windows | `windows 8`, `windows8`, `win8` | [windows/windows-8/thesvg-color-windows8.svg](windows/windows-8/thesvg-color-windows8.svg) |
+| `windows-8-1` | Windows 8.1 | windows | `windows 8 1`, `windows8 1`, `win8 1` | [windows/windows-8/thesvg-color-windows8.svg](windows/windows-8/thesvg-color-windows8.svg) |
+| `windows-retro` | Windows 95 / 98 / Me / 2000 | windows | `windows 95`, `windows 98`, `windows me`, `windows 2000`, `windows nt 4`, `windows retro` | [windows/retro/selfhst-windows-retro.svg](windows/retro/selfhst-windows-retro.svg) |
+| `windows-server` | Windows Server | windows | `windows server`, `microsoft windows server` | [windows/windows-8/thesvg-color-windows8.svg](windows/windows-8/thesvg-color-windows8.svg) |
+| `windows-server-2003` | Windows Server 2003 | windows | `windows server 2003` | [windows/classic/simple-icons-windowsxp.svg](windows/classic/simple-icons-windowsxp.svg) |
+| `windows-server-2008` | Windows Server 2008 | windows | `windows server 2008` | [windows/classic/simple-icons-windowsxp.svg](windows/classic/simple-icons-windowsxp.svg) |
+| `windows-server-2008-r2` | Windows Server 2008 R2 | windows | `windows server 2008 r2` | [windows/classic/simple-icons-windowsxp.svg](windows/classic/simple-icons-windowsxp.svg) |
+| `windows-vista` | Windows Vista | windows | `windows vista`, `windowsvista`, `winvista` | [windows/classic/simple-icons-windowsxp.svg](windows/classic/simple-icons-windowsxp.svg) |
+| `windows-xp` | Windows XP | windows | `windows xp`, `windowsxp`, `winxp` | [windows/classic/simple-icons-windowsxp.svg](windows/classic/simple-icons-windowsxp.svg) |

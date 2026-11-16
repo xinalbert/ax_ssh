@@ -36,7 +36,10 @@ impl AppState {
                         .and_then(|profile| {
                             profile.system_icon_override.clone().or_else(|| {
                                 self.system_detection(profile.id)
-                                    .and_then(|system| system.icon_id().map(str::to_owned))
+                                    .and_then(
+                                        super::super::super::system_icons::platform_for_detection,
+                                    )
+                                    .map(str::to_owned)
                             })
                         }),
                     _ => None,
@@ -537,7 +540,10 @@ impl AppState {
                         .and_then(|profile| {
                             profile.system_icon_override.clone().or_else(|| {
                                 self.system_detection(profile.id)
-                                    .and_then(|system| system.icon_id().map(str::to_owned))
+                                    .and_then(
+                                        super::super::super::system_icons::platform_for_detection,
+                                    )
+                                    .map(str::to_owned)
                             })
                         }),
                     _ => None,

@@ -1282,7 +1282,15 @@ tab-local terminal connection notice deliberately remains non-blocking.
     names/editions in remote release labels select their own artwork; known Linux
     without a recognized dedicated mark uses Tux.
     `assets/os-icons/catalog.json` owns canonical IDs, display names, aliases and
-    icon paths for the three families and 113 Linux entries. The offline
+    icon paths for the three families, 113 Linux entries and 12 Windows version/
+    generation choices. Explicit Windows product names select XP, Vista, 7, 8,
+    8.1, 10, 11 or Server; older Server 2003/2008 names select the classic flag.
+    Within each artwork generation, products share a symbol and retain their
+    release labels. Unknown versions and undetected local Windows use the generic
+    mark; kernel `10.0` alone never selects a desktop version. Linux/WSL identity
+    takes priority. Old automatic `windows` caches are refined from their stored
+    release in sidebar, tabs, focused-session summaries and editor previews;
+    manual choices still win and the stored detection is unchanged. The offline
     `scripts/generate_system_icons.py` generates private Rust recognition constants,
     a domain choice table used by config validation and the bounded searchable picker,
     `SystemPlatformIcon` shared by sidebar/tabs, and bilingual name indexes;
