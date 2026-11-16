@@ -26,16 +26,16 @@ image = { version = "0.25.10", default-features = false, features = ["jpeg", "pn
 i-slint-core = "=1.18.1"
 keyring = "4.1.5"
 libmudtelnet-rs = "2.0.10"
-notify = "=8.2.1"
+notify = "=8.2.2"
 portable-pty = "0.9.0"
-rand = "0.10"
+rand = "0.10.4"
 regex = "1.13.1"
 roxmltree = "0.21.2"
-rubato = "5.0.1"
+rubato = "5.1.0"
 # RSA is enabled for compatibility with existing SSH servers. The pinned RSA
 # implementation remains covered by the explicitly accepted RustSec exception
-# in the CI audit workflow until an upstream patched release is available.
-russh = { version = "0.65.0", default-features = false, features = ["flate2", "aws-lc-rs", "rsa"] }
+# in the CI audit workflow until russh adopts the patched stable RSA release.
+russh = { version = "0.65.1", default-features = false, features = ["flate2", "aws-lc-rs", "rsa"] }
 russh-sftp = "3.0.0"
 sha1 = "0.11.0"
 open = "5.3.6"
@@ -49,7 +49,7 @@ tracing = "0.1"
 tracing-appender = "0.2"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 url = "2.5.8"
-uuid = { version = "1.28.0", features = ["serde", "v4"] }
+uuid = { version = "1.29.2", features = ["serde", "v4"] }
 zeroize = "1"
 
 [target.'cfg(windows)'.dependencies]

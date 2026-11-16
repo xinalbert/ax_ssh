@@ -1,5 +1,15 @@
 # 项目研究记录
 
+## 2026-11-16 五项兼容依赖与 RSA 修复阻塞
+
+- 时间：2026-11-16 11:50 +0800
+- 检索问题：哪些直接和间接依赖可在现有 MSRV/平台约束内升级，RSA 旧公告是否已有修复？
+- 检索原因：用户要求先核对可升级包，随后授权更新。
+- 来源列表：[russh 0.65.1](https://github.com/Eugeny/russh/releases/tag/v0.65.1)、[notify 8.2.2](https://github.com/notify-rs/notify/releases/tag/notify-8.2.2)、[rubato 5.1.0](https://github.com/HEnquist/rubato/releases/tag/v5.1.0)、[uuid 1.29.2](https://github.com/uuid-rs/uuid/releases/tag/v1.29.2)、[rand 0.10.4](https://crates.io/crates/rand/0.10.4)、[RSA 公告](https://rustsec.org/advisories/RUSTSEC-2023-0071.html)、[CPAL 0.18.2](https://github.com/RustAudio/cpal/blob/v0.18.2/README.md#minimum-supported-versions)；registry API 和发布 crate 的 Cargo.toml/变更记录。
+- 关键结论：russh 0.65.1 修复 kex_done 先于 host-key 验证等问题并移除 `untrusted 0.7.1`/`generic-array 0.14.9` 依赖（`generic-array 1.4.5` 保留）；notify 8.2.2 修复 Windows watcher 关闭死锁并将 MSRV 提至 1.88；rand 0.10.4 修复反序列化 Uniform Duration 的 panic；rubato 5.1.0 开放 sinc 插值器；uuid 1.29.2 为补丁更新。五项候选 MSRV 最高 1.89。RSA 0.10.0 已发布且 RustSec patched 为 >=0.10.0，但 russh 0.65.1 精确依赖 =0.10.0-rc.18 与 =0.8.0-rc.4 PKCS#1，普通更新不能迁移稳定版；CPAL 最新版仍要求 macOS 14.2。
+- 对实施计划的影响：更新五项及可解析兼容间接版本，保留 Rust 1.92/macOS 11/Slint 1.18.1 和既有唯一 RSA 审计例外；修正“RSA 尚无修复”的过时当前说明，不绕过上游 pin。
+- 未解决问题：更新后本机 1030 项测试、完整门禁、原生 build 和 Rust 1.92 check 已通过；Windows/Linux/Intel macOS 原生验证和真实音频、watcher、GUI 由 CI/用户完成；RSA 稳定版迁移仍受上游 pin 限制。
+
 ## 2026-11-16 Windows 经典旗帜资源与许可
 
 - 时间：2026-11-16 10:55 +0800

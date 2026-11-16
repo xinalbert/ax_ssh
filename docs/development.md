@@ -39,10 +39,11 @@ or build dependency.
 
 ## Dependency baseline
 
-The lockfile uses Tokio 1.54.1, arboard 3.7.0, serde_json 1.0.154, uuid 1.29.0,
-notify 8.2.1, russh 0.65.0, rubato 5.0.1, and base64 0.23.1. CPAL stays pinned
+The lockfile uses Tokio 1.54.1, arboard 3.7.0, serde_json 1.0.154, uuid 1.29.2,
+notify 8.2.2, russh 0.65.1, rubato 5.1.0, rand 0.10.4, and base64 0.23.1. CPAL stays pinned
 to 0.17.3 to preserve macOS 11 support. Slint and its local patches remain on
-1.18.1.
+1.18.1. notify 8.2.2 requires Rust 1.88, within the application's Rust 1.92
+baseline, and fixes a Windows watcher-shutdown deadlock.
 
 The audio worker uses rubato's `Fft` with `FixedSync::Both` and borrowed planar
 buffer adapters. It retains preallocated processing buffers, startup-delay
@@ -107,7 +108,9 @@ cargo audit --file Cargo.lock --ignore RUSTSEC-2023-0071
 ```
 
 `RUSTSEC-2023-0071` remains the sole accepted exception for the RSA dependency
-used by russh. Other vulnerabilities fail the job and block release builds;
+used by russh. RSA 0.10.0 is a patched release, but russh 0.65.1 still pins
+0.10.0-rc.18, so an ordinary lockfile update cannot adopt that fix.
+Other vulnerabilities fail the job and block release builds;
 unmaintained-dependency warnings remain visible and nonfatal. Advisory database
 and registry updates require network access; a failed audit command fails the job.
 

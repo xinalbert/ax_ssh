@@ -946,10 +946,11 @@ Alt 组合，因此不支持的方向或已达 pane 上限时，普通终端 Met
 
 ## SSH 安全契约
 
-`russh::client::Handler::check_server_key` 是信任边界。应用锁定 `russh 0.65.0`，为兼容
-现有服务器启用其可选 RSA feature。该版本还修复客户端对 `EXT_INFO` 消息数量无上限，以及对端
-声明最大包大小为零时 channel 写入停滞的问题。锁定的 RSA 实现仍没有针对 RUSTSEC-2023-0071 的
-修复版本；如果部署环境中的攻击者能够观察签名时序，应优先使用 Ed25519 或 ECDSA。
+`russh::client::Handler::check_server_key` 是信任边界。应用锁定 `russh 0.65.1`，为兼容
+现有服务器启用其可选 RSA feature。在此前客户端 `EXT_INFO` 数量无上限和最大包大小为零的
+修复之上，此补丁仅在主机密钥验证成功后调用 `kex_done`，并在 agent 确认等待结束后再次检查锁定状态。
+RSA 0.10.0 已修复 RUSTSEC-2023-0071，但 russh 仍精确锁定 0.10.0-rc.18；在上游迁移前保留
+现有显式审计例外。如果部署环境中的攻击者能够观察签名时序，应优先使用 Ed25519 或 ECDSA。
 应用对 `PublicKeyOrCertificate` 回调只接受具体的 `PublicKey` 变体。服务端证书会被拒绝，
 因为当前 profile/known_hosts 契约尚未实现证书颁发机构校验。未知和不匹配的主机密钥都在
 认证前拒绝。首次拒绝握手可以把 SHA-256 指纹交给确认 UI，但只有用户明确决定后，

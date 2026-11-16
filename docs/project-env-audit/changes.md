@@ -1294,3 +1294,27 @@
 - 受影响文件：`docs/project-env-audit/current.md`、`docs/project-env-audit/changes.md` 和本机 Cargo 缓存。
 - 更新后的命令或环境：标准 locked/offline 命令与 ARM64 macOS CI target 命令；依赖锁文件、Rust toolchain 和 CI matrix 均未修改。
 - 验证结果：fmt/check/严格 all-target Clippy、945 项完整测试和14 项 focused 重连回归通过；Windows/Linux/Intel macOS 原生 CI 仍待执行。
+
+## 2026-11-16 11:54 +0800 依赖升级前刷新过期环境事实
+
+- 日期：2026-11-16
+- 变化摘要：旧记录的 Rust/Python、已安装 target、Windows ARM64 CI 和依赖基线已过期；按本机 CLI、CI 与新锁文件刷新。
+- 受影响文件：`Cargo.toml`、`Cargo.lock`、`docs/project-env-audit/current.md`、`docs/project-env-audit/changes.md`。
+- 更新后的命令或环境：默认 Rust/Cargo 1.99.0、Python 3.14.6、cargo-audit 0.22.2；已安装本机和 Windows MSVC target，另有 Rust 1.92.0 可显式检查 MSRV。保持 Rust 2024、macOS 11/CPAL 0.17.3、Slint 1.18.1/vendor 与单项 RSA 例外；使用标准离线门禁和原生 CI 命令。
+- 验证结果：Cargo update 更新 39 项（5 直接 + 34 间接），原生依赖缓存补齐；完整验证进行中。Windows/Linux/Intel macOS 仍需对应平台 CI，未启动 GUI。
+
+## 2026-11-16 12:10 +0800 兼容依赖升级验证完成
+
+- 日期：2026-11-16
+- 变化摘要：russh 0.65.1、notify 8.2.2、rand 0.10.4、uuid 1.29.2、rubato 5.1.0 和兼容间接依赖更新完成；无应用源码、工具链、平台下限或 Slint/vendor 变更。
+- 受影响文件：`Cargo.toml`、`Cargo.lock`、双语开发/架构说明、CI 审计注释及环境/实施记录。
+- 更新后的命令或环境：继续默认 Rust/Cargo 1.99.0、Rust 2024/MSRV 1.92.0 和 macOS 11；MSRV 首次 Skia 归档下载遇 HTTP/2 错误，源码回退也无法连接 googlesource。核对本机归档 tag 0.153.3、aarch64-apple-darwin/ganesh-gl-jpegd-jpege-metal-pdf key 和 gzip 完整性后，临时设置上游支持的 `SKIA_BINARIES_URL=file://...` 重试通过，无全局配置改动。
+- 验证结果：23 项定向、完整 1030 项测试、fmt/check/严格 all-target Clippy、原生 aarch64 check/Clippy/build、ARM64 Mach-O、Rust 1.92 check 通过；生成图标、56 份 Markdown/边界、skill/tracker/diff 通过。原始 audit 为 RSA 单项漏洞及 6 项停止维护警告，按已有唯一例外审计通过；程序为 `target/aarch64-apple-darwin/debug/ax_ssh`。其它平台原生 CI、真实音频/监听/GUI 仍需目标环境验收。
+
+## 2026-11-16 14:21 +0800 编译产物清理与提交前核对
+
+- 日期：2026-11-16
+- 变化摘要：用户要求清理 Rust 编译产物并提交已完成改动；已执行 `cargo clean`，移除 38178 个文件、25.2 GiB 产物。
+- 受影响文件：只清理忽略的 `target/`；同步当前环境和实施记录中的产物状态。
+- 更新后的命令或环境：已验证的 Skia 0.153.3 ARM64 归档单独保存到用户缓存目录，保留后续构建的本地下载来源。运行中的编译结束后再清理，未终止应用；下次构建需重新编译。
+- 验证结果：清理前后 Git 状态、暂存及未暂存差异摘要完全一致；提交前复核与已验证升级内容相同，复用升级后 1030 项测试、原生构建和 MSRV 检查结果，重新运行文档、生成图标、skill/tracker 和 diff 校验。
