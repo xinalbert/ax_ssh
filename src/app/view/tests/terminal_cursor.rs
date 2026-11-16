@@ -263,3 +263,157 @@ fn local_preedit_stays_visible_with_a_hidden_remote_cursor_and_only_commits_send
         .expect("hidden cursor preedit regression");
     }
 }
+
+#[test]
+fn preedit_changes_repaint_the_previous_overlay_over_styled_cjk_cells() {
+    use i_slint_core::item_tree::ParentItemTraversalMode;
+    use i_slint_core::lengths::LogicalRect;
+    use slint::platform::software_renderer::Rgb565Pixel;
+
+    // Compare only numerical damage rectangles and item/model state. The
+    // framebuffer is used to execute the renderer, never inspected or saved.
+    fn assert_repainted(
+        harness: &LayoutTestHarness,
+        pixels: &mut [Rgb565Pixel],
+        previous: LogicalRect,
+    ) {
+        let mut rectangles = Vec::new();
+        harness.ui.window().request_redraw();
+        harness.window.draw_if_needed(|renderer| {
+            rectangles.extend(
+                renderer
+                    .render(pixels, harness.ui.window().size().width as usize)
+                    .iter(),
+            );
+        });
+        let scale = harness.ui.window().scale_factor();
+        let left = (previous.min_x() * scale).ceil() as i32;
+        let top = (previous.min_y() * scale).ceil() as i32;
+        let right = (previous.max_x() * scale).floor() as i32;
+        let bottom = (previous.max_y() * scale).floor() as i32;
+        assert!(right > left && bottom > top, "nonempty old overlay");
+        for y in top..bottom {
+            for x in left..right {
+                assert!(
+                    rectangles.iter().any(|(origin, size)| {
+                        x >= origin.x
+                            && y >= origin.y
+                            && x < origin.x + size.width as i32
+                            && y < origin.y + size.height as i32
+                    }),
+                    "old overlay point ({x}, {y}) was not repainted: {rectangles:?}"
+                );
+            }
+        }
+    }
+
+    fn overlay_bounds(ui: &AppWindow, expected: &str) -> LogicalRect {
+        let text = ItemRc::new_root(WindowInner::from_pub(ui.window()).component())
+            .visit_descendants(|item| {
+                if item.is_visible()
+                    && let Some(text) = item.downcast::<ComplexText>()
+                    && text.as_pin_ref().text().as_str() == expected
+                {
+                    ControlFlow::Break(item.clone())
+                } else {
+                    ControlFlow::Continue(())
+                }
+            })
+            .expect("visible preedit text");
+        let overlay = text
+            .parent_item(ParentItemTraversalMode::FindAllParents)
+            .expect("preedit background");
+        LogicalRect::new(
+            overlay.map_to_window(overlay.geometry().origin),
+            overlay.geometry().size,
+        )
+    }
+
+    for detached in [false, true] {
+        for compact in [false, true] {
+            for incremental in [false, true] {
+                std::thread::spawn(move || {
+                    let harness = LayoutTestHarness::new();
+                    let ui = &harness.ui;
+                    let mut fonts = font_bridge::FontRegistry::new();
+                    let font = fonts
+                        .resources()
+                        .load_bundled_font("Maple Mono NF CN")
+                        .unwrap()
+                        .unwrap();
+                    fonts.register_loaded_font(font).unwrap();
+                    set_font_registry_generation(ui, fonts.generation_as_slint_int());
+                    let id = Uuid::from_u128(1);
+                    let mut terminal = TerminalModel::new(80, 24, 10);
+                    terminal.process(
+                        "\x1b[48;2;58;58;58m还有写内容做些提示打发附近阿什坎迪   \
+                         \x1b[0m\x1b[?25l\x1b[1;19H"
+                            .as_bytes(),
+                    );
+                    mount(&harness, detached, id, &mut terminal);
+                    ui.set_terminal_compact_rendering(compact);
+                    harness.settle();
+                    let source = terminal.contents();
+                    let before = ui.get_terminal_panes().row_data(0).unwrap().terminal;
+                    let background = before.render_lines.row_data(0).unwrap().backgrounds;
+                    let expected_background = background.iter().collect::<Vec<_>>();
+                    assert_eq!(expected_background.len(), 1);
+                    assert_eq!(expected_background[0].column, 0);
+                    assert!(expected_background[0].cells >= 34);
+                    let size = ui.window().size();
+                    let mut pixels =
+                        vec![Rgb565Pixel::default(); size.width as usize * size.height as usize];
+
+                    for _ in 0..3 {
+                        preedit(ui, "zhongwen");
+                        ui.window().request_redraw();
+                        harness.window.draw_if_needed(|renderer| {
+                            renderer.render(&mut pixels, size.width as usize);
+                        });
+                        let long = overlay_bounds(ui, "zhongwen");
+                        preedit(ui, "i");
+                        assert_repainted(&harness, &mut pixels, long);
+                        let narrow = overlay_bounds(ui, "i");
+                        assert!(narrow.width() < long.width());
+
+                        // Move a live composition to a different wide cell,
+                        // including a protocol cursor on its continuation.
+                        terminal.process(b"\x1b[1;26H");
+                        let pane = window_pane(id, &mut terminal);
+                        if incremental {
+                            assert_eq!(apply_terminal_pane_updates(ui, vec![pane]), 1);
+                        } else {
+                            apply_terminal_panes(ui, vec![pane], vec![]);
+                        }
+                        assert_repainted(&harness, &mut pixels, narrow);
+                        let moved = overlay_bounds(ui, "i");
+                        assert!(moved.min_x() > narrow.min_x());
+                        preedit(ui, "");
+                        assert_repainted(&harness, &mut pixels, moved);
+                        assert!(!visible_text(ui, "i"));
+                        assert_eq!(terminal.contents(), source);
+                        let after = ui.get_terminal_panes().row_data(0).unwrap().terminal;
+                        assert_eq!(after.render_lines, before.render_lines);
+                        assert_eq!(
+                            after
+                                .render_lines
+                                .row_data(0)
+                                .unwrap()
+                                .backgrounds
+                                .iter()
+                                .collect::<Vec<_>>(),
+                            expected_background
+                        );
+
+                        terminal.process(b"\x1b[1;19H");
+                        apply_terminal_panes(ui, vec![window_pane(id, &mut terminal)], vec![]);
+                        harness.settle();
+                    }
+                    ui.hide().unwrap();
+                })
+                .join()
+                .expect("styled CJK preedit repaint regression");
+            }
+        }
+    }
+}

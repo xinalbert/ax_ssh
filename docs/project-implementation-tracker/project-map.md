@@ -42,7 +42,7 @@
 | `src/app/view/tests/titlebar_drag.rs` | Tab/窗口手势隔离与滚动坐标回归 | `tab_reorder_uses_content_coordinates_with_platform_offsets_and_scroll`、`macos_leading_clearance_requests_drag_only_inside_its_actual_row` | 真实指针按下/移动/释放、Mac/非 Mac、1x/2x、滚动后重排与进入红绿灯留空时保持 Tab grab；只验证数值与事件，不截图 |
 | `src/app/view/tests/shortcut_menus.rs` | 主/独立窗口生成菜单快捷键回归 | `detached_menu_shortcuts_stay_with_their_window_and_respect_modal_state` | 独立适配器中的真实按键菜单入口、单次消费、窗口隔离、前后 Tab、Copy/Select All、模态与 SFTP 禁用；不截图 |
 | `src/app/view/tests/terminal_input.rs` | 终端透明输入代理的编辑历史隔离回归 | `main_terminal_proxy_keeps_local_undo_out_of_cleared_input`、`detached_terminal_proxy_keeps_local_undo_out_of_cleared_input` | 真实普通/IME 文字提交后清空、撤销/重做 fallback、物理 Control 字节与配置 Paste 优先级；无原生窗口或截图 |
-| `src/app/view/tests/terminal_cursor.rs` | 主/独立窗口的光标协议更新和本地预编辑回归 | `cursor_only_protocol_updates_reach_the_grid_without_replacing_models_or_focus`、`local_preedit_stays_visible_with_a_hidden_remote_cursor_and_only_commits_send_text` | 全量/增量刷新中的形状、颜色、闪烁、显隐、移动和宽字符光标更新，保持焦点和单行 model identity；隐藏远端光标时的 composition 显示/取消/单次提交；仅断言数值布局和 item 状态，不截图 |
+| `src/app/view/tests/terminal_cursor.rs` | 主/独立窗口的光标协议更新和本地预编辑回归 | `cursor_only_protocol_updates_reach_the_grid_without_replacing_models_or_focus`、`local_preedit_stays_visible_with_a_hidden_remote_cursor_and_only_commits_send_text` | 全量/增量刷新中的形状、颜色、闪烁、显隐、移动和宽字符光标更新，保持焦点和单行 model identity；隐藏远端光标时的 composition 显示/取消/单次提交；`preedit_changes_repaint_the_previous_overlay_over_styled_cjk_cells` 验证灰底汉字上预编辑缩短/移动/取消的旧区域重绘与源 model 保留，覆盖两窗口/两文字模式/两刷新方式；仅断言数值布局、damage 和 item 状态，不截图 |
 | `src/app/view/tests/terminal_typography.rs` | 真实排字与终端字体/几何布局回归 | `main_and_detached_terminals_render_symbol_batches_on_the_fixed_grid`、`proportional_terminal_fonts_fall_back_without_mutating_the_selected_family` | 主/独立窗口及两种文字模式的实际字体族及光标覆盖层、advance、几何路径、稳定 model/焦点；合成比例字体验证实际测量，保留用户选择；`fallback_glyph_paint_bounds_follow_shaping_without_changing_terminal_columns` 检查用户字符及未知宽字形的真实排字绘制边界；不截图 |
 | 同上 `terminal_typography.rs` | 延迟字体注册后的既有文本缓存回归 | `late_font_registration_refreshes_existing_text_metrics_and_paint_bounds` | 在主/独立窗口及两种模式先缓存文本，再注册未知宽字形字体并推进代次/刷新；核对实际 advance 和绘制边界，不截图 |
 | `src/app/view/tests/terminal_connection.rs` | 连接等待期几何和焦点回归 | `connecting_terminals_report_real_geometry_in_main_and_detached_windows`、`sidebar_connection_moves_focus_before_login_and_does_not_buffer_enter` | 主/独立窗口在 connected 前上报尺寸；展开/收起侧栏点击后 Enter 不重复建连；等待输入不补发，安全对话框不被抢焦点，主动多连接仍可用 |
@@ -254,9 +254,9 @@
 ## 刷新规则
 
 - 刷新触发：新增/删除模块、入口、跨层契约、构建/CI 或持久化事实时更新相应路径和定位；功能实现和验证历史追加到月度记录。
-- 最近依据：2026-11-13 Windows SFTP 盘符地址展示/复制与原生绝对路径粘贴，保留原始文件身份和 POSIX 字面路径；同日下载冲突逐文件覆盖/跳过/自动改名、本批次策略和共享弹窗，普通目录合并，原生 promise 维持不覆盖。保留 Tab/窗口拖动隔离、原生 macOS 标题栏及主窗口创建/首个事件初始化、Windows/Linux 既有布局；保留 Xming/VcXsrv 独立程序路径、.xlaunch 发现和配置导入、CI/Release 与传输/签名/凭据边界。
+- 最近依据：2026-11-16 灰底汉字预编辑覆盖层的状态/damage 数值回归；2026-11-13 Windows SFTP 盘符地址展示/复制与原生绝对路径粘贴，保留原始文件身份和 POSIX 字面路径；同日下载冲突逐文件覆盖/跳过/自动改名、本批次策略和共享弹窗，普通目录合并，原生 promise 维持不覆盖。保留 Tab/窗口拖动隔离、原生 macOS 标题栏及主窗口创建/首个事件初始化、Windows/Linux 既有布局；保留 Xming/VcXsrv 独立程序路径、.xlaunch 发现和配置导入、CI/Release 与传输/签名/凭据边界。
 - 地图只保留当前路由，不继续累积旧任务的“当前/最近”段落。此前地图逐字保存在[历史地图快照](project-map-before-2026-10-20.md)，实施状态见 [current.md](current.md)，历史见 [changes/2026/11.md](changes/2026/11.md)。
 
 ## 最后更新时间
 
-- 2026-11-13 16:22 +0800
+- 2026-11-16 08:51 +0800
