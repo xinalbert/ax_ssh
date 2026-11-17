@@ -63,6 +63,7 @@
 | `src/sftp/transfer/session.rs`、`src/sftp/transfer/session/tests.rs`、`src/ssh/worker/behavior_tests/session_reuse.rs` | 逐 transport 初始化会话缓存、失效观测与下载启动回归 | `SftpSessionCache`、`SftpSession`、`single_file_request` | 最多两个闲置项；成功清理后归还，错误/取消/EOF 丢弃；额度压力释放、断开清空；单文件直传实时核验，日志记录复用与首批数据 |
 | `src/ssh/worker/sftp/operations.rs` | 有界串行后台写操作 | `SftpWriteWorker` | 编辑/元数据操作不阻塞主调度；取消和 join |
 | `src/sftp/transfer/pipeline.rs` 与 `src/sftp/transfer/tests/performance.rs` | 有序分块请求窗口及模拟协议回归 | `RequestWindow`、`REQUEST_WINDOW`、`delayed_peer` | 16 × 64 KiB、短读/乱序、完整性和有界取消 |
+| `src/sftp/transfer/upload.rs`、`src/sftp/transfer/tests.rs` | 上传冲突、编号名称和安全发布 | `upload_initialized`、`find_keep_both_path`、`inspect_remote_upload_target` | 普通同名文件的三种选择；共存跳过已被任意条目占用的候选名称；原目标仍拒绝目录/链接，覆盖仍校验 fingerprint 和原子替换能力 |
 | `src/app/view/sftp.rs` | SFTP 文件/传输稳定模型及图标 | `update_file_rows`、`update_sftp_rows`、`slint_icon` | 缓存源快照/图标代次，只更新变化行 |
 | `AGENTS.md` | 全仓库持久指令 | 项目边界、所有权、安全和验证 | 开始任何 Rust/Slint/SSH 变更 |
 | `.agents/skills/ax-ssh-rust-slint/SKILL.md` | AxSSH 实施与评审工作流 | reference 路由、架构决策、安全门禁 | 修改或评审工程代码与边界 |
@@ -162,11 +163,11 @@
 | `src/telnet.rs` | Telnet transport 与 worker | `TelnetFrameBuffer`、`TelnetSessionHandle`、`TelnetSessionEvent` | 明文 TCP、64 KiB 完整帧组装、IAC 过滤、选项拒绝、NAWS、有界队列、同尺寸 watch 去重；输出非空时才启动一次性 16ms flush，空闲连接不循环 tick；保留取消和分片/loopback 回归 |
 | `src/serial.rs` | Serial 发现、身份解析与 worker | `discover_serial_ports`、`resolve_serial_port`、`SerialSessionHandle` | 只读枚举、稳定 USB 匹配、歧义拒绝、串口参数、设备 I/O 和有界关闭；发现不得自动打开 |
 | `ui/app.slint` | Rust-facing 主窗口/独立窗口、菜单栏和顶层 Slint 转发 | `AppWindow`、`WorkspaceViewState`、`SftpNativeDropRegion`、`TerminalPaneView`、`TerminalPaneDividerView`、`SecurityOverlayViewState`、`MenuBar`、`execute-menu-command` | Rust property/callback 接口、共享 event loop 的多窗口标记、Windows/Linux 无边框顶栏与隐藏快捷键菜单、macOS 原生标题栏、每窗口无条件 MenuBar 与主页面动作能力、Rust 发布的稳定 menu-state 布尔值、Terminal Edit accelerator、平台修饰键的 terminal target hover/activate、直接 Tab UUID 的 Move/Return/terminal/divider callbacks，以及顶栏偏移后的终端呈现和 SFTP 原生拖放几何；不在此保存选区或局部草稿 |
-| `ui/components/sftp-controls.slint`、`ui/icons/sftp-*.svg` | SFTP 有界图标/文本操作按钮及统一矢量资源 | `SftpActionButton`、`SftpIconButton`、`SftpPathCopyButton` | 方向/选中数量、hover/focus/禁用状态、Tooltip/键盘语义，样式来自 Theme |
+| `ui/components/sftp-controls.slint`、`ui/icons/sftp-*.svg` | SFTP 有界图标/文本操作按钮及统一矢量资源 | `SftpActionButton`、`SftpIconButton`、`SftpPathCopyButton` | 共用 ActionButtonSurface 与 Theme 间距/边框/浅强调色，图文整体居中；保留方向/选中数量、上下文菜单、Tooltip 和键盘语义 |
 | `ui/sftp/path-bar.slint`、`ui/components/middle-elided-path.slint`、`src/app/view/sftp/path_display.rs`、`src/app/sftp_paths.rs` | 本地/远端地址展示、Windows 盘符输入、字体适配和齿轮意图 | `SftpPathBar`、`MiddleElidedPath`、`PathPresentation`、`elide`、`local_path`、`remote_display_path`、`remote_directory_input` | 4096 字符中间省略/尾部优先；本地普通盘符/UNC 去扩展前缀，远端 `/G:/` 显示为 Windows 盘符；编辑/两处复制共用可读值；仅服务器 current/home 为盘符格式才转换粘贴的绝对盘符路径及成对引号，POSIX 字面名称保留；原始状态/刷新/文件身份不变 |
 | `src/app/view/sftp.rs`、`src/app/view/terminal.rs` | 文件/传输稳定模型与 snapshot 展示映射 | `elide_path`、`apply_sftp_snapshot`、`update_sftp_rows` | 快照保留原始路径，不创建分段模型；本地可读路径与中间省略的纯格式化回调由 app 组装 |
 | `src/app/view/tests/sftp_navigation.rs` | SFTP 无窗口路径与意图回归 | 主操作、路径原文、真实字体适配与菜单 copy test | 宽窄栏主操作/禁用、首尾省略与最大占宽、扩宽恢复；主/独立窗口本地盘符/UNC、Windows 远端显示、两处复制/编辑和真实剪贴板粘贴、刷新原始身份；不保存或检查图像 |
-| `ui/components/elided-controls.slint` | 共享单行省略标签与标准文本按钮包装 | `ElidedLabel`、`ElidedButton`、`natural-width`、`line-height`、`overflowed` | 按实际字体/内边距预留按钮宽度；表单/下拉/菜单/SFTP/弹窗共用截断与有界全文 Tooltip；ElidedTooltipContent 同源约束实际/min/preferred/max 尺寸并留内边距，用应用 tooltip token 覆盖同尺寸标准外框，避免平台色差；保留标准 Button 的 focus/pressed/click；占位只传说明，不传秘密正文 |
+| `ui/components/elided-controls.slint` | 共享单行省略标签、按钮表面与标准文本按钮包装 | `ElidedLabel`、`ElidedButton`、`ActionButtonSurface`、`natural-width`、`line-height`、`overflowed` | 文本/SFTP 按钮共用被动表面，标准 Button 保留 focus/pressed/click；按实际字体/内边距预留宽度；表单/下拉/菜单/SFTP/弹窗共用截断与有界全文 Tooltip；ElidedTooltipContent 同源约束实际/min/preferred/max 尺寸，以主题表面覆盖标准外框；占位只传说明，不传秘密正文 |
 | `src/app/view/tests/text_overflow.rs` | 共享文字呈现的实际页面回归 | 会话动作实测字体宽度、overflow hover、按钮点击、密码占位 | 无截图数字布局；英语/德语/中文与字体/窗口变化；Tab 长路径/中文/短标题的 popup 宽度和单一背景；Tooltip 不抢焦点或吞点击，不显示密码正文 |
 | `ui/workspace-shell.slint` | 工作区局部组合和短暂 UI 状态 | `WorkspaceShell`、`DetachedWorkspaceContent`、`TerminalPaneGroup`、`TerminalPaneDivider`、`native-sftp-drop-target-at`、`native-sftp-local-drop-region`、`terminal-edit-action`、`WorkspaceViewState` | 主窗口/独立窗口共用的 pane/divider 组合；主布局 SFTP/Terminal 仅在主窗口创建，detached 只保留一份可见组件与几何来源；Terminal surface 使用集中式顶部/底部外间距，detached 分屏入口归 macOS 原生标题栏；主窗口红绿灯留空的拖窗命中由 Theme 实际行几何负责；drag release/cancel 后 focused pane 的有界 IME focus request、可访问拖拽/键盘 resize、主/独立窗口均按 UUID 转发 `terminal-pointer-input` 等 terminal callback、SFTP 运行时分栏比例/Transfers 折叠，以及将条件 SFTP 组件的 Remote/Local 接收几何绑定为窗口坐标 DTO、Tab/内容 callback 转发；接收只读 Profile/Tab/终端/设置快照 |
 | `ui/icons/`、`ui/theme.slint` | 主/子窗口动作的共用矢量图像与外观 | `workspace-move-icon`、`workspace-return-icon`、`terminal-split-right-icon`、`terminal-split-down-icon` | 修改分屏/移出/返回图标时；原生 raster 从相同图像值生成 |
@@ -254,9 +255,9 @@
 ## 刷新规则
 
 - 刷新触发：新增/删除模块、入口、跨层契约、构建/CI 或持久化事实时更新相应路径和定位；功能实现和验证历史追加到月度记录。
-- 最近依据：2026-11-16 五项兼容依赖升级与 RSA 稳定修复受上游 pin 限制的说明；同日 Windows 版本目录、历史旗帜及自动缓存展示细化；同日 Settings 标签复用内置 SVG 齿轮；灰底汉字预编辑覆盖层的状态/damage 数值回归；2026-11-13 Windows SFTP 盘符地址展示/复制与原生绝对路径粘贴，保留原始文件身份和 POSIX 字面路径；同日下载冲突逐文件覆盖/跳过/自动改名、本批次策略和共享弹窗，普通目录合并，原生 promise 维持不覆盖。保留 Tab/窗口拖动隔离、原生 macOS 标题栏及主窗口创建/首个事件初始化、Windows/Linux 既有布局；保留 Xming/VcXsrv 独立程序路径、.xlaunch 发现和配置导入、CI/Release 与传输/签名/凭据边界。
+- 最近依据：2026-11-17 Settings/SFTP 共用轻量 ActionButtonSurface、统一间距与图文居中，保留标准文本按钮事件语义；2026-11-16 上传共存候选名跳过各类已占用条目、原目标精确类型校验及协议回归；同日五项兼容依赖升级与 RSA 稳定修复受上游 pin 限制的说明；同日 Windows 版本目录、历史旗帜及自动缓存展示细化；同日 Settings 标签复用内置 SVG 齿轮；灰底汉字预编辑覆盖层的状态/damage 数值回归；2026-11-13 Windows SFTP 盘符地址展示/复制与原生绝对路径粘贴，保留原始文件身份和 POSIX 字面路径；同日下载冲突逐文件覆盖/跳过/自动改名、本批次策略和共享弹窗，普通目录合并，原生 promise 维持不覆盖。保留 Tab/窗口拖动隔离、原生 macOS 标题栏及主窗口创建/首个事件初始化、Windows/Linux 既有布局；保留 Xming/VcXsrv 独立程序路径、.xlaunch 发现和配置导入、CI/Release 与传输/签名/凭据边界。
 - 地图只保留当前路由，不继续累积旧任务的“当前/最近”段落。此前地图逐字保存在[历史地图快照](project-map-before-2026-10-20.md)，实施状态见 [current.md](current.md)，历史见 [changes/2026/11.md](changes/2026/11.md)。
 
 ## 最后更新时间
 
-- 2026-11-16 11:54 +0800
+- 2026-11-17 09:16 +0800

@@ -92,6 +92,14 @@ export global Theme {
     out property <color> focus: accent;
     out property <color> hover: panel-alt;
     out property <color> selected: accent.with-alpha(0.16);
+    // Shared action buttons stay quiet until interaction. Primary actions use
+    // a tint rather than a solid accent block beside ordinary field controls.
+    out property <color> button-border: border.with-alpha(0.38);
+    out property <color> button-hover-border: border.with-alpha(0.72);
+    out property <color> button-surface: panel;
+    out property <color> button-primary-surface: accent.with-alpha(resolved-dark ? 0.12 : 0.08);
+    out property <color> button-active-surface: accent.with-alpha(resolved-dark ? 0.18 : 0.12);
+    out property <color> button-pressed-surface: accent.with-alpha(resolved-dark ? 0.24 : 0.18);
     // All tooltip surfaces use the application theme. Shared text tooltips
     // cover the standard widget frame with these same tokens.
     out property <color> tooltip-background: panel-alt;
@@ -139,9 +147,15 @@ export global Theme {
     out property <length> empty-page-padding: 28px;
     out property <length> text-tooltip-min-width: 96px;
     out property <length> text-tooltip-max-width: 360px;
-    out property <length> text-button-min-width: 32px;
-    out property <length> text-button-min-height: 32px;
-    out property <length> text-button-padding-x: space-xl;
+    out property <length> action-button-height: 32px;
+    out property <length> action-button-padding-x: space-xl;
+    out property <length> action-button-padding-y: space-sm;
+    out property <length> action-button-icon-size: 16px;
+    out property <length> action-button-toolbar-inset: space-xxs;
+    out property <int> action-button-font-weight: 500;
+    out property <length> text-button-min-width: action-button-height;
+    out property <length> text-button-min-height: action-button-height;
+    out property <length> text-button-padding-x: action-button-padding-x;
 
     // Main workspace geometry.
     out property <length> window-min-width: 520px;
@@ -253,7 +267,7 @@ export global Theme {
     out property <length> settings-section-padding-y: 5px;
     out property <length> settings-row-min-height: 48px;
     out property <length> settings-label-width: 250px;
-    out property <length> settings-control-height: 32px;
+    out property <length> settings-control-height: action-button-height;
     out property <length> settings-control-vertical-padding: 12px;
     out property <length> settings-field-width: 280px;
     out property <length> settings-terminal-size-width: 128px;
@@ -329,21 +343,21 @@ export global Theme {
     out property <length> terminal-notice-stacked-height: 272px;
     out property <length> terminal-notice-stack-threshold: 340px;
     out property <length> terminal-notice-indicator-width: 3px;
-    out property <length> sftp-toolbar-height: 34px;
+    out property <length> sftp-toolbar-height: action-button-height + 2 * action-button-toolbar-inset;
     out property <color> sftp-toolbar-surface: panel-alt;
     out property <color> sftp-header-surface: background;
     out property <color> sftp-path-surface: background;
     out property <color> sftp-status-surface: background;
     out property <color> sftp-row-divider: divider.with-alpha(0.22);
-    out property <length> sftp-control-icon-size: 16px;
+    out property <length> sftp-control-icon-size: action-button-icon-size;
     out property <length> sftp-toolbar-secondary-width: 420px;
     out property <length> sftp-toolbar-full-width: 540px;
     out property <length> sftp-primary-action-min-width: 96px;
     out property <length> sftp-control-font-size: font-body;
-    out property <int> sftp-control-font-weight: 500;
-    out property <length> sftp-control-min-width: 32px;
-    out property <length> sftp-control-min-height: 30px;
-    out property <length> sftp-control-padding-y: 5px;
+    out property <int> sftp-control-font-weight: action-button-font-weight;
+    out property <length> sftp-control-min-width: action-button-height;
+    out property <length> sftp-control-min-height: action-button-height;
+    out property <length> sftp-control-padding-y: action-button-padding-y;
     out property <length> sftp-path-row-padding-y: 6px;
     out property <length> sftp-status-row-padding-y: 3px;
     out property <length> sftp-header-height: 30px;
@@ -362,9 +376,9 @@ export global Theme {
     out property <length> sftp-transfer-action-width: 72px;
     out property <length> sftp-open-button-width: 60px;
     out property <length> sftp-refresh-button-width: 72px;
-    out property <length> sftp-nav-icon-button-width: 32px;
+    out property <length> sftp-nav-icon-button-width: action-button-height;
     out property <length> sftp-more-button-width: 84px;
-    out property <length> sftp-transfer-toolbar-height: 34px;
+    out property <length> sftp-transfer-toolbar-height: sftp-toolbar-height;
     out property <length> sftp-transfer-header-height: 28px;
     out property <length> sftp-splitter-size: 8px;
     out property <length> sftp-splitter-active-thickness: 2px;

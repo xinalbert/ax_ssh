@@ -2779,8 +2779,17 @@ presentation contract. `ElidedLabel` measures the configured font separately
 from its visible elided label and exposes `natural-width`, `line-height`, and
 `overflowed`; it creates a bounded, wrapping full-text tooltip only when the
 label actually overflows. `ElidedButton` keeps the standard Slint `Button` as
-the focus, keyboard, enabled, pressed, accessibility, and click owner while
-overlaying that label. Callers pass display `text`, optional `tooltip-text`,
+the focus, keyboard, enabled, pressed, accessibility, and click owner. Its native
+paint is transparent; the passive `ActionButtonSurface` and measured label provide
+the visible control, with an enclosing hover observer that leaves clicks to the
+standard button. SFTP action buttons use the same surface while retaining their
+own context-menu and keyboard routing. Both use a 32px minimum height, 12px
+horizontal and 6px vertical content padding, 16px icons and a medium text weight
+from Theme. Buttons grow vertically for taller fonts, and constrained labels
+retain elision. Ordinary actions have a light border; primary and selected
+actions use accent tints, with distinct hover, pressed, focus and disabled states.
+SFTP toolbar buttons retain 2px top/bottom breathing room, and icon/text groups
+are centered together. Callers pass display `text`, optional `tooltip-text`,
 independent `accessible-name`, `enabled`, and `clicked()` explicitly. Icon-only
 buttons keep their purpose-specific tooltips. Button preferred width reserves
 the overlay label's measured natural width plus its configured horizontal

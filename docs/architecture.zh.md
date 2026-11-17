@@ -1561,8 +1561,12 @@ TextInput 选区、IME、键盘编辑和光标可见滚动，编辑动作使用�
 `ui/components/elided-controls.slint` 统一拥有单行文本按钮的呈现契约。`ElidedLabel` 将配置
 字体的自然宽度测量与可见省略标签分开，并输出 `natural-width`、`line-height` 和
 `overflowed`；仅在标签真实溢出时创建有最大宽度且可换行的全文 tooltip。`ElidedButton`
-继续让 Slint 标准 `Button` 拥有焦点、键盘、enabled、pressed、可访问性和点击语义，只在其上
-覆盖共享标签。调用方显式传入显示 `text`、可选 `tooltip-text`、独立的
+继续让 Slint 标准 `Button` 拥有焦点、键盘、enabled、pressed、可访问性和点击语义；原生绘制透明，
+由被动 `ActionButtonSurface` 和测量后的标签统一呈现，外围 hover 观察层把点击留给标准按钮。
+SFTP 操作按钮共用该表面，保留自身的上下文菜单和键盘路由。两类按钮从 Theme 统一读取 32px 最小高度、
+横向 12px/纵向 6px 内边距、16px 图标和中等字重；字体较高时可增高，限宽文字仍可省略。
+普通操作使用轻量边框，主要/选中操作使用浅强调色，hover、按下、焦点和禁用状态分别可辨；
+SFTP 工具栏上下各留 2px，图标与文字作为整体居中。调用方显式传入显示 `text`、可选 `tooltip-text`、独立的
 `accessible-name`、`enabled` 和 `clicked()`；纯图标按钮保留自身的用途 tooltip。
 按钮 preferred-width 同时满足覆盖标签的实测自然宽度加横向内边距，以及平台按钮的最小宽度；
 字体和内边距通过共享参数与 Theme 默认值管理。显式限宽按钮仍可缩小并使用同一溢出 tooltip。

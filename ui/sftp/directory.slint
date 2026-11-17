@@ -552,11 +552,13 @@ export component SftpDirectoryPane inherits Rectangle {
         spacing: 0px;
 
         Rectangle {
-            height: Theme.sftp-toolbar-height;
+            height: max(Theme.sftp-toolbar-height, root.control-height + 2 * Theme.action-button-toolbar-inset);
             background: Theme.sftp-toolbar-surface;
             HorizontalLayout {
                 padding-left: Theme.sftp-column-padding;
                 padding-right: Theme.sftp-column-padding;
+                padding-top: Theme.action-button-toolbar-inset;
+                padding-bottom: Theme.action-button-toolbar-inset;
                 spacing: Theme.space-sm;
                 ElidedLabel {
                     accessible-role: text;

@@ -1,4 +1,4 @@
-import { Button, Palette } from "std-widgets.slint";
+import { Button } from "std-widgets.slint";
 import { Theme } from "../theme.slint";
 
 export component ElidedTooltipContent inherits Rectangle {
@@ -107,12 +107,40 @@ export component ElidedLabel inherits Rectangle {
     }
 }
 
+// Presentation only: the caller retains focus, pointer and keyboard ownership.
+export component ActionButtonSurface inherits Rectangle {
+    in property <bool> enabled: true;
+    in property <bool> hovered: false;
+    in property <bool> pressed: false;
+    in property <bool> focused: false;
+    in property <bool> primary: false;
+    in property <bool> active: false;
+    in property <bool> subtle: false;
+    out property <color> foreground: !root.enabled ? Theme.muted
+        : (root.primary || root.active ? Theme.accent : Theme.text);
+
+    border-radius: Theme.radius-small;
+    border-width: root.focused ? 2 * Theme.hairline : Theme.hairline;
+    border-color: !root.enabled ? (root.subtle ? transparent : Theme.button-border)
+        : (root.focused ? Theme.focus
+        : (root.primary || root.active ? Theme.accent.with-alpha(0.56)
+        : (root.hovered ? Theme.button-hover-border
+        : (root.subtle ? transparent : Theme.button-border))));
+    background: !root.enabled ? (root.subtle ? transparent : Theme.button-surface)
+        : (root.pressed ? Theme.button-pressed-surface
+        : (root.active || (root.primary && root.hovered) ? Theme.button-active-surface
+        : (root.primary ? Theme.button-primary-surface
+        : (root.hovered ? Theme.hover : (root.subtle ? transparent : Theme.button-surface)))));
+    opacity: root.enabled ? 1 : Theme.combo-box-disabled-opacity;
+    accessible-role: none;
+}
+
 export component ElidedButton inherits Rectangle {
     in property <string> text;
     in property <string> tooltip-text;
     in property <string> font-family: Theme.application-font-family;
     in property <length> font-size: Theme.font-body;
-    in property <int> font-weight: 400;
+    in property <int> font-weight: Theme.action-button-font-weight;
     in property <length> content-padding-x: Theme.text-button-padding-x;
     in property <string> accessible-name: root.text;
     in property <bool> enabled: true;
@@ -132,7 +160,7 @@ export component ElidedButton inherits Rectangle {
     );
     min-height: max(
         standard-size-probe.min-height,
-        max(Theme.text-button-min-height, button-label.line-height + 2 * Theme.space-xs),
+        max(Theme.text-button-min-height, button-label.line-height + 2 * Theme.action-button-padding-y),
     );
     horizontal-stretch: 0;
     vertical-stretch: 0;
@@ -144,14 +172,32 @@ export component ElidedButton inherits Rectangle {
         primary: root.primary;
     }
 
-    standard-button := Button {
+    // Observe hover around the standard control without taking its clicks.
+    hover-area := TouchArea {
         width: parent.width;
         height: parent.height;
-        text: "";
         enabled: root.enabled;
+        mouse-cursor: root.enabled ? pointer : default;
+
+        standard-button := Button {
+            width: parent.width;
+            height: parent.height;
+            text: "";
+            enabled: root.enabled;
+            primary: root.primary;
+            // Keep native interaction/accessibility, paint one shared surface.
+            opacity: 0;
+            accessible-label: root.accessible-name;
+            clicked => { root.clicked(); }
+        }
+    }
+
+    surface := ActionButtonSurface {
+        enabled: root.enabled;
+        hovered: hover-area.has-hover;
+        pressed: root.pressed;
+        focused: root.has-focus;
         primary: root.primary;
-        accessible-label: root.accessible-name;
-        clicked => { root.clicked(); }
     }
 
     button-label := ElidedLabel {
@@ -164,7 +210,7 @@ export component ElidedButton inherits Rectangle {
         font-weight: root.font-weight;
         tooltip-text: root.tooltip-text;
         tooltip-enabled: false;
-        text-color: root.primary ? Palette.accent-foreground : Palette.control-foreground;
+        text-color: surface.foreground;
         horizontal-alignment: TextHorizontalAlignment.center;
         opacity: root.enabled ? 1 : Theme.combo-box-disabled-opacity;
     }

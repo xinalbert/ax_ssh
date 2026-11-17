@@ -1,4 +1,5 @@
-import { Button, ScrollView, Slider, SpinBox } from "std-widgets.slint";
+import { ScrollView, Slider, SpinBox } from "std-widgets.slint";
+import { ElidedButton } from "../components/elided-controls.slint";
 import { Theme } from "../theme.slint";
 import { FlatTextInput } from "../components/flat-text-input.slint";
 import { SettingsField, SettingsRow, SettingsSectionHeading, SettingsToggleRow } from "../components/settings-controls.slint";
@@ -283,7 +284,7 @@ export component TerminalSettingsPage inherits Rectangle {
                     label: @tr("Save audio settings");
                     description: @tr("Applies to new SSH connections; recording starts automatically");
                     show-divider: false;
-                    SettingsField { Button { text: @tr("Save audio settings"); clicked => { root.save-audio-settings(); } } }
+                    SettingsField { ElidedButton { text: @tr("Save audio settings"); clicked => { root.save-audio-settings(); } } }
                 }
                 SettingsSectionHeading { label: @tr("MOUSE"); }
                 SettingsToggleRow {

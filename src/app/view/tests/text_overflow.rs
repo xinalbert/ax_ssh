@@ -394,6 +394,45 @@ fn shared_text_overflow_hover_preserves_full_label_and_button_click() {
         let point = item.map_to_window(LogicalPoint::new(size.width / 2.0, size.height / 2.0));
         harness.click(slint::LogicalPosition::new(point.x, point.y));
         assert_eq!(saves.get(), 1, "Tooltip must not swallow button clicks");
+        // Standard desktop buttons receive keyboard focus through Tab;
+        // macOS does not focus them merely because they were clicked.
+        let button_has_focus = || {
+            use i_slint_core::accessibility::AccessibleStringProperty;
+            use i_slint_core::item_tree::ParentItemTraversalMode;
+
+            let mut item = WindowInner::from_pub(ui.window())
+                .focus_item
+                .borrow()
+                .upgrade();
+            while let Some(current) = item {
+                if current
+                    .accessible_string_property(AccessibleStringProperty::Label)
+                    .as_deref()
+                    == Some(label)
+                {
+                    return true;
+                }
+                item = current.parent_item(ParentItemTraversalMode::StopAtPopups);
+            }
+            false
+        };
+        for _ in 0..64 {
+            if button_has_focus() {
+                break;
+            }
+            harness.press_key(slint::platform::Key::Tab);
+        }
+        assert!(
+            button_has_focus(),
+            "the standard button remains Tab reachable"
+        );
+        harness.press_key(slint::platform::Key::Return);
+        harness.press_key(slint::platform::Key::Space);
+        assert_eq!(
+            saves.get(),
+            3,
+            "the shared surface must preserve the standard button's focus and keyboard actions"
+        );
 
         let description = "Select the transport used by this saved connection.";
         let item = displayed_text(&harness, description);
