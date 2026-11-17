@@ -42,6 +42,7 @@ struct DirectoryTransferAggregate {
     is_directory: Option<bool>,
     discovered_files: usize,
     skipped_entries: usize,
+    filtered_entries: usize,
     skipped_files: usize,
     failed_files: usize,
     message: Option<String>,
@@ -68,6 +69,7 @@ fn finish_directory_transfer(
         transfer_id,
         discovered_files: transfer.discovered_files,
         skipped_entries: transfer.skipped_entries,
+        filtered_entries: transfer.filtered_entries,
         skipped_files: transfer.skipped_files,
         failed_files: transfer.failed_files,
         cancelled: transfer.cancelled,
@@ -601,6 +603,7 @@ pub(super) async fn run_sftp_session(
                                             transfer_id: root_transfer_id,
                                             discovered_files: summary.discovered_files,
                                             skipped_entries: summary.skipped_entries,
+                                            filtered_entries: summary.filtered_entries,
                                             skipped_files: 0,
                                             failed_files: 0,
                                             cancelled: false,
@@ -614,6 +617,7 @@ pub(super) async fn run_sftp_session(
                                     aggregate.is_directory = Some(true);
                                     aggregate.discovered_files = summary.discovered_files;
                                     aggregate.skipped_entries = summary.skipped_entries;
+                                    aggregate.filtered_entries = summary.filtered_entries;
                                     aggregate.message = summary.first_issue;
                                     aggregate.discovery_finished = true;
                                     if let Some(event) = finish_directory_transfer(

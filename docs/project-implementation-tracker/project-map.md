@@ -215,6 +215,7 @@
 | `src/app/workspace/startup.rs` | 启动工作区恢复 | load_startup_workspace | 修改 checkpoint 优先级与最近文件清理 |
 | `src/app/connection/request.rs` | 新建/恢复连接及工作区终端恢复的应用编排 | `ConnectionContext::resume_restored_terminals`、`load_terminal_fonts`、`resume_existing_connection` | 启动与文件恢复共用有界快照枚举；恢复本地/profile 终端请求后台字体初始化，SFTP-only 不触发；主机信任和认证仍由既有安全路径处理 |
 | `src/config/settings/` | 分类设置 schema/规范化 | appearance/audio/sftp/shortcuts/terminal/workspace/x11 | 分类字段修改；settings.rs 保留 aggregate 与显式导出 |
+| `src/config/settings/sftp.rs`、`ui/settings/sftp.slint` | 跨平台系统杂项传输预设及设置预览 | `SftpTransferFilterSettings`、`effective_patterns`、`platform_default_patterns_text` | 新建/恢复默认启用三平台统一预设，保留显式关闭与自定义选择；只读可复制规则列表，不使用通用隐藏文件模式；上传/下载共用 basename matcher，Hidden 仍仅控制浏览显示 |
 | `src/app/state/tabs/` | 无 Slint 的 Tab 刷新/快照/终端状态 | refresh/snapshots/terminal | 修改状态转换；tabs.rs 保留生命周期 |
 | `ui/sftp/` | SFTP DTO、目录与传输组件 | types.slint、directory.slint、transfers.slint | 修改对应视觉组件；sftp-pane 只组合分栏 |
 
@@ -255,9 +256,9 @@
 ## 刷新规则
 
 - 刷新触发：新增/删除模块、入口、跨层契约、构建/CI 或持久化事实时更新相应路径和定位；功能实现和验证历史追加到月度记录。
-- 最近依据：2026-11-17 Settings/SFTP 共用轻量 ActionButtonSurface、统一间距与图文居中，保留标准文本按钮事件语义；2026-11-16 上传共存候选名跳过各类已占用条目、原目标精确类型校验及协议回归；同日五项兼容依赖升级与 RSA 稳定修复受上游 pin 限制的说明；同日 Windows 版本目录、历史旗帜及自动缓存展示细化；同日 Settings 标签复用内置 SVG 齿轮；灰底汉字预编辑覆盖层的状态/damage 数值回归；2026-11-13 Windows SFTP 盘符地址展示/复制与原生绝对路径粘贴，保留原始文件身份和 POSIX 字面路径；同日下载冲突逐文件覆盖/跳过/自动改名、本批次策略和共享弹窗，普通目录合并，原生 promise 维持不覆盖。保留 Tab/窗口拖动隔离、原生 macOS 标题栏及主窗口创建/首个事件初始化、Windows/Linux 既有布局；保留 Xming/VcXsrv 独立程序路径、.xlaunch 发现和配置导入、CI/Release 与传输/签名/凭据边界。
+- 最近依据：2026-11-17 三平台共享 SFTP 系统杂项预设、可复制只读列表及独立过滤计数，避免正常目录误报失败；同日 Settings/SFTP 共用轻量 ActionButtonSurface、统一间距与图文居中，保留标准文本按钮事件语义；2026-11-16 上传共存候选名跳过各类已占用条目、原目标精确类型校验及协议回归；同日五项兼容依赖升级与 RSA 稳定修复受上游 pin 限制的说明；同日 Windows 版本目录、历史旗帜及自动缓存展示细化；同日 Settings 标签复用内置 SVG 齿轮；灰底汉字预编辑覆盖层的状态/damage 数值回归；2026-11-13 Windows SFTP 盘符地址展示/复制与原生绝对路径粘贴，保留原始文件身份和 POSIX 字面路径；同日下载冲突逐文件覆盖/跳过/自动改名、本批次策略和共享弹窗，普通目录合并，原生 promise 维持不覆盖。保留 Tab/窗口拖动隔离、原生 macOS 标题栏及主窗口创建/首个事件初始化、Windows/Linux 既有布局；保留 Xming/VcXsrv 独立程序路径、.xlaunch 发现和配置导入、CI/Release 与传输/签名/凭据边界。
 - 地图只保留当前路由，不继续累积旧任务的“当前/最近”段落。此前地图逐字保存在[历史地图快照](project-map-before-2026-10-20.md)，实施状态见 [current.md](current.md)，历史见 [changes/2026/11.md](changes/2026/11.md)。
 
 ## 最后更新时间
 
-- 2026-11-17 09:16 +0800
+- 2026-11-17 15:20 +0800

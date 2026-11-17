@@ -415,6 +415,7 @@ impl SftpBrowserState {
         id: Uuid,
         discovered_files: usize,
         skipped_entries: usize,
+        filtered_entries: usize,
         skipped_files: usize,
         failed_files: usize,
         cancelled: bool,
@@ -428,7 +429,9 @@ impl SftpBrowserState {
         if failed_files > 0 {
             details.push(format!("{failed_files} failed"));
         }
-        let skipped = skipped_entries.saturating_add(skipped_files);
+        let skipped = skipped_entries
+            .saturating_add(skipped_files)
+            .saturating_add(filtered_entries);
         if skipped > 0 {
             details.push(format!("{skipped} skipped"));
         }
@@ -445,7 +448,7 @@ impl SftpBrowserState {
             SftpTransferPhase::Cancelled
         } else if skipped_entries == 0
             && failed_files == 0
-            && skipped_files > 0
+            && skipped > 0
             && skipped_files == discovered_files
         {
             SftpTransferPhase::Skipped

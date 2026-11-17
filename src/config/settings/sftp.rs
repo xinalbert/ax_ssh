@@ -10,14 +10,24 @@ const MAX_SFTP_TRANSFER_FILTER_TEXT_CHARS: usize = 16 * 1024;
 ///
 /// Patterns are matched against a single file or directory name. `*` matches
 /// any sequence of characters; path separators are deliberately not accepted.
-#[derive(Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
 pub struct SftpTransferFilterSettings {
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub enabled: bool,
-    #[serde(default)]
+    #[serde(default = "default_true")]
     pub use_platform_defaults: bool,
     #[serde(default)]
     pub custom_patterns: Vec<String>,
+}
+
+impl Default for SftpTransferFilterSettings {
+    fn default() -> Self {
+        Self {
+            enabled: true,
+            use_platform_defaults: true,
+            custom_patterns: Vec::new(),
+        }
+    }
 }
 
 impl SftpTransferFilterSettings {
@@ -89,7 +99,37 @@ fn normalize_sftp_transfer_filter_patterns(text: &str) -> Vec<String> {
 }
 
 fn platform_default_sftp_transfer_filter_patterns() -> Vec<String> {
-    Vec::new()
+    // Transfers can cross operating systems in either direction, so every
+    // client uses the same narrow preset rather than only its host's names.
+    // Do not exclude dotfiles generally: .ssh, .git and .env are user content.
+    [
+        // macOS Finder metadata, AppleDouble sidecars and volume bookkeeping.
+        ".DS_Store",
+        "._*",
+        ".Spotlight-V100",
+        ".Trashes",
+        ".fseventsd",
+        ".TemporaryItems",
+        ".DocumentRevisions-V100",
+        ".VolumeIcon.icns",
+        ".apdisk",
+        "__MACOSX",
+        // Windows Explorer metadata, thumbnails and volume bookkeeping.
+        "Thumbs.db",
+        "ehthumbs.db",
+        "ehthumbs_vista.db",
+        "desktop.ini",
+        "Desktop.ini",
+        "$RECYCLE.BIN",
+        "System Volume Information",
+        // Linux desktop metadata and freedesktop trash directories.
+        ".directory",
+        ".Trash",
+        ".Trash-*",
+    ]
+    .into_iter()
+    .map(str::to_owned)
+    .collect()
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -251,11 +291,53 @@ mod sftp_transfer_filter_tests {
     }
 
     #[test]
-    fn reset_does_not_filter_files_by_default() {
+    fn reset_enables_the_shared_system_file_preset() {
         let settings = SftpTransferFilterSettings::reset_to_platform_defaults();
-        assert!(!settings.enabled);
-        assert!(!settings.use_platform_defaults);
+        assert!(settings.enabled);
+        assert!(settings.use_platform_defaults);
         assert!(settings.custom_patterns.is_empty());
-        assert!(settings.effective_patterns().is_empty());
+        assert_eq!(settings, SftpTransferFilterSettings::default());
+        assert_eq!(
+            settings.effective_patterns().join("\n"),
+            SftpTransferFilterSettings::platform_default_patterns_text()
+        );
+        assert!(!settings.effective_patterns().is_empty());
+    }
+
+    #[test]
+    fn missing_filter_fields_use_defaults_but_explicit_choices_survive_reload() {
+        let settings: AppSettings = serde_json::from_str("{}").expect("missing settings");
+        assert_eq!(
+            settings.sftp_transfer_filters,
+            SftpTransferFilterSettings::default()
+        );
+        let partial: SftpTransferFilterSettings =
+            serde_json::from_str("{}").expect("missing filter fields");
+        assert_eq!(partial, SftpTransferFilterSettings::default());
+
+        for (enabled, use_defaults) in [(false, false), (false, true), (true, false)] {
+            let chosen = SftpTransferFilterSettings::normalized(enabled, use_defaults, "*.tmp");
+            let saved = serde_json::to_string(&chosen).expect("serialize filter choices");
+            let restored: SftpTransferFilterSettings =
+                serde_json::from_str(&saved).expect("reload filter choices");
+            assert_eq!(restored, chosen);
+            assert_eq!(
+                restored.effective_patterns(),
+                if enabled { vec!["*.tmp"] } else { vec![] }
+            );
+        }
+    }
+
+    #[test]
+    fn custom_patterns_extend_the_preset_without_duplicates() {
+        let settings = SftpTransferFilterSettings::normalized(true, true, ".DS_Store\n*.tmp");
+        let patterns = settings.effective_patterns();
+        assert_eq!(patterns.iter().filter(|p| *p == ".DS_Store").count(), 1);
+        assert!(patterns.iter().any(|p| p == "*.tmp"));
+        let disabled = SftpTransferFilterSettings {
+            enabled: false,
+            ..settings
+        };
+        assert!(disabled.effective_patterns().is_empty());
     }
 }

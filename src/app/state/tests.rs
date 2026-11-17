@@ -1925,7 +1925,7 @@ fn skipped_downloads_finish_from_active_states_and_are_excluded_on_replay() {
             sftp.completed_directory_child_paths(root)
                 .contains("/remote/root/file.txt")
         );
-        sftp.finish_download_root(root, 1, 0, 1, 0, false, None);
+        sftp.finish_download_root(root, 1, 0, 0, 1, 0, false, None);
         assert_eq!(
             sftp.transfers
                 .iter()
@@ -1935,6 +1935,34 @@ fn skipped_downloads_finish_from_active_states_and_are_excluded_on_replay() {
             SftpTransferPhase::Skipped
         );
         assert!(sftp.transfer_intents().is_empty());
+    }
+}
+
+#[test]
+fn filtered_download_entries_do_not_mark_successful_directories_failed() {
+    for (files, errors, filtered, failed, expected) in [
+        (2, 0, 3, 0, SftpTransferPhase::Completed),
+        (0, 0, 3, 0, SftpTransferPhase::Skipped),
+        (2, 1, 3, 0, SftpTransferPhase::Failed),
+        (2, 0, 3, 1, SftpTransferPhase::Failed),
+    ] {
+        let mut sftp = SftpBrowserState::default();
+        let root = Uuid::new_v4();
+        sftp.begin_download_discovery(
+            root,
+            "root".into(),
+            "/tmp/root".into(),
+            "/remote/root".into(),
+        )
+        .expect("directory root");
+        sftp.finish_download_root(root, files, errors, filtered, 0, failed, false, None);
+        let row = sftp
+            .transfers
+            .iter()
+            .find(|row| row.id == root)
+            .expect("root row");
+        assert_eq!(row.phase, expected);
+        assert!(row.status.contains("skipped"));
     }
 }
 

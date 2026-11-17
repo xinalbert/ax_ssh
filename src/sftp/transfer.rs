@@ -209,6 +209,8 @@ pub enum SftpTransferEvent {
         transfer_id: Uuid,
         discovered_files: usize,
         skipped_entries: usize,
+        /// Names intentionally excluded by transfer filters, without scan errors.
+        filtered_entries: usize,
         skipped_files: usize,
         failed_files: usize,
         cancelled: bool,
@@ -405,6 +407,7 @@ pub(crate) enum SftpDiscoveredDownload {
 pub(crate) struct SftpDiscoverySummary {
     pub(crate) discovered_files: usize,
     pub(crate) skipped_entries: usize,
+    pub(crate) filtered_entries: usize,
     pub(crate) first_issue: Option<String>,
     pub(crate) is_directory: bool,
 }

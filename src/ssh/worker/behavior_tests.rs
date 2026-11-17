@@ -1354,6 +1354,60 @@ async fn sftp_directory_root_finishes_after_every_child_transfer() {
 }
 
 #[tokio::test]
+async fn sftp_directory_filters_report_exclusions_without_discovery_errors() {
+    let fixture = Fixture::new(false).await;
+    {
+        let mut files = fixture.files.files.lock().expect("fixture files");
+        files.clear();
+        for name in [".DS_Store", "Thumbs.db", ".directory", ".env", "file.txt"] {
+            files.insert(format!("/remote/{name}"), CONTENT.to_vec());
+        }
+    }
+    let (worker, mut events) = fixture.worker().await;
+    until(&mut events, |event| {
+        matches!(event, SshSessionEvent::Connected)
+    })
+    .await;
+    let root = Uuid::new_v4();
+    worker
+        .sftp_download_submitter()
+        .submit(
+            root,
+            "/remote".into(),
+            fixture.directory.clone(),
+            crate::config::SftpTransferFilterSettings::default().effective_patterns(),
+            true,
+        )
+        .await
+        .expect("filtered directory download");
+    let event = until(&mut events, |event| matches!(event,
+        SshSessionEvent::SftpTransfer(SftpTransferEvent::DiscoveryFinished { transfer_id, .. }) if *transfer_id == root
+    )).await;
+    assert!(matches!(
+        event,
+        SshSessionEvent::SftpTransfer(SftpTransferEvent::DiscoveryFinished {
+            discovered_files: 2,
+            filtered_entries: 3,
+            skipped_entries: 0,
+            failed_files: 0,
+            cancelled: false,
+            message: None,
+            ..
+        })
+    ));
+    for name in [".env", "file.txt"] {
+        assert_eq!(
+            std::fs::read(fixture.directory.join("remote").join(name)).expect("downloaded content"),
+            CONTENT
+        );
+    }
+    for name in [".DS_Store", "Thumbs.db", ".directory"] {
+        assert!(!fixture.directory.join("remote").join(name).exists());
+    }
+    worker.shutdown().await.expect("worker shutdown");
+}
+
+#[tokio::test]
 async fn cancelling_sftp_directory_cancels_active_children_before_root() {
     let fixture = Fixture::new(false).await;
     let (worker, mut events) = fixture.worker().await;

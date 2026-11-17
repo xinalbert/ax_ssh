@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20261117-shared-button-style
-- 目标：统一设置与 SFTP 按钮的留白、轻量边框、强调色和图文对齐，减少撑满工具栏的视觉密度。
-- 交付物：共享按钮表面与 Theme token、设置/SFTP 接入、行为验证、双语说明和实施记录。
+- 目标 ID：20261117-sftp-system-file-filters
+- 目标：补齐 Windows/Linux/macOS 常见系统杂项的 SFTP 默认过滤与可见配置，并按功能提交已完成改动。
+- 交付物：跨平台过滤预设、默认与持久化兼容、设置规则预览、上传/下载回归、双语说明和本地提交。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：`ui/theme.slint`、共享文本/SFTP 控件、Settings 操作按钮和 SFTP 工具栏；必要的无截图交互回归、双语架构及 tracker。
-- 不在本轮范围内：导航/页面入口、数据与回调契约、文件图标资源、SSH/传输行为、持久化、提交/推送/发布；已有上传修复保留。
+- 当前范围：SFTP 过滤配置、设置规则预览、发现/worker/应用层的过滤计数与目录完成状态、相关回归、双语架构和完整实施记录；此前上传冲突与共享按钮按功能提交。
+- 不在本轮范围内：过滤所有隐藏文件、修改浏览器 Hidden 开关、SSH 信任/凭据/网络 API、依赖与 schema 升级、GUI 启动或截图、推送与发布。
 
 ## 当前状态
 
@@ -23,30 +23,30 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| B1 | completed | 按钮样式和所属边界核对 | 设置/SFTP 控件、Theme、现有交互回归 | 标准按钮与自绘按钮混用；用户确认文字与图标两类均统一处理 |
-| B2 | completed | 共享轻量按钮表面、间距和图文对齐 | Cargo 重编译 Slint、已有按钮/路径/焦点回归 | UI owns 样式，标准 Button 保留文字按钮事件语义 |
-| B3 | completed | 全量门禁、双语说明与记录 | fmt/check/Clippy/test/build、文档/skill/tracker/diff | 外观与实机交互由用户验收，不自制截图 |
+| F1 | completed | 过滤链路、默认及提交边界核对 | 配置、UI、上传/下载 matcher、已有验证记录 | 内置预设为空；此前两项已按功能提交 |
+| F2 | completed | 跨平台预设、默认和设置预览 | 默认/持久化/禁用与上传下载定向回归 | 配置层拥有规则；保留显式关闭与自定义选择 |
+| F3 | completed | 完整门禁、说明、构建与本地提交 | fmt/check/Clippy/test/build、文档/skill/tracker/diff | 1038 项测试通过，arm64 程序构建完成；实际 GUI/服务器和其它原生平台另验 |
 
 ## 已完成
 
-- 设置文字按钮和 SFTP 操作按钮现共用 ActionButtonSurface，采用轻量边框、浅强调色及共享 Theme 几何；工具栏上下留白，图文整体居中，音频保存操作也接入共享控件。
-- 本次只改变 UI 呈现，维持原数据、回调、键盘和授权边界；不使用外部研究或多 agent。
-- 保留 11 月 16 日上传冲突修复及其 1031 项测试记录，相关传输源码不在本轮编辑范围。
+- 确认预设函数返回空列表且默认关闭，设置页只能在单行说明中展示预设；上传和下载已复用同一 basename 匹配器。
+- 上传共存修复提交为 `3594227`，设置/SFTP 按钮统一提交为 `998517f`；仅追加本地提交。
+- 已补齐 20 项跨平台系统杂项预设及设置预览，新配置/恢复默认启用；保留显式关闭与自定义选择。按规则过滤单独计数，避免正常目录下载被误报失败。
 
 ## 验证
 
-- 已完成：Slint 重编译与 locked/offline check、严格 all-target Clippy、完整 1031 项测试（472 library + 559 binary，Doc tests 0）及本机 locked/offline build，产物 `target/debug/ax_ssh` 为 arm64 Mach-O；12 项文本/SFTP 定向回归包括多语言/字体尺寸、长文字 Tooltip、鼠标点击、Tab/Enter/Space、路径/菜单/复制、禁用状态和冲突弹窗；fmt、Markdown/入口、skill/tracker 与 diff 检查通过。
-- 未完成：用户外观与平台实机交互验收、其它平台原生 CI。
+- 已完成：本轮 13 项过滤定向回归及完整 1038 项测试（477 library + 561 binary，Doc tests 0）、fmt、locked/offline check、严格 all-target Clippy 和 build 全部通过；Slint 已重编译，`target/debug/ax_ssh` 为 arm64 Mach-O。Markdown/入口、翻译完整性/生成一致性、项目 skill、tracker 和暂存 diff 校验通过，按功能整理本地提交。
+- 未完成：GUI/真实服务器验收和其它平台原生 CI。
 
 ## 风险与阻塞
 
-- 用户已确认文字/图标两类均需统一；最终视觉接受仍需用户在实际界面确认。
-- 本机 macOS aarch64，不能代替其它平台原生 CI；不启动 GUI、捕获或检查自行生成的应用截图。
+- 默认规则只排除常见系统杂项，保留 `.ssh`、`.git`、`.env` 等用户内容；已有配置的关闭状态保持。
+- 本机 macOS aarch64；不以本机回归替代其它平台原生 CI 或用户 GUI 验收。
 
 ## 下一步
 
-- 用户使用 `target/debug/ax_ssh` 核对设置与 SFTP 的按钮外观和实机交互，按反馈继续调整。
+- 用户使用新版程序，在 Settings > SFTP 查看默认规则；已有配置可点击“恢复平台默认值”启用，GUI 和真实服务器行为另行验收。
 
 ## 最后更新时间
 
-- 2026-11-17 09:16 +0800
+- 2026-11-17 15:20 +0800

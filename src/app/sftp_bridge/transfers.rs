@@ -756,7 +756,7 @@ fn queue_selected_remote_downloads(
                     if let Err(error) = row {
                         terminal
                             .sftp
-                            .finish_download_root(transfer_id, 0, 0, 0, 0, false, None);
+                            .finish_download_root(transfer_id, 0, 0, 0, 0, 0, false, None);
                         return Err(error);
                     }
                     terminal.sftp.register_download_root_intent(

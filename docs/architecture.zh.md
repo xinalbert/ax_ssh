@@ -425,10 +425,12 @@ source snapshot。保存 profile 时密码可以留空；保存密码开关和�
 未启用保存时后端选择不参与处理。
 编辑器的“已保存密码”状态只读取当前非敏感后端引用。“清除已保存密码”复用管理确认弹窗，
 确认后携带 profile UUID 单独提交 `clear-saved-password` 命令，立即执行，不提交或重置本地草稿。
-`AppSettings` 还持有有界的 `SftpTransferFilterSettings`：平台默认规则、启用开关和用户文件名
-模式。application bridge 将生效的 basename 模式传入上传和下载 intent，SFTP 领域用同一个 `*`
-匹配器处理直接条目和递归发现，因此传输过滤与浏览器的 Hidden 显示开关保持分离。General 草稿
-中的恢复操作会恢复当前平台默认规则并清空自定义模式。
+`AppSettings` 还持有有界的 `SftpTransferFilterSettings`：共享系统杂项预设、启用开关和用户文件名
+模式。由于任一传输端都可能采用其它操作系统，所有客户端均包含 Windows、Linux 和 macOS 的预设名称。
+Settings > SFTP 通过可滚动、只读且可复制的列表展示内置规则。
+application bridge 将生效的 basename 模式传入上传和下载 intent，SFTP 领域用同一个 `*`
+匹配器处理直接条目和递归发现，因此传输过滤与浏览器的 Hidden 显示开关保持分离。SFTP 草稿
+中的恢复操作会启用共享预设并清空自定义模式。
 编辑器还包含 SSH-only、非敏感的 `sftp_remote_path` 和 `sftp_local_path` 字段。
 它们只是本地草稿：修改时不会打开任一目录，保存时也不会改变已经运行的 Tab。
 
@@ -1223,7 +1225,18 @@ INFO 日志记录请求接收、会话就绪（含是否复用）、校验完成
 局部重试耗尽会明确结束对应文件/根任务，其余文件继续。仅 transport 已关闭时才将传输失败标为等待重连；application 等待 worker 的 session 终态，不再因单个传输错误退役存活 SSH attempt。
 既有 browser 有界恢复耗尽后仍可报告 session failure。
 
-所有 SFTP Tab 共享的同时上传数也可在 Settings > SFTP 中设置为 1-32（默认 8）。降低该值不会取消已经取得许可的上传，只会限制后续上传。下载根 intent 携带用户配置的 basename 文件名过滤模式；仅在用户启用过滤时，application bridge 和递归 worker 才使用同一 `*` 匹配器。默认关闭过滤，避免无提示地漏传系统文件。浏览器的 Hidden 开关仍只控制显示。`AppSettings` 持久化过滤启用状态和规范化后的自定义模式。`AppSettings::sftp_transfers` 保存每 Tab 并发和每连接带宽的全局默认值；`SshConfig::sftp_transfer_policy` 可为单个服务器覆盖这些值，进程级同时上传上限仍为全局值。
+所有 SFTP Tab 共享的同时上传数也可在 Settings > SFTP 中设置为 1-32（默认 8）。降低该值不会取消已经取得许可的上传，只会限制后续上传。下载根 intent 携带用户配置的 basename 文件名过滤模式；application bridge 和递归 worker 使用同一大小写敏感的 `*` 匹配器。
+新配置和恢复默认会启用窄范围系统杂项预设：macOS 的 `.DS_Store`、`._*`、`.Spotlight-V100`、`.Trashes`、
+`.fseventsd`、`.TemporaryItems`、`.DocumentRevisions-V100`、`.VolumeIcon.icns`、`.apdisk`、`__MACOSX`；
+Windows 的 `Thumbs.db`、`ehthumbs.db`、`ehthumbs_vista.db`、`desktop.ini`、`Desktop.ini`、`$RECYCLE.BIN`、
+`System Volume Information`；Linux 的 `.directory`、`.Trash`、`.Trash-*`。
+不包含通用点文件模式，`.ssh`、`.git`、`.env` 等用户隐藏内容仍可传输；过滤条目计入发现摘要。
+保留已保存的关闭/仅自定义选择和现有 schema 37 之前的迁移；已有用户可通过“恢复平台默认值”启用预设。
+浏览器的 Hidden 开关仍只控制显示。`AppSettings` 持久化过滤启用状态、预设选择和规范化后的自定义模式。
+发现过程单独统计按规则过滤的条目，与无法读取或不支持的条目区分；worker 通过 `DiscoveryFinished`
+传递该计数，正常文件成功下载的目录显示 Completed 并保留跳过数量，全部内容被过滤时显示 Skipped。
+实际扫描/子文件错误仍使根任务失败。macOS 原生目录 promise 接受按规则排除子项，入队时重新核对根目录过滤规则。
+`AppSettings::sftp_transfers` 保存每 Tab 并发和每连接带宽的全局默认值；`SshConfig::sftp_transfer_policy` 可为单个服务器覆盖这些值，进程级同时上传上限仍为全局值。
 新 SFTP worker 启动时复制生效策略，因此修改设置不会改变进行中的连接。共享异步限速器在
 同一连接的全部上传/下载任务之间计量 64 KiB 的读写块；0 表示不限速。Slint 不接触秘密或 russh handle。
 

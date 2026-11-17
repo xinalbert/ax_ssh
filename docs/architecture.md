@@ -660,13 +660,15 @@ editor content's preferred height, so all fields remain reachable when the
 editor is taller than the current window. `in-out` properties remain inside components only where
 two nested controls are editing the same local draft. Derived labels, dialog
 copy, and visual states are bindings, not duplicate mutable storage.
-`AppSettings` also owns bounded `SftpTransferFilterSettings`: a platform preset,
-an enable flag, and user filename patterns. The application bridge passes the
+`AppSettings` also owns bounded `SftpTransferFilterSettings`: a shared system-file preset,
+an enable flag, and user filename patterns. Every client includes Windows, Linux,
+and macOS names because either transfer endpoint may use another operating system.
+Settings > SFTP shows the built-in patterns in a scrollable, read-only, copyable
+preview. The application bridge passes the
 effective basename patterns into upload and download intents; the SFTP domain
 uses the same `*` matcher for direct entries and recursive discovery, keeping
 transfer filtering separate from the browser's Hidden display toggle. Resetting
-the General-page draft restores the current platform preset and clears custom
-patterns.
+the SFTP-page filters enables the shared preset and clears custom patterns.
 Password and vault-password fields are local secret drafts: they are blank on
 every editor open, are cleared after submit, and never enter the read-only
 source snapshot. A password may be left empty when saving a profile, and the
@@ -2005,10 +2007,24 @@ The process-wide upload limiter is also configurable from Settings > SFTP
 (1-32 simultaneous uploads, default 8). Lowering the setting does not cancel
 uploads that already hold a permit; it limits subsequent uploads. The transfer
 root carries the configured basename-only filename-filter patterns. The
-application bridge and recursive worker apply the same `*` matcher when a user
-enables filtering; filters are disabled by default so system files are not
-silently omitted. The browser's Hidden toggle remains display-only. `AppSettings`
-persists the enable flag and normalized custom patterns.
+application bridge and recursive worker apply the same case-sensitive `*` matcher.
+New settings and reset filters enable a narrow system-file preset: macOS
+`.DS_Store`, `._*`, `.Spotlight-V100`, `.Trashes`, `.fseventsd`, `.TemporaryItems`,
+`.DocumentRevisions-V100`, `.VolumeIcon.icns`, `.apdisk`, and `__MACOSX`; Windows
+`Thumbs.db`, `ehthumbs.db`, `ehthumbs_vista.db`, `desktop.ini`, `Desktop.ini`,
+`$RECYCLE.BIN`, and `System Volume Information`; Linux `.directory`, `.Trash`,
+and `.Trash-*`. The preset excludes no general dotfile pattern: `.ssh`, `.git`,
+`.env`, and other user hidden content remain eligible. Filtered entries are
+reported in discovery summaries. Explicit saved disable/custom-only choices and
+the existing pre-schema-37 migration remain intact; existing users can opt in
+with Restore platform defaults. The browser's Hidden toggle remains display-only.
+`AppSettings` persists the enable flag, preset choice, and normalized custom patterns.
+Discovery counts intentionally filtered entries separately from unreadable or
+unsupported entries. The worker passes that count in `DiscoveryFinished` so a
+directory with successfully downloaded eligible files finishes as Completed,
+with skipped counts; a root whose entire contents are filtered finishes as
+Skipped. Actual scan/child errors still fail the root. Native macOS directory
+promises accept intentional child exclusions and recheck root filters when queued.
 `AppSettings::sftp_transfers` stores global defaults for per-Tab concurrency and
 per-connection bandwidth. `SshConfig::sftp_transfer_policy` optionally overrides
 those values for a server; the process-wide upload cap remains global. The effective policy is copied into a new SFTP worker, so

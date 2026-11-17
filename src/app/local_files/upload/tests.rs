@@ -12,6 +12,73 @@ fn local_upload_names_have_no_client_character_count_cap() {
 }
 
 #[tokio::test]
+async fn default_upload_filters_skip_system_entries_and_preserve_user_dotfiles() {
+    use ax_ssh::config::SftpTransferFilterSettings;
+
+    let root = std::env::temp_dir().join(format!("ax-ssh-filter-upload-{}", Uuid::new_v4()));
+    for directory in [".ssh", ".git", ".Trash-1000"] {
+        std::fs::create_dir_all(root.join(directory)).expect("create upload directory");
+    }
+    for name in [
+        ".DS_Store",
+        "Thumbs.db",
+        ".directory",
+        ".env",
+        "report.txt",
+        ".ssh/config",
+        ".git/config",
+        ".Trash-1000/deleted.txt",
+    ] {
+        std::fs::write(root.join(name), b"content").expect("create upload file");
+    }
+    let root_name = root
+        .file_name()
+        .and_then(|name| name.to_str())
+        .expect("fixture name");
+    for enabled in [true, false] {
+        let settings = SftpTransferFilterSettings {
+            enabled,
+            ..Default::default()
+        };
+        let (sender, mut receiver) = mpsc::channel(2);
+        let scan_root = root.clone();
+        let discovery = tokio::task::spawn_blocking(move || {
+            discover_local_uploads_streaming(
+                vec![scan_root],
+                "/srv",
+                &settings.effective_patterns(),
+                &sender,
+            )
+        });
+        let mut paths = HashSet::new();
+        while let Some(file) = receiver.recv().await {
+            paths.insert(file.remote_path);
+        }
+        let summary = discovery.await.expect("upload task").expect("upload scan");
+        for name in [".env", ".ssh/config", ".git/config", "report.txt"] {
+            assert!(
+                paths.contains(&format!("/srv/{root_name}/{name}")),
+                "{name}"
+            );
+        }
+        assert_eq!(summary.discovered_files, if enabled { 4 } else { 8 });
+        assert_eq!(summary.skipped_entries, if enabled { 4 } else { 0 });
+        assert_eq!(paths.len(), summary.discovered_files);
+        if enabled {
+            assert!(
+                summary
+                    .first_issue
+                    .as_deref()
+                    .is_some_and(|issue| issue.contains("Excluded by transfer filter"))
+            );
+        } else {
+            assert!(summary.first_issue.is_none());
+        }
+    }
+    std::fs::remove_dir_all(root).expect("remove upload fixture");
+}
+
+#[tokio::test]
 async fn streaming_upload_discovery_keeps_more_than_512_files_and_deep_paths() {
     let root = std::env::temp_dir().join(format!("ax-ssh-stream-upload-{}", Uuid::new_v4()));
     std::fs::create_dir_all(&root).expect("create upload fixture root");

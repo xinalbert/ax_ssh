@@ -285,7 +285,9 @@ fn legacy_profile_defaults_group_and_migrates_credential_marker() {
     assert_eq!(store.sessions[0].group_name, "");
     assert!(store.groups.is_empty());
     assert_eq!(ssh(&store.sessions[0]).credential_storage, None);
-    assert_eq!(store.settings, AppSettings::default());
+    let mut migrated_defaults = AppSettings::default();
+    migrated_defaults.sftp_transfer_filters.enabled = false;
+    assert_eq!(store.settings, migrated_defaults);
 }
 
 #[test]

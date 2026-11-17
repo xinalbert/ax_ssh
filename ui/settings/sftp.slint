@@ -100,12 +100,23 @@ export component SftpSettingsPage inherits SettingsPage {
     }
     SettingsRow {
         label: @tr("Platform defaults");
-        description: root.sftp-filter-platform-defaults;
         SettingsField {
-            CheckBox {
-                checked <=> root.draft-sftp-filter-use-platform-defaults;
-                enabled: root.draft-sftp-filter-enabled;
-                accessible-label: @tr("Use platform default filters");
+            VerticalLayout {
+                width: Theme.settings-field-width;
+                spacing: Theme.space-sm;
+                CheckBox {
+                    height: Theme.settings-control-height;
+                    checked <=> root.draft-sftp-filter-use-platform-defaults;
+                    enabled: root.draft-sftp-filter-enabled;
+                    accessible-label: @tr("Use platform default filters");
+                }
+                FlatTextEdit {
+                    height: Theme.settings-sftp-filter-list-height;
+                    text: root.sftp-filter-platform-defaults;
+                    read-only: true;
+                    wrap: TextWrap.no-wrap;
+                    accessible-label: @tr("Platform defaults");
+                }
             }
         }
     }
@@ -115,7 +126,7 @@ export component SftpSettingsPage inherits SettingsPage {
         SettingsField {
             FlatTextEdit {
                 width: Theme.settings-field-width;
-                height: 88px;
+                height: Theme.settings-sftp-filter-list-height;
                 text <=> root.draft-sftp-filter-custom-patterns;
                 enabled: root.draft-sftp-filter-enabled;
                 accessible-label: @tr("Custom SFTP filename patterns");

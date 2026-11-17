@@ -603,6 +603,10 @@ fn queue_native_remote_directory_download(
     local_target: PathBuf,
 ) -> Result<()> {
     let filter_patterns = active_sftp_transfer_filter_patterns(state)?;
+    let remote_name = remote_path.rsplit('/').next().unwrap_or_default();
+    if ax_ssh::sftp::transfer_name_matches_filter(remote_name, &filter_patterns) {
+        anyhow::bail!("directory is excluded by SFTP transfer filters");
+    }
     let local_directory = local_target
         .parent()
         .filter(|path| !path.as_os_str().is_empty())
@@ -639,6 +643,7 @@ fn queue_native_remote_directory_download(
                 0,
                 0,
                 0,
+                0,
                 false,
                 Some(error.to_string()),
             );
@@ -661,6 +666,7 @@ fn queue_native_remote_directory_download(
         ) {
             terminal.sftp.finish_download_root(
                 transfer_id,
+                0,
                 0,
                 0,
                 0,

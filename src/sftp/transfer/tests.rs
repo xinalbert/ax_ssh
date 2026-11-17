@@ -115,6 +115,42 @@ fn transfer_filter_patterns_match_exact_names_and_wildcards() {
 }
 
 #[test]
+fn default_transfer_filters_cover_all_platforms_and_preserve_user_dotfiles() {
+    let patterns = crate::config::SftpTransferFilterSettings::default().effective_patterns();
+    for name in [
+        ".DS_Store",
+        ".Trashes",
+        ".Spotlight-V100",
+        "._report.txt",
+        "__MACOSX",
+        "Thumbs.db",
+        "desktop.ini",
+        "Desktop.ini",
+        "$RECYCLE.BIN",
+        "System Volume Information",
+        ".directory",
+        ".Trash",
+        ".Trash-1000",
+    ] {
+        assert!(transfer_name_matches_filter(name, &patterns), "{name}");
+    }
+    for name in [
+        ".ssh",
+        ".git",
+        ".env",
+        ".config",
+        ".hidden",
+        "report.txt",
+        "report.tmp",
+        "DS_Store",
+        "Thumbs.db.backup",
+        "System Volume Information.txt",
+    ] {
+        assert!(!transfer_name_matches_filter(name, &patterns), "{name}");
+    }
+}
+
+#[test]
 fn recursive_download_children_have_stable_root_scoped_ids() {
     let first_root = Uuid::new_v4();
     let second_root = Uuid::new_v4();
@@ -1165,6 +1201,82 @@ async fn recursive_discovery_materializes_nested_empty_directories() {
 
     assert!(summary.is_directory);
     assert!(local.path().join("root/nested").is_dir());
+}
+
+#[tokio::test]
+async fn recursive_download_default_filters_skip_system_entries_and_keep_user_dotfiles() {
+    let local = TestCacheDir::new();
+    fs::create_dir(local.path()).expect("local directory fixture");
+    let entries = [
+        (".DS_Store", false),
+        ("Thumbs.db", false),
+        (".directory", false),
+        (".Trash-1000", true),
+        (".ssh", true),
+        (".git", true),
+        (".env", false),
+        ("report.txt", false),
+    ]
+    .into_iter()
+    .map(|(name, directory)| DirectoryEntry {
+        name: name.to_owned(),
+        directory,
+        size: 1,
+    })
+    .collect();
+    let (client, server) = tokio::io::duplex(64 * 1024);
+    tokio::spawn(russh_sftp::server::run(
+        server,
+        DirectoryDiscoveryServer {
+            directories: HashMap::from([
+                ("/srv/root".to_owned(), entries),
+                ("/srv/root/.ssh".to_owned(), Vec::new()),
+                ("/srv/root/.git".to_owned(), Vec::new()),
+                (
+                    "/srv/root/.Trash-1000".to_owned(),
+                    vec![DirectoryEntry {
+                        name: "deleted.txt".to_owned(),
+                        directory: false,
+                        size: 1,
+                    }],
+                ),
+            ]),
+        },
+    ));
+    let root = SftpDownloadRoot::new(
+        Uuid::new_v4(),
+        "/srv/root".to_owned(),
+        local.path().to_owned(),
+        crate::config::SftpTransferFilterSettings::default().effective_patterns(),
+        true,
+    )
+    .expect("root request");
+    let (sender, mut receiver) = mpsc::channel(8);
+    let mut stream = Some(client);
+    let summary = discover_download_requests(
+        || std::future::ready(stream.take().context("fixture stream already opened")),
+        root,
+        sender,
+    )
+    .await
+    .expect("filtered download scan");
+    let mut names = HashSet::new();
+    while let Some(discovered) = receiver.recv().await {
+        if let SftpDiscoveredDownload::Request { request, .. } = discovered {
+            names.insert(request.name);
+        }
+    }
+    assert_eq!(
+        names,
+        HashSet::from(["root/.env".to_owned(), "root/report.txt".to_owned()])
+    );
+    assert_eq!(summary.discovered_files, 2);
+    assert_eq!(summary.skipped_entries, 0);
+    assert_eq!(summary.filtered_entries, 4);
+    assert!(summary.first_issue.is_none());
+    assert!(local.path().join("root/.ssh").is_dir());
+    assert!(local.path().join("root/.git").is_dir());
+    assert!(!local.path().join("root/.Trash-1000").exists());
 }
 
 #[tokio::test]

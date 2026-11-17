@@ -54,7 +54,7 @@ where
         discover_initialized_download_requests(&session, &root, discovered_tx, &cancellation).await;
     if result
         .as_ref()
-        .is_ok_and(|summary| summary.first_issue.is_none())
+        .is_ok_and(|summary| summary.skipped_entries == 0)
     {
         session.recycle();
     }
@@ -110,9 +110,9 @@ pub(super) async fn discover_initialized_download_requests(
     if transfer_name_matches_filter(&root.name, root.filter_patterns()) {
         return Ok(SftpDiscoverySummary {
             discovered_files: 0,
-            skipped_entries: 1,
-            first_issue: Some("Excluded by transfer filter".to_owned()),
-            is_directory: false,
+            filtered_entries: 1,
+            is_directory: root.expected_directory(),
+            ..SftpDiscoverySummary::default()
         });
     }
     cancellation.wait_until_running().await?;
@@ -148,6 +148,7 @@ pub(super) async fn discover_initialized_download_requests(
         return Ok(SftpDiscoverySummary {
             discovered_files: 1,
             skipped_entries: 0,
+            filtered_entries: 0,
             first_issue: None,
             is_directory: root.expected_directory(),
         });
@@ -193,7 +194,7 @@ pub(super) async fn discover_initialized_download_requests(
                 }
             };
             if transfer_name_matches_filter(&name, root.filter_patterns()) {
-                record_discovery_issue(&mut summary, "Excluded by transfer filter");
+                summary.filtered_entries = summary.filtered_entries.saturating_add(1);
                 continue;
             }
             let mut child_components = frame.local_components.clone();
