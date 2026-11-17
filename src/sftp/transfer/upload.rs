@@ -363,12 +363,22 @@ pub(super) async fn inspect_remote_upload_target(
     session: &RawSftpSession,
     path: &str,
 ) -> Result<Option<RemoteUploadFingerprint>> {
-    match timeout(REQUEST_TIMEOUT, session.lstat(path.to_owned())).await {
-        Ok(Ok(attrs)) if attrs.attrs.is_regular() => Ok(Some(RemoteUploadFingerprint {
-            size: attrs.attrs.size,
-            modified: attrs.attrs.mtime,
+    match remote_upload_entry_attributes(session, path).await? {
+        Some(attrs) if attrs.file_type().is_file() => Ok(Some(RemoteUploadFingerprint {
+            size: attrs.size,
+            modified: attrs.mtime,
         })),
-        Ok(Ok(_)) => anyhow::bail!("remote upload target is not a regular file"),
+        Some(_) => anyhow::bail!("remote upload target is not a regular file"),
+        None => Ok(None),
+    }
+}
+
+async fn remote_upload_entry_attributes(
+    session: &RawSftpSession,
+    path: &str,
+) -> Result<Option<FileAttributes>> {
+    match timeout(REQUEST_TIMEOUT, session.lstat(path.to_owned())).await {
+        Ok(Ok(attrs)) => Ok(Some(attrs.attrs)),
         Ok(Err(russh_sftp::client::error::Error::Status(status)))
             if status.status_code == StatusCode::NoSuchFile =>
         {
@@ -438,7 +448,9 @@ pub(super) async fn find_keep_both_path(
         };
         let candidate = format!("{parent}/{candidate_name}");
         validate_remote_path(&candidate)?;
-        if inspect_remote_upload_target(session, &candidate)
+        // Any existing entry occupies a candidate name. In particular, never
+        // follow a link or treat a directory as a failed file overwrite.
+        if remote_upload_entry_attributes(session, &candidate)
             .await?
             .is_none()
         {

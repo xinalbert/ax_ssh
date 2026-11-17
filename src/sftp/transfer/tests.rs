@@ -303,6 +303,7 @@ struct UploadTestServer {
     cancellation: TransferCancellation,
     files: Arc<Mutex<HashMap<String, Vec<u8>>>>,
     directories: Arc<Mutex<HashSet<String>>>,
+    symlinks: HashSet<String>,
 }
 
 fn upload_test_status(id: u32) -> Status {
@@ -352,6 +353,8 @@ impl russh_sftp::server::Handler for UploadTestServer {
             .contains(&path)
         {
             attrs.set_dir(true);
+        } else if self.symlinks.contains(&path) {
+            attrs.set_symlink(true);
         } else {
             return Err(StatusCode::NoSuchFile);
         }
@@ -496,17 +499,29 @@ async fn run_upload_test_with_close_policy(
     event_tx: &mpsc::Sender<SftpTransferEvent>,
     close_policy: UploadClosePolicy,
 ) -> Result<UploadOutcome> {
-    let (client, server) = tokio::io::duplex(64 * 1024);
-    russh_sftp::server::run(
-        server,
+    run_upload_test_with_peer(
+        request,
+        cancellation,
+        event_tx,
         UploadTestServer {
             close_policy,
             cancellation: cancellation.clone(),
             files: files.clone(),
             directories: Arc::new(Mutex::new(HashSet::from(["/srv".to_owned()]))),
+            symlinks: HashSet::new(),
         },
     )
-    .await;
+    .await
+}
+
+async fn run_upload_test_with_peer(
+    request: &SftpUploadRequest,
+    cancellation: &TransferCancellation,
+    event_tx: &mpsc::Sender<SftpTransferEvent>,
+    peer: UploadTestServer,
+) -> Result<UploadOutcome> {
+    let (client, server) = tokio::io::duplex(64 * 1024);
+    russh_sftp::server::run(server, peer).await;
     upload_initialized(client, request, cancellation, event_tx).await
 }
 
@@ -633,6 +648,85 @@ async fn upload_conflict_choices_preserve_or_publish_the_expected_remote_file() 
         b"new content"
     );
     fs::remove_file(path).expect("local upload fixture should be removed");
+}
+
+#[tokio::test]
+async fn upload_keep_both_skips_occupied_names_without_accepting_non_regular_targets() {
+    let local = TestCacheDir::new();
+    fs::create_dir(local.path()).expect("local upload directory");
+    let source = local.path().join("source.txt");
+    fs::write(&source, b"new content").expect("upload source");
+    let files = Arc::new(Mutex::new(HashMap::from([
+        ("/srv/report.txt".to_owned(), b"original".to_vec()),
+        ("/srv/report (3).txt".to_owned(), b"numbered".to_vec()),
+    ])));
+    let directories = Arc::new(Mutex::new(HashSet::from([
+        "/srv".to_owned(),
+        "/srv/report (1).txt".to_owned(),
+    ])));
+    let cancellation = TransferCancellation::new();
+    let peer = || UploadTestServer {
+        close_policy: UploadClosePolicy::Accept,
+        cancellation: cancellation.clone(),
+        files: files.clone(),
+        directories: directories.clone(),
+        symlinks: HashSet::from(["/srv/report (2).txt".to_owned()]),
+    };
+    let (event_tx, _events) = mpsc::channel(SFTP_TRANSFER_EVENT_CAPACITY);
+    let mut request = SftpUploadRequest::from_local_file(
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        "/srv/report.txt".to_owned(),
+        source,
+        11,
+        Vec::new(),
+    )
+    .expect("upload request");
+    request.set_conflict_choice(SftpConflictChoice::KeepBoth);
+    assert!(matches!(
+        run_upload_test_with_peer(&request, &cancellation, &event_tx, peer())
+            .await
+            .expect("occupied numbered names should be skipped"),
+        UploadOutcome::Published
+    ));
+    {
+        let files = files.lock().expect("remote files");
+        assert_eq!(files["/srv/report.txt"], b"original");
+        assert_eq!(files["/srv/report (3).txt"], b"numbered");
+        assert_eq!(files["/srv/report (4).txt"], b"new content");
+        assert_eq!(
+            files.len(),
+            3,
+            "no temporary file or non-regular replacement"
+        );
+    }
+
+    // Only candidate names may have arbitrary types. Reject a non-regular
+    // requested target both before prompting and after an explicit choice.
+    for path in ["/srv/report (1).txt", "/srv/report (2).txt"] {
+        for choice in [
+            None,
+            Some(SftpConflictChoice::KeepBoth),
+            Some(SftpConflictChoice::Overwrite),
+        ] {
+            let mut target = request.clone();
+            target.remote_path = path.to_owned();
+            target.name = path.rsplit('/').next().expect("target name").to_owned();
+            target.conflict_choice = choice;
+            let error = run_upload_test_with_peer(&target, &cancellation, &event_tx, peer())
+                .await
+                .err()
+                .expect("requested directory or link must remain rejected");
+            assert!(error.to_string().contains("not a regular file"));
+        }
+    }
+    assert_eq!(files.lock().expect("remote files").len(), 3);
+    assert!(
+        directories
+            .lock()
+            .expect("remote directories")
+            .contains("/srv/report (1).txt")
+    );
 }
 
 #[tokio::test]

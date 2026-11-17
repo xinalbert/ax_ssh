@@ -2143,7 +2143,9 @@ only to the files from one upload/drop intent in that SFTP worker. New uploads
 default to asking again. The worker rechecks the remote fingerprint before
 publishing an overwrite with the server's `posix-rename@openssh.com` extension;
 if the extension is unavailable or the target changed, the upload fails without
-replacing the original. Keep both chooses a numbered free name. Pending upload
+replacing the original. Keep both chooses a numbered free name, skipping names
+occupied by files, directories, or symbolic links without following or replacing
+those entries. An existing requested upload target must still be a regular file. Pending upload
 intents and prompts remain bounded, and closing the Tab drops their decisions.
 External edit auto upload defaults on, is debounced, and remains guarded by the observed fingerprint. Drag/drop accepts only a bounded path intent and reuses the normal
 bridge validation and transfer queue. Internal drag payloads carry an explicit
