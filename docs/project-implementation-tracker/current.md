@@ -14,7 +14,7 @@
 
 ## 当前状态
 
-- 阶段：验证中
+- 阶段：已完成
 - 开工判定：允许开工
 - 是否需要联网：是，已完成
 - 多 agent：未使用
@@ -25,28 +25,30 @@
 | --- | --- | --- | --- | --- |
 | R1 | completed | 干净工作区、分支和可用日期标签核对 | fetch、local/remote tags、master 对齐 | 今天无本地/远端标签，使用 2026-11-18 |
 | R2 | completed | 元数据同步与发布前校验 | release sync/verify、helper tests、fmt/check/Clippy/test | 14 项发布 helper 和 1038 项 Rust 测试通过 |
-| R3 | in_progress | 提交、推送 master、annotated tag 与远端核对 | staged diff、tag 类型/commit、remote refs | 先推 metadata commit，后推 tag；保留失败标签 |
+| R3 | completed | 提交、推送 master、annotated tag 与远端核对 | staged diff、tag 类型/commit、remote refs | master 先推 c84767b，tag 随后推送，Release 44213376608 已启动 |
 
 ## 已完成
 
-- 核对根发布约束、版本脚本及 Release 触发规则；本地/远端 master 均为 d7aa926，工作区干净。
-- 本地及远端均无 2026-11-18 日期标签，未发现本地相关失败/中断标签记录，选定首发日期标签。
+- 核对根发布约束、版本脚本及 Release 触发规则；发布前本地/远端 master 均为 d7aa926，工作区干净。
+- 发布前本地及远端均无 2026-11-18 日期标签，选定首发日期标签；没有移动、删除或复用既有 tag。
 - Cargo/lock/macOS short 同步为 2026.11.18，macOS bundle 为 20261118；14 项发布 helper 和完整 Rust 门禁通过。
+- 元数据提交 c84767b 已先推送 master；annotated 2026-11-18 随后创建并推送，远端 peeled commit 与 c84767b 一致。
+- Release [44213376608](https://github.com/xinalbert/ax_ssh/actions/runs/44213376608) 已确认处于 in_progress，head SHA 与标签目标一致。
 
 ## 验证
 
 - 已完成：分支/工作区/远端标签和发布流程核对；日期元数据 sync/verify、14 项发布 helper tests、fmt、locked/offline check、严格 all-target Clippy 和完整 1038 项测试（477 library + 561 binary，Doc tests 0）通过；Markdown/入口、项目 skill、tracker/diff 检查通过。
-- 未完成：版本提交、master/tag 推送与远端/Release 触发核对；其它平台和发布构建由 CI 验证。
+- 未完成：Release 的跨平台资产构建与最终发布由 CI 继续执行，尚未宣称发布完成。
 
 ## 风险与阻塞
 
 - 本机 macOS aarch64 只能验证原生构建；其它平台发布资产由既有 Release CI 验证。
-- 推送 annotated tag 将按仓库配置自动启动 Release 工作流；本轮用户已要求按该发布规则执行。
+- Release 工作流正在执行，任何后续失败都不能通过移动/复用 2026-11-18 标签处理。
 
 ## 下一步
 
-- 提交版本元数据，先推送 master，再复核标签未被占用，创建并推送 annotated tag，确认远端 ref 与 Release 触发。
+- 在 GitHub Actions 查看已启动的 Release；如需修复并重新发布，使用下一个未占用的同日修订标签。
 
 ## 最后更新时间
 
-- 2026-11-18 09:05 +0800
+- 2026-11-18 09:08 +0800
