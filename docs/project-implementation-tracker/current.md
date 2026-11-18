@@ -2,51 +2,51 @@
 
 ## 当前目标
 
-- 目标 ID：20261117-sftp-system-file-filters
-- 目标：补齐 Windows/Linux/macOS 常见系统杂项的 SFTP 默认过滤与可见配置，并按功能提交已完成改动。
-- 交付物：跨平台过滤预设、默认与持久化兼容、设置规则预览、上传/下载回归、双语说明和本地提交。
+- 目标 ID：20261118-release-tag
+- 目标：按仓库日期标签规则创建并推送 annotated `2026-11-18`，启动既有 Release 工作流。
+- 交付物：同步且已提交的 Cargo/macOS 发布元数据、发布检查、master 和 tag 的远端核对及实施记录。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：SFTP 过滤配置、设置规则预览、发现/worker/应用层的过滤计数与目录完成状态、相关回归、双语架构和完整实施记录；此前上传冲突与共享按钮按功能提交。
-- 不在本轮范围内：过滤所有隐藏文件、修改浏览器 Hidden 开关、SSH 信任/凭据/网络 API、依赖与 schema 升级、GUI 启动或截图、推送与发布。
+- 当前范围：`Cargo.toml`、`Cargo.lock`、`packaging/macos/Info.plist` 的日期版本，发布脚本/现有 Rust 门禁验证，以及 tracker。
+- 不在本轮范围内：应用行为、依赖升级、SSH 信任/凭据、工作流修改、移动/删除/复用已有 tag、GUI 启动或截图。
 
 ## 当前状态
 
-- 阶段：已完成
+- 阶段：验证中
 - 开工判定：允许开工
-- 是否需要联网：否
+- 是否需要联网：是，已完成
 - 多 agent：未使用
 
 ## 活动计划
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| F1 | completed | 过滤链路、默认及提交边界核对 | 配置、UI、上传/下载 matcher、已有验证记录 | 内置预设为空；此前两项已按功能提交 |
-| F2 | completed | 跨平台预设、默认和设置预览 | 默认/持久化/禁用与上传下载定向回归 | 配置层拥有规则；保留显式关闭与自定义选择 |
-| F3 | completed | 完整门禁、说明、构建与本地提交 | fmt/check/Clippy/test/build、文档/skill/tracker/diff | 1038 项测试通过，arm64 程序构建完成；实际 GUI/服务器和其它原生平台另验 |
+| R1 | completed | 干净工作区、分支和可用日期标签核对 | fetch、local/remote tags、master 对齐 | 今天无本地/远端标签，使用 2026-11-18 |
+| R2 | completed | 元数据同步与发布前校验 | release sync/verify、helper tests、fmt/check/Clippy/test | 14 项发布 helper 和 1038 项 Rust 测试通过 |
+| R3 | in_progress | 提交、推送 master、annotated tag 与远端核对 | staged diff、tag 类型/commit、remote refs | 先推 metadata commit，后推 tag；保留失败标签 |
 
 ## 已完成
 
-- 确认预设函数返回空列表且默认关闭，设置页只能在单行说明中展示预设；上传和下载已复用同一 basename 匹配器。
-- 上传共存修复提交为 `3594227`，设置/SFTP 按钮统一提交为 `998517f`；仅追加本地提交。
-- 已补齐 20 项跨平台系统杂项预设及设置预览，新配置/恢复默认启用；保留显式关闭与自定义选择。按规则过滤单独计数，避免正常目录下载被误报失败。
+- 核对根发布约束、版本脚本及 Release 触发规则；本地/远端 master 均为 d7aa926，工作区干净。
+- 本地及远端均无 2026-11-18 日期标签，未发现本地相关失败/中断标签记录，选定首发日期标签。
+- Cargo/lock/macOS short 同步为 2026.11.18，macOS bundle 为 20261118；14 项发布 helper 和完整 Rust 门禁通过。
 
 ## 验证
 
-- 已完成：本轮 13 项过滤定向回归及完整 1038 项测试（477 library + 561 binary，Doc tests 0）、fmt、locked/offline check、严格 all-target Clippy 和 build 全部通过；Slint 已重编译，`target/debug/ax_ssh` 为 arm64 Mach-O。Markdown/入口、翻译完整性/生成一致性、项目 skill、tracker 和暂存 diff 校验通过，按功能整理本地提交。
-- 未完成：GUI/真实服务器验收和其它平台原生 CI。
+- 已完成：分支/工作区/远端标签和发布流程核对；日期元数据 sync/verify、14 项发布 helper tests、fmt、locked/offline check、严格 all-target Clippy 和完整 1038 项测试（477 library + 561 binary，Doc tests 0）通过；Markdown/入口、项目 skill、tracker/diff 检查通过。
+- 未完成：版本提交、master/tag 推送与远端/Release 触发核对；其它平台和发布构建由 CI 验证。
 
 ## 风险与阻塞
 
-- 默认规则只排除常见系统杂项，保留 `.ssh`、`.git`、`.env` 等用户内容；已有配置的关闭状态保持。
-- 本机 macOS aarch64；不以本机回归替代其它平台原生 CI 或用户 GUI 验收。
+- 本机 macOS aarch64 只能验证原生构建；其它平台发布资产由既有 Release CI 验证。
+- 推送 annotated tag 将按仓库配置自动启动 Release 工作流；本轮用户已要求按该发布规则执行。
 
 ## 下一步
 
-- 用户使用新版程序，在 Settings > SFTP 查看默认规则；已有配置可点击“恢复平台默认值”启用，GUI 和真实服务器行为另行验收。
+- 提交版本元数据，先推送 master，再复核标签未被占用，创建并推送 annotated tag，确认远端 ref 与 Release 触发。
 
 ## 最后更新时间
 
-- 2026-11-17 15:20 +0800
+- 2026-11-18 09:05 +0800
