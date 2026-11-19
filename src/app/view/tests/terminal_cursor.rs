@@ -174,6 +174,34 @@ fn cursor_only_protocol_updates_reach_the_grid_without_replacing_models_or_focus
     }
 }
 
+#[test]
+fn disabling_cursor_blink_keeps_the_protocol_cursor_steady() {
+    std::thread::spawn(|| {
+        let harness = LayoutTestHarness::new();
+        let ui = &harness.ui;
+        let id = Uuid::from_u128(2);
+        let mut terminal = TerminalModel::new(80, 24, 10);
+        terminal.process(b"\x1b[?12hinput");
+        mount(&harness, false, id, &mut terminal);
+        let cursor = cursor_item(&harness, slint::Color::from_rgb_u8(0xcc, 0xcc, 0xcc));
+        assert!(cursor.is_visible());
+
+        ui.set_terminal_cursor_blink(false);
+        harness.settle();
+        let visible = cursor.is_visible();
+        harness
+            .time
+            .set(harness.time.get() + Duration::from_millis(1_060));
+        slint::platform::update_timers_and_animations();
+
+        assert!(visible, "disabling blink must not hide the protocol cursor");
+        assert_eq!(cursor.is_visible(), visible);
+        ui.hide().expect("hide steady cursor window");
+    })
+    .join()
+    .expect("steady cursor setting regression");
+}
+
 fn visible_text(ui: &AppWindow, expected: &str) -> bool {
     ItemRc::new_root(WindowInner::from_pub(ui.window()).component())
         .visit_descendants(|item| {
