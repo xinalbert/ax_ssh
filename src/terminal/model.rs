@@ -4,7 +4,6 @@ use super::*;
 use std::sync::mpsc::sync_channel;
 use std::time::Instant;
 
-use alacritty_terminal::event::WindowSize;
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::term::{Config as TermConfig, Osc52, TermMode};
 use alacritty_terminal::vte::ansi::Rgb;
@@ -34,8 +33,8 @@ impl TerminalModel {
             processor: Processor::new(),
             protocol_events,
             query_palette: TerminalQueryPalette::default(),
-            window_size: None,
-            pending_text_area_requests: Vec::new(),
+            grid_metrics: None,
+            pending_text_area_requests: 0,
             pending_cell_size_requests: 0,
             scrollback_lines,
             snapshot_lines: Vec::new(),
@@ -133,44 +132,20 @@ impl TerminalModel {
         self.processor.stop_sync(&mut self.term);
     }
 
-    /// Records measured physical cell dimensions and returns responses for
+    /// Records measured physical cell and text-area dimensions and returns responses for
     /// bounded `CSI 14 t` and `CSI 16 t` requests deferred until the first
     /// layout completed.
-    pub fn set_window_size(
-        &mut self,
-        columns: u32,
-        rows: u32,
-        cell_width: u32,
-        cell_height: u32,
-    ) -> Vec<Vec<u8>> {
-        let window_size = WindowSize {
-            num_lines: rows.min(u32::from(u16::MAX)) as u16,
-            num_cols: columns.min(u32::from(u16::MAX)) as u16,
-            cell_width: cell_width.min(u32::from(u16::MAX)) as u16,
-            cell_height: cell_height.min(u32::from(u16::MAX)) as u16,
-        };
-        if self.window_size.is_some_and(|current| {
-            current.num_lines == window_size.num_lines
-                && current.num_cols == window_size.num_cols
-                && current.cell_width == window_size.cell_width
-                && current.cell_height == window_size.cell_height
-        }) {
+    pub fn set_grid_metrics(&mut self, metrics: TerminalGridMetrics) -> Vec<Vec<u8>> {
+        if self.grid_metrics == Some(metrics) {
             return Vec::new();
         }
-        self.window_size = Some(window_size);
-        let mut responses = self
-            .pending_text_area_requests
-            .drain(..)
-            .filter_map(|formatter| protocol_response(formatter(window_size).into_bytes()))
-            .collect::<Vec<_>>();
-        let remaining = PROTOCOL_RESPONSE_CAPACITY.saturating_sub(responses.len());
+        self.grid_metrics = Some(metrics);
+        let text_area_requests = std::mem::take(&mut self.pending_text_area_requests);
         let cell_size_requests = std::mem::take(&mut self.pending_cell_size_requests);
-        responses.extend(
-            std::iter::repeat_with(|| cell_size_response(window_size))
-                .take(cell_size_requests.min(remaining))
-                .flatten(),
-        );
-        responses
+        std::iter::repeat_with(|| text_area_size_response(metrics))
+            .take(text_area_requests)
+            .chain(std::iter::repeat_with(|| cell_size_response(metrics)).take(cell_size_requests))
+            .collect()
     }
 
     /// Updates the configured base colors used to answer OSC color queries.
@@ -369,13 +344,10 @@ impl TerminalModel {
             };
             let (x, y) = if matches!(coordinate_encoding, MouseCoordinateEncoding::SgrPixels) {
                 let (max_x, max_y) = self
-                    .window_size
-                    .map(|size| {
-                        (
-                            usize::from(size.num_cols).saturating_mul(usize::from(size.cell_width)),
-                            usize::from(size.num_lines)
-                                .saturating_mul(usize::from(size.cell_height)),
-                        )
+                    .grid_metrics
+                    .map(|metrics| {
+                        let size = metrics.size();
+                        (size.pixel_width() as usize, size.pixel_height() as usize)
                     })
                     .unwrap_or((usize::MAX, usize::MAX));
                 (
@@ -559,15 +531,11 @@ impl TerminalModel {
                         responses.push(response);
                     }
                 }
-                TerminalProtocolEvent::TextAreaSizeRequest(formatter) => {
-                    if let Some(window_size) = self.window_size {
-                        if let Some(response) =
-                            protocol_response(formatter(window_size).into_bytes())
-                        {
-                            responses.push(response);
-                        }
-                    } else if self.pending_text_area_requests.len() < PROTOCOL_RESPONSE_CAPACITY {
-                        self.pending_text_area_requests.push(formatter);
+                TerminalProtocolEvent::TextAreaSizeRequest => {
+                    if let Some(metrics) = self.grid_metrics {
+                        responses.push(text_area_size_response(metrics));
+                    } else if self.pending_grid_request_capacity() > 0 {
+                        self.pending_text_area_requests += 1;
                     }
                 }
                 TerminalProtocolEvent::Title(title) => {
@@ -599,22 +567,20 @@ impl TerminalModel {
         if count == 0 {
             return;
         }
-        if let Some(window_size) = self.window_size {
+        if let Some(metrics) = self.grid_metrics {
             let remaining = PROTOCOL_RESPONSE_CAPACITY.saturating_sub(responses.len());
             responses.extend(
-                std::iter::repeat_with(|| cell_size_response(window_size))
-                    .take(count.min(remaining))
-                    .flatten(),
+                std::iter::repeat_with(|| cell_size_response(metrics)).take(count.min(remaining)),
             );
         } else {
-            let occupied = self
-                .pending_text_area_requests
-                .len()
-                .saturating_add(self.pending_cell_size_requests);
-            self.pending_cell_size_requests = self
-                .pending_cell_size_requests
-                .saturating_add(count.min(PROTOCOL_RESPONSE_CAPACITY.saturating_sub(occupied)));
+            self.pending_cell_size_requests += count.min(self.pending_grid_request_capacity());
         }
+    }
+
+    fn pending_grid_request_capacity(&self) -> usize {
+        PROTOCOL_RESPONSE_CAPACITY
+            - self.pending_text_area_requests
+            - self.pending_cell_size_requests
     }
 
     fn is_alternate_screen(&self) -> bool {
@@ -671,14 +637,13 @@ fn protocol_response(response: Vec<u8>) -> Option<Vec<u8>> {
     (!response.is_empty() && response.len() <= MAX_PROTOCOL_RESPONSE_BYTES).then_some(response)
 }
 
-fn cell_size_response(window_size: WindowSize) -> Option<Vec<u8>> {
-    protocol_response(
-        format!(
-            "\x1b[6;{};{}t",
-            window_size.cell_height, window_size.cell_width
-        )
-        .into_bytes(),
-    )
+fn text_area_size_response(metrics: TerminalGridMetrics) -> Vec<u8> {
+    let size = metrics.size();
+    format!("\x1b[4;{};{}t", size.pixel_height(), size.pixel_width()).into_bytes()
+}
+
+fn cell_size_response(metrics: TerminalGridMetrics) -> Vec<u8> {
+    format!("\x1b[6;{};{}t", metrics.cell_height(), metrics.cell_width()).into_bytes()
 }
 
 fn default_query_color(index: usize, palette: TerminalQueryPalette) -> Rgb {

@@ -1,5 +1,15 @@
 # 项目研究记录
 
+## 2026-11-19 终端文本区与 PTY 像素度量
+
+- 时间：2026-11-19 11:55 +0800
+- 检索问题：文本区、单格和 PTY 的像素尺寸应如何区分，混排字形宽度能否作为格坐标？
+- 检索原因：对照终端显示链路与协议，定位分数 DPI 下逐格取整造成的偏差。
+- 来源列表：[RFC 4254 §6.2](https://www.rfc-editor.org/rfc/rfc4254.html#section-6.2)、[RFC 4254 §6.7](https://www.rfc-editor.org/rfc/rfc4254.html#section-6.7)、[xterm 控制序列](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html)、[UAX #11](https://www.unicode.org/reports/tr11/)、[UAX #29](https://www.unicode.org/reports/tr29/)；锁定的 Alacritty Terminal 0.26.0、VTE 0.15.0 以及 Slint 度量源码。
+- 关键结论：xterm 区分文本区与单格的像素应答；SSH PTY 的行列尺寸与像素尺寸独立。锁定的 Alacritty 文本区应答按整数单格乘行列，无法保留分数 DPI 下的整个格网范围。Unicode 字符宽度和字素分段不等同于字体渲染宽度。
+- 对实施计划的影响：分别取整单格和整个格网；共享格网范围给查询、鼠标边界和 resize，不改变解析器的 Unicode 占格规则或 SSH 信任边界。
+- 未解决问题：未扩大 window-operation 查询覆盖范围；分数 DPI 跨屏、截图中的字形显示和真实远端 TUI 仍需实机验收。
+
 ## 2026-11-16 五项兼容依赖与 RSA 修复阻塞
 
 - 时间：2026-11-16 11:50 +0800

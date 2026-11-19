@@ -982,10 +982,12 @@ tab-local terminal connection notice deliberately remains non-blocking.
    hiding the protocol cursor. Terminal-local
    `OSC 4`, `OSC 10`, `OSC 11`, and `OSC 12` palette changes resolve into the
    same snapshot colors used for rendering and color-query replies. `CSI 14 t`
-   reports the measured text-area pixels and `CSI 16 t` reports the measured
-   cell height and width; both defer through the same bounded protocol queue
-   until layout metrics are known. Window-operation queries `CSI 13 t`, `CSI 15 t`,
-   and `CSI 19 t` remain unanswered because this model does not own window position
+   reports the physical extent of the text grid and `CSI 16 t` reports the rounded
+   physical cell height and width; both are deferred within a shared bound until
+   layout metrics are known. The grid extent multiplies fractional physical cell
+   dimensions by the row and column counts before rounding, and the same extent
+   bounds SGR pixel mouse reports and feeds local/SSH PTY resize. Window-operation
+   queries `CSI 13 t`, `CSI 15 t`, and `CSI 19 t` remain unanswered because this model does not own window position
    or full-screen geometry, and it never substitutes text-area dimensions for those
    values. Protocol callbacks use a 16-event bounded queue; overflow is logged and
    excess responses may be dropped, so this is a backpressure safety limit rather
@@ -1056,8 +1058,8 @@ tab-local terminal connection notice deliberately remains non-blocking.
    complete row count is sent through the existing PTY resize request.
    `AppState::resize_terminal_with_metrics(tab_id, ...)` is the single
    application entry for a UI grid change: it carries the character grid and
-   measured physical cell dimensions, requests the specified visible pane's
-   existing worker resize first, and then immediately resizes that Tab's local
+   measured fractional physical cell dimensions, requests the specified visible
+   pane's existing worker resize first, and then immediately resizes that Tab's local
    `TerminalModel`. Local and SSH workers receive both character and physical
    PTY dimensions; Telnet sends NAWS only after the peer accepts that option.
    Serial has no remote terminal-size contract, so its worker request is a no-op
@@ -1072,7 +1074,8 @@ tab-local terminal connection notice deliberately remains non-blocking.
    `10x3` history model reflows to the measured pane size during connection or
    authentication, including when no worker exists yet. If a worker exists,
    the same bounded resize path carries the latest dimensions; keyboard and
-   IME input still require a completed connection.
+   IME input still require a completed connection. A scale-factor or font-metric
+   change can update physical dimensions even when the character grid is unchanged.
    SSH and Telnet output crosses the worker boundary in bounded 16 KiB batches.
    A one-shot 16 ms flush is armed only after the output buffer becomes non-empty,
    so an idle connection has no recurring output timer. The first SSH output

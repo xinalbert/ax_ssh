@@ -13,11 +13,11 @@ use std::sync::Arc;
 use std::sync::mpsc::{Receiver, SyncSender, TrySendError};
 use std::time::Instant;
 
-use alacritty_terminal::event::{Event, EventListener, WindowSize};
+use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::term::{ClipboardType, Term};
 use alacritty_terminal::vte::ansi::{Processor, Rgb};
 
-use crate::terminal_dimensions::TerminalSize;
+use crate::terminal_dimensions::{TerminalGridMetrics, TerminalSize};
 
 const PROTOCOL_RESPONSE_CAPACITY: usize = 16;
 const MAX_PROTOCOL_RESPONSE_BYTES: usize = 4 * 1024;
@@ -26,7 +26,6 @@ const MAX_HYPERLINK_URI_BYTES: usize = 2 * 1024;
 pub const MAX_OSC52_CLIPBOARD_BYTES: usize = 64 * 1024;
 
 type ColorResponseFormatter = Arc<dyn Fn(Rgb) -> String + Send + Sync + 'static>;
-type TextAreaResponseFormatter = Arc<dyn Fn(WindowSize) -> String + Send + Sync + 'static>;
 pub type ClipboardLoadFormatter = Arc<dyn Fn(&str) -> String + Send + Sync + 'static>;
 
 /// One bounded output batch crossing a transport/application boundary.
@@ -56,7 +55,7 @@ impl TerminalOutputChunk {
 enum TerminalProtocolEvent {
     PtyWrite(Vec<u8>),
     ColorRequest(usize, ColorResponseFormatter),
-    TextAreaSizeRequest(TextAreaResponseFormatter),
+    TextAreaSizeRequest,
     Title(String),
     ResetTitle,
     Bell,
@@ -76,9 +75,7 @@ impl EventListener for TerminalEventListener {
             Event::ColorRequest(index, formatter) => {
                 TerminalProtocolEvent::ColorRequest(index, formatter)
             }
-            Event::TextAreaSizeRequest(formatter) => {
-                TerminalProtocolEvent::TextAreaSizeRequest(formatter)
-            }
+            Event::TextAreaSizeRequest(_) => TerminalProtocolEvent::TextAreaSizeRequest,
             Event::Title(title) => {
                 TerminalProtocolEvent::Title(bound_utf8(title, MAX_TERMINAL_TITLE_BYTES))
             }
@@ -413,8 +410,8 @@ pub struct TerminalModel {
     processor: Processor,
     protocol_events: Receiver<TerminalProtocolEvent>,
     query_palette: TerminalQueryPalette,
-    window_size: Option<WindowSize>,
-    pending_text_area_requests: Vec<TextAreaResponseFormatter>,
+    grid_metrics: Option<TerminalGridMetrics>,
+    pending_text_area_requests: usize,
     pending_cell_size_requests: usize,
     scrollback_lines: usize,
     snapshot_lines: Vec<Arc<TerminalStyledLine>>,

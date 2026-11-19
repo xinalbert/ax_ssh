@@ -1296,7 +1296,7 @@ fn restored_terminal_can_reflow_to_measured_size_before_a_worker_exists() {
     assert!(restored.terminal(tab_id).unwrap().worker.is_none());
     assert!(
         restored
-            .resize_terminal_with_metrics(tab_id, 100, 30, 8, 16)
+            .resize_terminal_with_metrics(tab_id, 100, 30, 8.0, 16.0)
             .unwrap()
     );
     let frame = restored

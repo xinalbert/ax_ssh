@@ -81,6 +81,55 @@ impl TerminalSize {
     }
 }
 
+/// Measured terminal grid with independently rounded cell and text-area pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TerminalGridMetrics {
+    size: TerminalSize,
+    cell_width: u32,
+    cell_height: u32,
+}
+
+impl TerminalGridMetrics {
+    pub fn from_physical_cells(
+        columns: usize,
+        rows: usize,
+        cell_width: f64,
+        cell_height: f64,
+    ) -> Option<Self> {
+        if !cell_width.is_finite()
+            || !cell_height.is_finite()
+            || cell_width <= 0.0
+            || cell_height <= 0.0
+        {
+            return None;
+        }
+        let grid = TerminalSize::model(columns, rows);
+        let round_pixels = |value: f64| value.round().max(1.0) as u32;
+        let size = TerminalSize {
+            pixel_width: round_pixels(f64::from(grid.columns) * cell_width),
+            pixel_height: round_pixels(f64::from(grid.rows) * cell_height),
+            ..grid
+        };
+        Some(Self {
+            size,
+            cell_width: round_pixels(cell_width),
+            cell_height: round_pixels(cell_height),
+        })
+    }
+
+    pub const fn size(self) -> TerminalSize {
+        self.size
+    }
+
+    pub(crate) const fn cell_width(self) -> u32 {
+        self.cell_width
+    }
+
+    pub(crate) const fn cell_height(self) -> u32 {
+        self.cell_height
+    }
+}
+
 pub fn validate_backend_size(columns: u32, rows: u32) -> Result<()> {
     if columns == 0 || rows == 0 {
         bail!("terminal dimensions must be greater than zero");
@@ -128,6 +177,24 @@ mod tests {
             (backend.pixel_width(), backend.pixel_height()),
             (1_024, 768)
         );
+    }
+
+    #[test]
+    fn fractional_physical_cells_round_after_multiplying_normalized_grid_dimensions() {
+        let metrics = TerminalGridMetrics::from_physical_cells(100, 24, 9.4, 18.6).unwrap();
+        assert_eq!(
+            metrics.size(),
+            TerminalSize::model_with_pixels(100, 24, 940, 446)
+        );
+        assert_eq!((metrics.cell_width(), metrics.cell_height()), (9, 19));
+
+        let clamped = TerminalGridMetrics::from_physical_cells(301, 2, 9.4, 18.6).unwrap();
+        assert_eq!(
+            clamped.size(),
+            TerminalSize::model_with_pixels(300, 3, 2820, 56)
+        );
+        assert!(TerminalGridMetrics::from_physical_cells(100, 24, 0.0, 18.6).is_none());
+        assert!(TerminalGridMetrics::from_physical_cells(100, 24, 9.4, f64::NAN).is_none());
     }
 
     #[test]

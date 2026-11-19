@@ -140,13 +140,25 @@ fn synchronized_output_capability_reply_survives_every_query_split() {
 }
 
 #[test]
-fn reports_text_area_pixels_after_measured_layout() {
-    let mut terminal = TerminalModel::new(80, 24, 10);
+fn reports_fractional_grid_pixels_after_measured_layout_and_pixel_only_resize() {
+    let mut terminal = TerminalModel::new(100, 24, 10);
 
     assert!(terminal.process_with_responses(b"\x1b[14t").is_empty());
     assert_eq!(
-        terminal.set_window_size(80, 24, 9, 18),
-        vec![b"\x1b[4;432;720t".to_vec()]
+        terminal.set_grid_metrics(
+            TerminalGridMetrics::from_physical_cells(100, 24, 9.4, 18.6).unwrap()
+        ),
+        vec![b"\x1b[4;446;940t".to_vec()]
+    );
+    let resized = TerminalGridMetrics::from_physical_cells(100, 24, 9.25, 18.75).unwrap();
+    assert!(terminal.set_grid_metrics(resized).is_empty());
+    assert_eq!(
+        terminal.process_with_responses(b"\x1b[14t\x1b[16t\x1b[18t"),
+        vec![
+            b"\x1b[4;450;925t".to_vec(),
+            b"\x1b[8;24;100t".to_vec(),
+            b"\x1b[6;19;9t".to_vec()
+        ]
     );
 }
 
@@ -167,12 +179,13 @@ fn reports_cell_pixels_after_measured_layout() {
     assert!(terminal.process_with_responses(b"\x1b[1").is_empty());
     assert!(terminal.process_with_responses(b"6t").is_empty());
     assert_eq!(
-        terminal.set_window_size(80, 24, 9, 18),
-        vec![b"\x1b[6;18;9t".to_vec()]
+        terminal
+            .set_grid_metrics(TerminalGridMetrics::from_physical_cells(80, 24, 9.4, 18.6).unwrap()),
+        vec![b"\x1b[6;19;9t".to_vec()]
     );
     assert_eq!(
         terminal.process_with_responses(b"\x1b[16t"),
-        vec![b"\x1b[6;18;9t".to_vec()]
+        vec![b"\x1b[6;19;9t".to_vec()]
     );
 }
 
@@ -945,8 +958,9 @@ fn sgr_pixel_mode_remains_an_extension_of_sgr_mouse_mode() {
 
 #[test]
 fn clamps_sgr_pixel_mouse_coordinates_to_the_measured_text_area() {
-    let mut terminal = TerminalModel::new(80, 24, 10);
-    terminal.set_window_size(80, 24, 10, 20);
+    let mut terminal = TerminalModel::new(100, 24, 10);
+    let metrics = TerminalGridMetrics::from_physical_cells(100, 24, 9.4, 18.6).unwrap();
+    terminal.set_grid_metrics(metrics);
     terminal.process(b"\x1b[?1000;1006;1016h");
     let event = TerminalMouseEvent {
         kind: TerminalMouseEventKind::Press,
@@ -961,8 +975,12 @@ fn clamps_sgr_pixel_mouse_coordinates_to_the_measured_text_area() {
         Some(b"\x1b[<0;1;1M".to_vec())
     );
     assert_eq!(
+        terminal.encode_mouse_event_with_pixels(event, 939, 446),
+        Some(b"\x1b[<0;939;446M".to_vec())
+    );
+    assert_eq!(
         terminal.encode_mouse_event_with_pixels(event, 9_999, 9_999),
-        Some(b"\x1b[<0;800;480M".to_vec())
+        Some(b"\x1b[<0;940;446M".to_vec())
     );
 }
 

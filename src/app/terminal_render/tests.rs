@@ -97,6 +97,41 @@ fn compatible_symbol_runs_batch_without_crossing_style_or_combining_boundaries()
 }
 
 #[test]
+fn mixed_latin_han_and_zwj_emoji_keep_cell_positions_through_reflow() {
+    let mut terminal = ax_ssh::terminal::TerminalModel::new(20, 3, 10);
+    let text = "A中\u{301}👩\u{200d}💻B文C";
+    terminal.process(format!("\x1b[3;1H{text}").as_bytes());
+    terminal.resize(10, 3);
+
+    let narrow = terminal.snapshot();
+    assert_eq!((narrow.cursor_row, narrow.cursor_column), (2, 1));
+    let rendered = render_terminal(narrow, settings());
+    let positions = rendered.lines[1]
+        .runs
+        .iter()
+        .map(|run| (run.text.as_str(), run.column, run.cells))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        positions,
+        [
+            ("A", 0, 1),
+            ("中\u{301}", 1, 2),
+            ("👩\u{200d}💻", 3, 4),
+            ("B", 7, 1),
+            ("文", 8, 2),
+        ]
+    );
+    assert_eq!(rendered.lines[2].runs[0].text.trim_end(), "C");
+    assert_eq!(rendered.lines[2].runs[0].column, 0);
+    assert_eq!(terminal.selection_text(1, 0, 2, 0), text);
+
+    terminal.resize(20, 3);
+    let wide = terminal.snapshot();
+    assert_eq!((wide.cursor_row, wide.cursor_column), (2, 11));
+    assert_eq!(terminal.selection_text(2, 0, 2, 10), text);
+}
+
+#[test]
 fn text_symbol_fallback_keeps_program_colors_and_original_characters() {
     let mut terminal = ax_ssh::terminal::TerminalModel::new(80, 3, 10);
     let text = "↳⎿↳✳✻·✻✽✻✶·";

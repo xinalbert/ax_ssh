@@ -382,6 +382,7 @@ export component TerminalPane inherits Rectangle {
     private property <length> cell-height:
         max(root.font-cell-height,
             root.font-cell-height * root.terminal-line-height-percent / 100);
+    private property <length> physical-pixel: 1phx;
     // grid-clip is the VerticalLayout's stretched content item, so this uses
     // the pane's actual inner width after its horizontal padding.
     private property <int> terminal-columns:
@@ -752,6 +753,9 @@ export component TerminalPane inherits Rectangle {
 
     changed terminal-columns => { root.schedule-terminal-size-update(); }
     changed terminal-rows => { root.schedule-terminal-size-update(); }
+    changed cell-width => { root.schedule-terminal-size-update(); }
+    changed cell-height => { root.schedule-terminal-size-update(); }
+    changed physical-pixel => { root.schedule-terminal-size-update(); }
     changed terminal-font-family => { root.schedule-terminal-size-update(); }
     changed terminal-font-size => { root.schedule-terminal-size-update(); }
     changed terminal-line-height-percent => { root.schedule-terminal-size-update(); }

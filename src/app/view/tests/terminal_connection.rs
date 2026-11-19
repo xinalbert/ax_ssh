@@ -71,6 +71,43 @@ fn connecting_terminals_report_real_geometry_in_main_and_detached_windows() {
 }
 
 #[test]
+fn terminal_reports_geometry_again_when_only_the_scale_factor_changes() {
+    std::thread::spawn(|| {
+        let harness = LayoutTestHarness::new();
+        let ui = &harness.ui;
+        let id = Uuid::from_u128(1);
+        ui.set_detached_window(true);
+        ui.set_active_tab_kind("terminal".into());
+        ui.set_terminal_panes(ModelRc::new(VecModel::from(vec![connecting_pane(id)])));
+        let requests = Rc::new(RefCell::new(Vec::new()));
+        let received = requests.clone();
+        let weak = ui.as_weak();
+        ui.on_resize_terminal(move |_, columns, rows, width, height| {
+            let scale = weak.unwrap().window().scale_factor();
+            received
+                .borrow_mut()
+                .push((columns, rows, width, height, scale));
+        });
+        ui.show().unwrap();
+        harness.window.set_size(slint::PhysicalSize::new(1000, 720));
+        harness.settle();
+        let original = *requests.borrow().last().expect("initial resize");
+        requests.borrow_mut().clear();
+        ui.window()
+            .dispatch_event(WindowEvent::ScaleFactorChanged { scale_factor: 1.25 });
+        harness.window.set_size(slint::PhysicalSize::new(1250, 900));
+        harness.settle();
+        let measured = *requests.borrow().last().expect("scale-factor resize");
+        assert_eq!((measured.0, measured.1), (original.0, original.1));
+        assert_eq!(measured.4, 1.25);
+        assert!(measured.2 > 0.0 && measured.3 > 0.0);
+        ui.hide().unwrap();
+    })
+    .join()
+    .expect("fractional terminal scale regression");
+}
+
+#[test]
 fn sidebar_connection_moves_focus_before_login_and_does_not_buffer_enter() {
     for collapsed in [false, true] {
         std::thread::spawn(move || {

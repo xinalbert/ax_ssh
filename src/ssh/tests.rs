@@ -336,6 +336,7 @@ async fn external_agent_signer_authenticates_against_a_trusted_server() {
                 send_initial_prompt: false,
                 x11_requests: None,
                 pty_modes: None,
+                window_size: None,
             },
         )
         .await
@@ -418,6 +419,8 @@ struct TestServer {
     send_initial_prompt: bool,
     x11_requests: Option<mpsc::UnboundedSender<()>>,
     pty_modes: Option<mpsc::UnboundedSender<Vec<(russh::Pty, u32)>>>,
+    window_size:
+        Option<tokio::sync::watch::Sender<Option<crate::terminal_dimensions::TerminalSize>>>,
 }
 
 impl TestServer {
@@ -427,6 +430,7 @@ impl TestServer {
             send_initial_prompt: true,
             x11_requests: None,
             pty_modes: None,
+            window_size: None,
         }
     }
 
@@ -438,6 +442,7 @@ impl TestServer {
             send_initial_prompt: false,
             x11_requests: None,
             pty_modes: Some(pty_modes),
+            window_size: None,
         }
     }
 }
@@ -537,12 +542,22 @@ impl server::Handler for TestServer {
     async fn window_change_request(
         &mut self,
         channel: russh::ChannelId,
-        _columns: u32,
-        _rows: u32,
-        _pixel_width: u32,
-        _pixel_height: u32,
+        columns: u32,
+        rows: u32,
+        pixel_width: u32,
+        pixel_height: u32,
         session: &mut server::Session,
     ) -> Result<(), Self::Error> {
+        if let Some(window_size) = &self.window_size {
+            window_size.send_replace(Some(
+                crate::terminal_dimensions::TerminalSize::backend_with_pixels(
+                    columns,
+                    rows,
+                    pixel_width,
+                    pixel_height,
+                ),
+            ));
+        }
         session.channel_success(channel)?;
         Ok(())
     }
@@ -932,6 +947,8 @@ fn worker_errors_are_bounded_on_character_boundaries() {
 
 #[tokio::test]
 async fn probe_then_password_login_preserves_host_key_verification() {
+    use crate::terminal_dimensions::{TerminalGridMetrics, TerminalSize};
+
     let mut rng = StdRng::seed_from_u64(42);
     let host_key = russh::keys::PrivateKey::random(&mut rng, russh::keys::Algorithm::Ed25519)
         .expect("test host key should be generated");
@@ -951,6 +968,7 @@ async fn probe_then_password_login_preserves_host_key_verification() {
     let address = listener
         .local_addr()
         .expect("test SSH listener should have an address");
+    let (window_size_tx, mut window_size_rx) = tokio::sync::watch::channel(None);
     let server_task = tokio::spawn(async move {
         let mut sessions = Vec::new();
         for _ in 0..4 {
@@ -958,10 +976,16 @@ async fn probe_then_password_login_preserves_host_key_verification() {
                 .accept()
                 .await
                 .expect("test SSH connection should be accepted");
-            let session =
-                server::run_stream(server_config.clone(), stream, TestServer::password_only())
-                    .await
-                    .expect("test SSH session should start");
+            let session = server::run_stream(
+                server_config.clone(),
+                stream,
+                TestServer {
+                    window_size: Some(window_size_tx.clone()),
+                    ..TestServer::password_only()
+                },
+            )
+            .await
+            .expect("test SSH session should start");
             sessions.push(tokio::spawn(session));
         }
         sessions
@@ -1030,8 +1054,16 @@ async fn probe_then_password_login_preserves_host_key_verification() {
         .await
         .expect("SSH worker should report connection promptly");
     assert_eq!(connected, Some(SshSessionEvent::Connected));
+    let size = TerminalGridMetrics::from_physical_cells(100, 30, 9.4, 18.6)
+        .unwrap()
+        .size();
     worker
-        .request_resize(100, 30)
+        .request_resize_with_pixels(
+            size.columns(),
+            size.rows(),
+            size.pixel_width(),
+            size.pixel_height(),
+        )
         .expect("SSH worker should accept terminal resize");
     let resized = timeout(Duration::from_secs(2), async {
         loop {
@@ -1050,6 +1082,18 @@ async fn probe_then_password_login_preserves_host_key_verification() {
             rows: 30,
         })
     );
+    let received_size = timeout(
+        Duration::from_secs(2),
+        window_size_rx.wait_for(Option::is_some),
+    )
+    .await
+    .expect("peer should receive window-change promptly")
+    .expect("peer should keep the window size channel alive");
+    assert_eq!(
+        *received_size,
+        Some(TerminalSize::backend_with_pixels(100, 30, 940, 558))
+    );
+    drop(received_size);
     worker
         .request_send(b"whoami\r".to_vec())
         .expect("SSH worker should accept terminal input");
@@ -1142,6 +1186,7 @@ async fn x11_request_does_not_prepare_a_local_server_before_a_remote_channel_ope
                 send_initial_prompt: true,
                 x11_requests: Some(x11_request_tx.clone()),
                 pty_modes: None,
+                window_size: None,
             };
             tokio::spawn(
                 server::run_stream(server_config.clone(), stream, handler)
@@ -1265,6 +1310,7 @@ async fn private_key_login_opens_interactive_shell() {
                     send_initial_prompt: true,
                     x11_requests: None,
                     pty_modes: None,
+                    window_size: None,
                 },
             )
             .await

@@ -281,17 +281,12 @@ pub(super) fn wire_input(
                     .upgrade()
                     .map(|ui| f64::from(ui.window().scale_factor()).max(0.01))
                     .unwrap_or(1.0);
-                let to_physical = |value: f32| {
-                    (f64::from(value).max(0.0) * scale_factor)
-                        .round()
-                        .clamp(1.0, f64::from(u32::MAX)) as u32
-                };
                 app.resize_terminal_with_metrics(
                     tab_id,
                     columns,
                     rows,
-                    to_physical(cell_width),
-                    to_physical(cell_height),
+                    f64::from(cell_width) * scale_factor,
+                    f64::from(cell_height) * scale_factor,
                 )
             });
         match result {

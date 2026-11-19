@@ -1,6 +1,7 @@
 //! Tab terminal state without generated UI types.
 
 use super::*;
+use ax_ssh::terminal_dimensions::TerminalGridMetrics;
 
 impl AppState {
     pub(in crate::app) fn active_terminal_mut(&mut self) -> Option<&mut TerminalTabState> {
@@ -20,7 +21,7 @@ impl AppState {
         columns: u32,
         rows: u32,
     ) -> Result<bool> {
-        self.resize_terminal_with_metrics(tab_id, columns, rows, 0, 0)
+        self.resize_terminal_with_metrics(tab_id, columns, rows, 0.0, 0.0)
     }
 
     pub(in crate::app) fn resize_terminal_with_metrics(
@@ -28,8 +29,8 @@ impl AppState {
         tab_id: Uuid,
         columns: u32,
         rows: u32,
-        cell_width: u32,
-        cell_height: u32,
+        physical_cell_width: f64,
+        physical_cell_height: f64,
     ) -> Result<bool> {
         let terminal = self
             .terminal_mut(tab_id)
@@ -38,16 +39,19 @@ impl AppState {
             .terminal
             .as_ref()
             .context("terminal tab has no terminal model")?;
-        let size = TerminalSize::model_with_pixels(
+        let metrics = TerminalGridMetrics::from_physical_cells(
             columns as usize,
             rows as usize,
-            columns.saturating_mul(cell_width),
-            rows.saturating_mul(cell_height),
+            physical_cell_width,
+            physical_cell_height,
+        );
+        let size = metrics.map_or_else(
+            || TerminalSize::model(columns as usize, rows as usize),
+            TerminalGridMetrics::size,
         );
         let characters_changed = current_size.size().columns() != size.columns()
             || current_size.size().rows() != size.rows();
-        let has_window_metrics = cell_width > 0 && cell_height > 0;
-        if !characters_changed && !has_window_metrics {
+        if !characters_changed && metrics.is_none() {
             return Ok(false);
         }
         if let Some(worker) = terminal.worker.as_ref() {
@@ -62,11 +66,7 @@ impl AppState {
             .terminal
             .as_mut()
             .context("terminal tab has no terminal model")?;
-        let responses = if has_window_metrics {
-            model.set_window_size(size.columns(), size.rows(), cell_width, cell_height)
-        } else {
-            Vec::new()
-        };
+        let responses = metrics.map_or_else(Vec::new, |metrics| model.set_grid_metrics(metrics));
         let sent_protocol_response = !responses.is_empty();
         if characters_changed && model.resize(size.columns() as usize, size.rows() as usize) {
             terminal.discard_pending_terminal_snapshot();

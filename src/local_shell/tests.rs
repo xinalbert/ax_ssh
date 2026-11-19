@@ -185,9 +185,12 @@ fn default_shell_fallback_matches_the_platform() {
 
 #[test]
 fn local_pty_size_includes_physical_terminal_dimensions() {
-    let size = pty_size(TerminalSize::backend_with_pixels(80, 24, 720, 432));
-    assert_eq!((size.cols, size.rows), (80, 24));
-    assert_eq!((size.pixel_width, size.pixel_height), (720, 432));
+    let metrics =
+        crate::terminal_dimensions::TerminalGridMetrics::from_physical_cells(100, 24, 9.4, 18.6)
+            .unwrap();
+    let size = pty_size(metrics.size());
+    assert_eq!((size.cols, size.rows), (100, 24));
+    assert_eq!((size.pixel_width, size.pixel_height), (940, 446));
 }
 
 #[cfg(target_os = "macos")]
