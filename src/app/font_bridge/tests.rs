@@ -192,6 +192,21 @@ fn shortcut_discovery_and_registration_invalidate_cached_choices_in_the_slint_co
             }
         }
         slint::platform::set_platform(Box::new(TestPlatform)).unwrap();
+        // Generic-family overrides still append native system families. Keep
+        // this cache-invalidation fixture independent of the runner's fonts,
+        // while retaining the shared collection used by the real Slint context.
+        let window = MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer);
+        i_slint_core::window::WindowInner::from_pub(window.window())
+            .context()
+            .font_context()
+            .borrow_mut()
+            .inner = i_slint_core::textlayout::sharedparley::parley::FontContext {
+            collection: fontique::Collection::new(fontique::CollectionOptions {
+                shared: true,
+                system_fonts: false,
+            }),
+            source_cache: Default::default(),
+        };
         let mut collection = slint::fontique_011::shared_collection();
         let missing = "AxSSH Missing Native Fixture";
         collection.register_fonts(
@@ -211,6 +226,7 @@ fn shortcut_discovery_and_registration_invalidate_cached_choices_in_the_slint_co
                 [id].into_iter(),
             );
         }
+        assert_eq!(native_shortcut_families(&mut collection), [missing]);
         let mut registry = FontRegistry::new();
         for family in [BUNDLED_UI_FONT_FAMILY, TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY] {
             registry
@@ -226,7 +242,10 @@ fn shortcut_discovery_and_registration_invalidate_cached_choices_in_the_slint_co
         let primary = "AxSSH Late Primary Fixture";
         let generation = registry.generation_as_slint_int();
         let before = terminal_shortcut_font_families(primary, generation);
-        assert!(before.iter().all(|family| family == BUNDLED_UI_FONT_FAMILY));
+        assert!(
+            before.iter().all(|family| family == BUNDLED_UI_FONT_FAMILY),
+            "initial shortcut families: {before:?}"
+        );
         let candidate = "AxSSH Discovered Native Fixture";
         collection.register_fonts(
             fontique::Blob::new(Arc::new(EMBEDDED_UI_FONT_FILES[1].to_vec())),
