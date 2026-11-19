@@ -2,15 +2,15 @@
 
 ## 当前目标
 
-- 目标 ID：20261119-terminal-shortcut-system-fonts
-- 目标：`⌘`、`⌃` 采用所选字体优先、缺字时系统字体回退、内置字体兜底的覆盖解析，取消固定字体与固定比例缩字号。
-- 交付物：快捷键字形解析改动、本机完整门禁证据与中英架构说明；实现已通过独立审查，用户视觉验收仍待完成。
+- 目标 ID：20261119-windows-drag-resize-guard
+- 目标：在 `vendor/i-slint-backend-winit/` 的 Windows 边缘缩放路径加入最大化/全屏守卫，并在 cursor-move 与 press 两侧双重校验 resize 方向，预防 winit 0.30.13 `dragging` 标志卡死导致窗口拖动直到重启才恢复（用户实机现象：Windows 菜单栏拖不动、重启恢复）。
+- 交付物：vendor backend 双侧守卫与根 Cargo 集成回归、本机门禁证据、双语契约；独立审查结论与 Windows 实机用户验收交接。
 
 ## 项目边界
 
 - 根目录：`<repo-root>`
-- 当前范围：快捷键字形的字体解析与展示（`src/app/font_bridge.rs`、`src/app/terminal_render/typography.rs`、`src/app/view/terminal.rs`、`ui/components/terminal-grid.slint`、`ui/terminal-pane.slint`）、双语架构说明、验证与实施记录；保留此前未提交的终端像素度量等改动。
-- 不在本轮范围内：Telnet NVT、SSH 信任与凭据、全窗口或屏幕几何查询、Unicode 宽度策略重写、依赖升级和发布操作。
+- 当前范围：`vendor/i-slint-backend-winit/drag_resize_window.rs`、`vendor/i-slint-backend-winit/winitwindowadapter.rs`、`tests/window_resize.rs`、Cargo 补丁说明与双语架构和跟踪记录；守卫只属于 UI backend 边界，不改依赖版本或 CI 矩阵。
+- 不在本轮范围内：SSH/安全边界、字体、Tab 策略、winit/Slint 版本升级、macOS/Linux 与正常状态下的拖动/缩放行为变化、上游 winit 源码改造。
 
 ## 当前状态
 
@@ -23,32 +23,33 @@
 
 | Step | Status | Deliverable | Verification | Notes |
 | --- | --- | --- | --- | --- |
-| S1 | completed | 所选字体优先、系统回退、内置兜底的快捷键字形解析 | 定向 RED/GREEN 16 项、字体注册/发现刷新、真实字体数据与缺字排字 | 委派的实现子任务已按用户要求停止，未创建 Worker 记录 |
-| S2 | completed | 双语契约与本机完整验证、新构建 | fmt/check/严格 Clippy/test/build、diff | 父控重跑四项门禁均退出码 0，1049 项测试通过 |
-| S3 | completed | 独立实现审查与验收边界交接 | 实际源码与原始测试日志审查结论 APPROVE | GUI 字形由用户确认，其它平台由原生 CI |
+| W1 | completed | Windows 边缘缩放双侧守卫及旧方向清理，不吞普通 press | 根 Cargo 回归获得真实行为 RED 后 GREEN | 用户要求停止原实现子任务，由主控接手完成 |
+| W2 | completed | 本机完整门禁与 diff 证据 | fmt/check/严格 Clippy/test/build、diff、tracker/文档校验均 exit 0；1056 passed | 使用根 Cargo 测试入口；Windows 原生构建留原生 CI |
+| W3 | completed | 独立审查与 Windows 待验收项交接 | 最终 APPROVE；已登记菜单栏拖动、边缘缩放、最大化交互复测步骤 | 完成的是审查与交接，Windows 实机与原生 CI 仍未验证 |
 
 ## 已完成
 
-- 委派的实现子任务已按用户要求停止，当前没有进行中的实现；最终源码只把 `⌘`/`⌃` 的角色字体改为按实际覆盖解析：所选字族优先 → 预先保存的平台 Monospace 与原始 Common/Han 候选 → 后台发现的有界系统等宽字族 → 已注册内置字族兜底。
-- 字号不再缩放，协议列宽、原始文字、选区/复制与按键处理保持不变；本轮不声明墨迹必然容纳于单格（实测系统字形的墨迹宽度可超过所选字体的窄格）。
-- 父控独立重跑 `cargo check --locked --offline`、严格 `cargo clippy --all-targets --locked --offline -- -D warnings`、`cargo test --locked --offline`（478 library + 571 binary 共 1049 项，Doc tests 0）与 `cargo build --locked --offline`，退出码均为 0；`cargo fmt --all -- --check` 与 `git diff --check` 此前均为 0。
-- 子任务定向证据：快捷键 16 项、`app::font_bridge::tests` 20 项、`terminal_typography` 8 项、`terminal_render` 28 项通过，Slint 由 Cargo 重新编译；中英架构说明已与新的解析顺序同步。
-- 独立 reviewer 审查实际差异与原始日志后结论为 APPROVE，未发现阻止本地提交的新增源码缺陷。本机 `--target aarch64-apple-darwin` 的 check 与严格 all-target Clippy 亦均退出码 0。
+- 已知触发路径与本地证据逐行核对：`vendor/i-slint-backend-winit/drag_resize_window.rs:13` 在窗口 `!is_decorated() && is_resizable()` 时缓存缩放方向，未按最大化/全屏状态跳过；`winitwindowadapter.rs:1257-1266` 缓存方向、`1304-1306` 左键 press 命中缓存方向即调用 `drag_resize_window` 并吞掉 press；锁定 winit 0.30.13 `platform_impl/windows/window.rs:492-528` 的 `handle_os_dragging` 仅设置 `dragging` 标志且已置位时早退，`platform_impl/windows/event_loop.rs:1207-1216` 只在 `WM_EXITSIZEMOVE` 复位；上游 issue 4821 记录该标志可卡死、PR 4825 为上游修复方向（是否已合入/发布不作确定）。
+- 用户指出子任务反复重试并要求主控接手后，原实现子任务已停止。独立 vendor crate 测试存在 workspace/features/dev-dependency 阻塞，不把这些环境/入口错误当作产品回归；改用根 Cargo 集成测试编译真实补丁模块，现有 CI 自动覆盖，不增加依赖或修改矩阵。
+- 主控完成 Windows 最大化/全屏 hover/press 双侧校验，阻断时清旧方向、恢复默认光标且保留 Slint press；非 Windows 短路不查询原生状态，保持原行为。按下回归先实际失败（0 passed/1 failed，exit 101），补齐实现后 4 项定向测试通过（exit 0），再补普通缩放/恢复和八方向回归。双语契约和来源已同步。
+- 独立 reviewer 针对原审查阻塞项复核真实文件、原始日志与当前暂存内容，最终 APPROVE；确认仅调整测试模块位置消除严格 Clippy 错误，原生产算法未再改变。用户已授权收尾并本地提交，全部改动构成一个 Windows backend 修复主题。
+- 交接限制：上一终端字体目标已本地提交为 `16dc858` 与 `6dc6c1a`，用户 GUI 视觉验收仍未完成，该限制继续保留。
 
 ## 验证
 
-- 已完成：本机 fmt/check/严格 Clippy/完整测试/build 与 diff 检查（退出码 0），以及上述快捷键、字体注册、终端排字与渲染定向回归；证据日志为 `axssh-precommit-validation.log`、`shortcut-font-tdd/green-shortcuts-final.log` 与 `shortcut-font-tdd/static-checks.log`。
-- 未完成：用户对本机新构建的视觉验收；Windows/Linux/Intel macOS 原生 CI。单格无重叠/无裁切未主张；本地提交由主控按像素几何与字体回退两个主题整理，不推送或发布。
+- 已完成：press 回归真实 RED/GREEN；最终定向 7 项通过，全套 1056 项通过（478 library + 571 binary + 7 integration）。本机 `aarch64-apple-darwin` check、严格 all-target Clippy、fmt/test/build、Markdown/入口、tracker、diff 均 exit 0；原始输出与退出码见授权 scratch 的 `axssh-windows-drag-fix/parent/validation.log`。Clippy 曾发现测试模块后仍有生产 helper，已移到模块前且重验通过，失败日志单独保留。
+- 未完成：Windows 原生 CI 与用户实机复测；不宣称 Windows 已验证修复。项目 skill 标准 validator 已通过。
 
 ## 风险与阻塞
 
-- 保持 Slint 负责实际布局、Rust 负责协议和 transport；不以排版字形宽度修改模型列宽，也不以固定缩放掩盖超宽问题。
-- 系统字体的覆盖与轮廓随平台和已安装字体变化，实际回退字族只能由真实排字结果确定；不能以存在字形或等宽标志代替排字验证。
+- 上游根因不能由本仓库单独证明："重启恢复"与 `dragging` 卡死一致，但不能据此宣称已证明用户现象的全部根因；守卫只是对已知触发路径的预防，不能治愈已卡死的进程（需重启一次）。
+- 保持锁定 winit 0.30.13 版本与上游源码不变，改动仅限 `vendor/i-slint-backend-winit/` 本地补丁边界；vendor 不得承载 AxSSH UI、会话或 SSH 状态。
+- Windows 实机行为无法在本机验证；本机门禁、独立审查与交接完成也不等于 Windows 原生验收通过。
 
 ## 下一步
 
-- 用户以本机新构建复查 `⌘`/`⌃` 实际字形及跨屏度量；其它平台交由原生 CI。当前无活跃实现任务；仅整理并验证本地提交，不继续扩大功能实验。
+- 按用户授权整理单个本地修复提交，不推送或发布；用户在 Windows 新构建上重启一次后，复测“最大化→抓边缘→还原→拖菜单栏”及普通边缘缩放。其余平台交原生 CI，不扩大功能范围。
 
 ## 最后更新时间
 
-- 2026-11-19 15:08 +0800
+- 2026-11-19 18:35 +0800

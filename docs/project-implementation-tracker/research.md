@@ -953,3 +953,13 @@
 - 关键结论：XLaunch 保存 XML，包含 WindowMode、ClientMode、Display、Clipboard、ClipboardPrimary、Wgl、DisableAC、ExtraParams；它除启动服务器外，还能启动本地/远端程序。Display=-1 采用自动显示号。直接运行 XLaunch -run 会让 AxSSH 无法可靠获取自动显示号，因此读取本机服务器字段并构造独立参数更符合现有 endpoint/信任所有权。
 - 对实施计划的影响：增加独立 windows_app_path 与 xlaunch_config_path，保留旧 Custom 字段；明确选择 Xming/VcXsrv 才应用覆盖。只接受 NoClient 配置，固定显示号参与候选，自动显示号在启动前选择；附加参数按 Windows C 规则解析，无 shell，no-auth 仍需显式选择。XML parser 复用锁文件中已有 roxmltree 0.21.2，无版本升级。
 - 未解决问题：Xming 官网本次返回 502；依据共享格式及上游 VcXsrv 实现，Xming 的不同版本和 Windows 原生启动仍需实机验证。本机配置解析/参数测试不替代 GUI 或真实 X server 验收。
+
+## 2026-11-19 Windows 拖窗状态卡死与边缘缩放守卫
+
+- 时间：2026-11-19 17:32 +0800
+- 检索问题：Windows 上窗口拖动为何整体失效且必须重启应用才恢复，锁定依赖内的边缘缩放路径能否预防？
+- 检索原因：用户实机报告 Windows 菜单栏拖不动、重启恢复；需核对上游已知缺陷与锁定 winit/vendor 源码，再决定 vendor 补丁守卫范围。
+- 来源列表：[winit issue 4821](https://github.com/rust-windowing/winit/issues/4821)、[winit PR 4825](https://github.com/rust-windowing/winit/pull/4825)（由主控已读，本轮未重复检索，PR 是否合入/发布不作确定）；锁定 winit 0.30.13 源码 `src/platform_impl/windows/window.rs:492-528` 与 `src/platform_impl/windows/event_loop.rs:1207-1216`；`vendor/i-slint-backend-winit/drag_resize_window.rs:13` 与 `winitwindowadapter.rs:1257-1306`。
+- 关键结论：issue 4821 记录 winit 0.30.x Windows backend 的 `dragging` 标志只在 `WM_EXITSIZEMOVE` 复位，错过该通知后 `drag_window`/`drag_resize_window` 持续早退，进程内窗口拖动直到重启前失效；PR 4825 是上游修复方向，其合入与发布状态未确认。本地 vendor backend 的 `!is_decorated() && is_resizable()` 条件在窗口最大化/全屏时仍缓存缩放方向并在 press 时吞掉按下调用 `drag_resize_window`，属于 vendor 层可守卫的已知触发路径。
+- 对实施计划的影响：W1 在 `vendor/i-slint-backend-winit/` 补丁边界内加入最大化/全屏守卫，并要求 cursor-move 与 press 两侧双重校验方向；macOS/Linux 与正常状态行为不变。守卫定义为已知触发路径预防，不声明覆盖用户现象的全部根因，也不治愈已卡死进程。
+- 未解决问题：用户环境具体在哪一 OS 版本/窗口状态下错过 `WM_EXITSIZEMOVE` 未实机复现；PR 4825 的最终状态与将随哪个 winit 版本发布未确认；Windows 实机验证必须由用户设备与原生 CI 完成。

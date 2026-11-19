@@ -2974,6 +2974,28 @@ buffer age on invalidation, so software rendering redraws and presents the
 entire window before returning to partial damage updates. Other renderer paths
 retain their usual redraw behavior.
 
+The undecorated-window edge-resize path in `vendor/i-slint-backend-winit/`
+caches a `ResizeDirection` on `CursorMoved` whenever the window is undecorated
+and resizable, and a left press with a cached direction calls
+`drag_resize_window` without dispatching that press into the scene. The locked
+winit 0.30.13 Windows backend sets a `dragging` flag when posting
+`WM_NCLBUTTONDOWN`, returns early from further drag requests while the flag is
+set, and clears it only on `WM_EXITSIZEMOVE`; upstream issue 4821 documents a
+missed exit notification leaving window drag dead for the process lifetime.
+The local backend patch blocks Windows edge resize while maximized or
+fullscreen, checking both cursor movement and the current native state on
+press. A blocked press clears the cached direction, restores the default cursor,
+and continues normal Slint pointer dispatch instead of entering native resize.
+Normal Windows resizing and non-Windows behavior are unchanged. The root Cargo
+integration test `tests/window_resize.rs` deliberately includes the backend's
+private resize source through the application's locked dependencies, without
+adding a public application API; existing native CI test steps
+run these regressions without the backend's standalone GUI test harness.
+The guard prevents this known trigger only; it cannot heal an already stuck
+process (restart once), and Windows native move/size behavior still requires
+real-machine verification. Upstream sources are recorded in
+`docs/project-implementation-tracker/research.md`.
+
 The patched `softbuffer::Surface::damage_support()` exposes the native
 presentation contract without changing the `present_with_damage` call. Windows,
 Wayland surfaces with `wl_surface.damage_buffer` (protocol version 4+), X11

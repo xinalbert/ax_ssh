@@ -1666,6 +1666,18 @@ Windows 窗口重新获得键盘焦点时也会使 winit renderer 失效并请�
 窗口可能丢失可见像素却没有收到 occluded 事件。Win32 softbuffer surface 在失效时重置 buffer age，
 使 software renderer 先整窗重绘并呈现，再恢复局部脏区更新；其它 renderer 保持原有重绘行为。
 
+`vendor/i-slint-backend-winit/` 中的无边框窗口边缘缩放路径在窗口未装饰且可缩放时，由 `CursorMoved`
+缓存一个 `ResizeDirection`；左键按下若命中已缓存方向，则直接调用 `drag_resize_window` 并吞掉该次按下，
+不再分发进场景。锁定的 winit 0.30.13 Windows backend 在投递 `WM_NCLBUTTONDOWN` 时设置 `dragging`
+标志，标志未清除前后续拖动请求直接早退，且只有 `WM_EXITSIZEMOVE` 会复位它；上游 issue 4821 记录了错过
+退出通知会使进程内窗口拖动永久失效。本地 backend 补丁在 Windows 最大化与全屏时禁止边缘缩放，
+同时在 cursor-move 与 press 两侧复检；press 使用当前原生窗口状态，不盲信旧方向。阻断时清除缓存方向并
+恢复默认光标，继续分发普通 Slint 按下事件，而不是进入原生 resize。Windows 普通窗口与非 Windows 行为不变。
+根 Cargo 的 `tests/window_resize.rs` 刻意将 backend 私有缩放源码作为补丁测试接缝，通过应用锁定依赖编译，
+不新增应用公共 API；现有各原生 CI 的 test 步骤自动
+运行回归，不依赖 backend 独立的 GUI 测试入口。守卫只预防这一已知触发路径，不能治愈标志已卡死的进程
+（需重启一次）；Windows 原生移动/缩放行为仍待实机验证。上游来源记录在 `docs/project-implementation-tracker/research.md`。
+
 补丁后的 `softbuffer::Surface::damage_support()` 暴露原生呈现契约，但不改变
 `present_with_damage` 调用方式。Windows、支持 `wl_surface.damage_buffer` 的 Wayland
 surface（协议版本 4+）、X11 XShm 与 Core Graphics tile 会报告直接矩形或 tile 处理；Web

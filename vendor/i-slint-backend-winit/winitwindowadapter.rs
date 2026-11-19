@@ -1301,8 +1301,9 @@ impl WinitWindowAdapter {
                 };
                 let event = match state {
                     winit::event::ElementState::Pressed => {
-                        if button == PointerEventButton::Left && self.current_resize_direction.get().is_some() {
-                            handle_resize(winit_window, self.current_resize_direction.get());
+                        if button == PointerEventButton::Left
+                            && handle_resize(winit_window, &self.current_resize_direction)
+                        {
                             return Ok(());
                         }
                         self.pressed.set(true);

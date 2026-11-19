@@ -22,7 +22,7 @@
 | `assets/fonts/` | 项目自带应用/Terminal 字体、许可证和作者声明 | 修改字体选择或打包资源时 | JetBrains Mono 四个字重由 Rust 编译进可执行文件作为默认基线；Maple 和 Iosevka 分别为必需的 Han/缺失符号回退资源，其余 TTF 从运行时资源路径读取；均不经 Slint import，也不读取参考子模块 |
 | `assets/ion/` | 用户提供 Terminal 图标的跨平台资源集与说明 | 接入应用图标、打包或替换品牌图标时 | `terminal_icon.svg` 是唯一源；Slint/winit 使用 256px PNG，Windows 嵌入 ICO，macOS Dock/Bundle 使用 PNG/ICNS，Linux package 安装 hicolor PNG 集 |
 | `assets/os-icons/` | 官网/Iconify/社区系统与平台 SVG/PNG、原生变体和来源许可清单 | 为系统标识选图、核对身份或 light/dark 命名时 | 329 个系统图标、179 个系统/平台条目；`ui/folder/` 另存连接分组的 Iconify 文件夹 UI 资源，不计入系统图标清单 |
-| `vendor/i-slint-backend-winit/` | 锁定 Slint 1.18.1 的 winit software backend 本地补丁 | 修改 software damage forwarding 或升级 Slint 时 | 转发 `PhysicalRegion::iter()` 的多矩形 damage，并按 `Surface::damage_support()` 对 full-frame/lock-time backend 直接走 `present()`；Windows 窗口重新聚焦时使 renderer 失效并请求整窗重绘；不得承载 AxSSH UI、终端或 SSH 逻辑 |
+| `vendor/i-slint-backend-winit/` | 锁定 Slint 1.18.1 的 winit backend 本地补丁 | 修改 software damage forwarding、Windows 原生缩放守卫或升级 Slint 时 | 转发 `PhysicalRegion::iter()` 的多矩形 damage，并按 `Surface::damage_support()` 对 full-frame/lock-time backend 直接走 `present()`；Windows 窗口重新聚焦时使 renderer 失效并请求整窗重绘；Windows 最大化/全屏禁用边缘 resize，hover/press 双侧复检并清旧方向，不吞普通 press，回归入口为 `tests/window_resize.rs`；不得承载 AxSSH UI、终端或 SSH 逻辑 |
 | `vendor/i-slint-renderer-skia/` | 锁定 Slint 1.18.1 的 Skia GPU layer cache 生命周期补丁 | 修改 GPU 资源释放、行缓存或升级 Slint 时 | 仅在 `free_graphics_resources` 对销毁组件调用 `layer_cache.component_destroyed`；保留原 crate 许可证与其余源码，不承载 AxSSH 状态或 SSH 逻辑 |
 | `vendor/softbuffer/` | 锁定 softbuffer 0.4.8 的跨平台 software surface 本地补丁 | 修改 damage 能力、平台 present、macOS DPI 或升级 softbuffer 时 | `DamageSupport` 描述矩形、bounding rectangle、tiles、driver-dependent、full-frame 和 lock-time 消费方式；backend 映射覆盖 Win32/Wayland/X11/KMS/Web/Android/Orbital/Core Graphics。Win32 surface 在失效时重置 buffer age；macOS 另保留持久 framebuffer、失效状态和 damage-aware CoreAnimation presentation layer；只接收有界、opaque、可注销的窗口几何提示，不得承载 terminal/session/SSH 状态、凭据或 transport，也不引入应用层 tile/partition model |
 | `.agents/` | 项目级 Codex skills 和按需加载的工程规范 | 修改 Rust、Slint、应用边界或 SSH 安全契约时 | 根 `AGENTS.md` 保留硬约束，细则放入 references |
@@ -261,4 +261,4 @@
 
 ## 最后更新时间
 
-- 2026-11-19 14:46 +0800
+- 2026-11-19 18:35 +0800
