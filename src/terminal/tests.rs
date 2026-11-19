@@ -383,6 +383,29 @@ fn snapshots_rebuild_rows_when_the_visible_scrollback_offset_changes() {
 }
 
 #[test]
+fn sgr_color_state_persists_until_explicit_reset_across_output_chunks() {
+    let mut terminal = TerminalModel::new(80, 3, 10);
+    terminal.process(b"\x1b[38;2;230;190;70mcolored");
+    terminal.process(b" plain");
+    let snapshot = terminal.snapshot();
+    let runs = &snapshot.lines[0].runs;
+    assert_eq!(runs.len(), 1);
+    assert_eq!(
+        runs[0].style.foreground,
+        TerminalColor::Rgb {
+            red: 230,
+            green: 190,
+            blue: 70,
+        }
+    );
+
+    terminal.process(b"\x1b[39m reset");
+    let snapshot = terminal.snapshot();
+    let runs = &snapshot.lines[0].runs;
+    assert_eq!(runs[1].style.foreground, TerminalColor::Default);
+}
+
+#[test]
 fn parses_standard_extended_truecolor_and_attributes() {
     let mut terminal = TerminalModel::new(80, 24, 10);
     terminal.process(b"\x1b[1;3;4;31mred\x1b[22;23;24;38;5;208mindex\x1b[48;2;1;2;3;7mflip");
@@ -460,6 +483,37 @@ fn wide_characters_occupy_two_grid_cells() {
     assert_eq!(snapshot.lines[0].runs[1].cells, 2);
     assert_eq!(snapshot.lines[0].runs[2].column, 3);
     assert_eq!(snapshot.cursor_column, 4);
+}
+
+#[test]
+fn adjacent_wide_characters_keep_two_cell_columns_across_output_chunks() {
+    let text = "下载的时候现场生成";
+    let bytes = text.as_bytes();
+
+    // Feed the same UTF-8 stream at every byte boundary. A PTY read may split
+    // both a Unicode scalar and an ANSI sequence; the terminal parser must
+    // retain the stream state and must not invent a spacer cell between CJK
+    // characters.
+    for split in 0..=bytes.len() {
+        let mut terminal = TerminalModel::new(80, 3, 10);
+        terminal.process(&bytes[..split]);
+        terminal.process(&bytes[split..]);
+
+        let snapshot = terminal.snapshot();
+        assert_eq!(terminal.contents(), text, "split {split}");
+        let runs = &snapshot.lines[0].runs;
+        assert_eq!(runs.len(), text.chars().count(), "split {split}");
+        for (index, (run, character)) in runs.iter().zip(text.chars()).enumerate() {
+            assert_eq!(
+                run.text,
+                character.to_string(),
+                "split {split}, index {index}"
+            );
+            assert_eq!(run.column, index * 2, "split {split}, index {index}");
+            assert_eq!(run.cells, 2, "split {split}, index {index}");
+        }
+        assert_eq!(snapshot.cursor_column, text.chars().count() * 2);
+    }
 }
 
 #[test]

@@ -64,6 +64,15 @@ fn text_family(item: &ItemRc) -> SharedString {
         .get()
 }
 
+fn text_width(harness: &LayoutTestHarness, item: &ItemRc) -> f32 {
+    let text = item.downcast::<ComplexText>().unwrap();
+    harness
+        .window
+        .renderer()
+        .text_size(text.as_pin_ref(), item, None, TextWrap::NoWrap)
+        .width
+}
+
 fn assert_probe_family(ui: &AppWindow, family: &str) {
     let mut count = 0;
     ItemRc::new_root(WindowInner::from_pub(ui.window()).component()).visit_descendants(|item| {
@@ -125,12 +134,7 @@ fn main_and_detached_terminals_render_symbol_batches_on_the_fixed_grid() {
                 harness.settle();
                 let arrows = text_item(ui, "←↑→");
                 assert_eq!(text_family(&arrows), "Iosevka Term");
-                let text = arrows.downcast::<ComplexText>().unwrap();
-                let measured = harness
-                    .window
-                    .renderer()
-                    .text_size(text.as_pin_ref(), &arrows, None, TextWrap::NoWrap)
-                    .width;
+                let measured = text_width(&harness, &arrows);
                 assert!(
                     (measured - arrows.geometry().size.width).abs() <= 1.1,
                     "batched symbols must match their allocated cells: {measured} vs {:?}",
@@ -253,6 +257,69 @@ fn braille_spinner_frames_keep_the_symbol_font_in_main_and_detached_terminals() 
         })
         .join()
         .expect("braille spinner typography regression");
+    }
+}
+
+#[test]
+fn hermes_nested_output_shapes_the_original_prefix_in_both_terminal_windows() {
+    for detached in [false, true] {
+        std::thread::spawn(move || {
+            use i_slint_core::textlayout::sharedparley::parley;
+
+            let harness = LayoutTestHarness::new();
+            let ui = &harness.ui;
+            let mut terminal = TerminalModel::new(80, 24, 10);
+            terminal.process(
+                "  \x1b[38;2;230;190;70m⎿\x1b[0m  Other domestic mirrors for these exact files:\r\n  ↳ 中文 Thought for 4s\r\n  ⎿  raw.githubusercontent.com / fastly.jsdelivr.net\x1b[1;3H"
+                    .as_bytes(),
+            );
+            let copy = terminal.selection_text(0, 0, 2, 60);
+            setup(&harness, detached, &mut terminal);
+            let maple = std::fs::read(
+                std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                    .join("assets/fonts/MapleMono-NF-CN-Regular.ttf"),
+            )
+            .expect("read bundled Maple font for fallback comparison");
+            for compact in [false, true] {
+                ui.set_terminal_compact_rendering(compact);
+                publish(ui, &mut terminal);
+                harness.settle();
+                let prefix = text_item(ui, "⎿");
+                let family = text_family(&prefix);
+                let text = prefix.downcast::<ComplexText>().unwrap();
+                let weight = ComplexText::FIELD_OFFSETS
+                    .font_weight()
+                    .apply_pin(text.as_pin_ref())
+                    .get();
+                let context = WindowInner::from_pub(ui.window()).context().clone();
+                let mut fonts = context.font_context().borrow_mut();
+                let mut layouts = parley::LayoutContext::<()>::new();
+                let mut builder = layouts.ranged_builder(&mut fonts.inner, "⎿", 1.0, false);
+                builder.push_default(parley::StyleProperty::FontFamily(
+                    parley::FontFamily::Single(parley::FontFamilyName::named(family.as_str())),
+                ));
+                builder.push_default(parley::StyleProperty::FontWeight(parley::FontWeight::new(
+                    weight as f32,
+                )));
+                let mut layout = builder.build("⎿");
+                layout.break_all_lines(None);
+                let runs = layout.lines().flat_map(|line| line.runs()).collect::<Vec<_>>();
+                assert!(!runs.is_empty());
+                assert!(runs.iter().all(|run| run.clusters().all(|cluster| {
+                    cluster.glyphs().all(|glyph| glyph.id != 0)
+                })), "missing nested-output glyph in UI font context for {family}");
+                assert!(runs.iter().all(|run| run.font().data.as_ref() == maple));
+                let pane = ui.get_terminal_panes().row_data(0).unwrap();
+                let runs = pane.terminal.render_lines.row_data(0).unwrap().runs;
+                let prefix = runs.iter().find(|run| run.text == "⎿").unwrap();
+                assert_eq!((prefix.column, prefix.cells), (2, 1));
+                assert_eq!(prefix.foreground, slint::Color::from_rgb_u8(230, 190, 70));
+                assert_eq!(terminal.selection_text(0, 0, 2, 60), copy);
+            }
+            ui.hide().unwrap();
+        })
+        .join()
+        .expect("Hermes nested-output typography regression");
     }
 }
 
@@ -661,9 +728,7 @@ fn fallback_glyph_paint_bounds_follow_shaping_without_changing_terminal_columns(
                             [(0, "🖥", "  A"), (1, "⚠", "  B"), (2, "Ω", "  C")]
                         {
                             let item = text_item(ui, glyph);
-                            let text = item.downcast::<ComplexText>().unwrap();
-                            let advance = harness.window.renderer()
-                                .text_size(text.as_pin_ref(), &item, None, TextWrap::NoWrap).width;
+                            let advance = text_width(&harness, &item);
                             let allocated = item.geometry().size.width;
                             let marker_item = text_item(ui, marker);
                             let cell_width = marker_item.map_to_window(Default::default()).x
@@ -714,14 +779,7 @@ fn late_font_registration_refreshes_existing_text_metrics_and_paint_bounds() {
                 // Populate both the renderer's shaping cache and the item's
                 // preferred-width binding before the requested face exists.
                 let item = text_item(ui, "Ω");
-                let text = item.downcast::<ComplexText>().unwrap();
-                let measured = harness.window.renderer().text_size(
-                    text.as_pin_ref(),
-                    &item,
-                    None,
-                    TextWrap::NoWrap,
-                );
-                assert!(measured.width > 0.0);
+                assert!(text_width(&harness, &item) > 0.0);
             }
             let generation = ui.get_font_registry_generation();
             register_advance_fixture("AxSSH Late Wide Fixture", 'Ω', 600);
@@ -734,12 +792,7 @@ fn late_font_registration_refreshes_existing_text_metrics_and_paint_bounds() {
                 harness.settle();
                 let item = text_item(ui, "Ω");
                 assert_eq!(text_family(&item), "AxSSH Late Wide Fixture");
-                let text = item.downcast::<ComplexText>().unwrap();
-                let width = harness
-                    .window
-                    .renderer()
-                    .text_size(text.as_pin_ref(), &item, None, TextWrap::NoWrap)
-                    .width;
+                let width = text_width(&harness, &item);
                 assert!((width - 14.4).abs() < 0.02, "cached advance: {width}");
                 assert!(item.geometry().size.width + 0.01 >= width);
             }

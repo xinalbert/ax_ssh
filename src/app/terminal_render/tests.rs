@@ -184,6 +184,61 @@ fn text_symbol_fallback_keeps_program_colors_and_original_characters() {
 }
 
 #[test]
+fn hermes_mirror_output_survives_wrapping_and_arbitrary_input_chunks() {
+    let text = "  \x1b[38;2;230;190;70m⎿\x1b[0m  for: NotoSansCJK, NotoSerifCJK, SourceSans3, SourceSerif4, STIX — all from raw.githubusercontent.com.\r\n\
+                Other domestic mirrors for these exact files:\r\n\
+                  ⎿  - jsdelivr alternative: fastly.jsdelivr.net\r\n\
+                  ↳ 中文 Thought for 4s\r\n\
+                P- npmmirror binaries: no.\r\n\
+                \x1b[?2026h\x1b[20;1H\x1b[2KTry a batch of candidates against STIX-LICENSE.txt\x1b[?2026l";
+    for columns in [40, 80, 120] {
+        let mut whole = ax_ssh::terminal::TerminalModel::new(columns, 24, 10);
+        whole.process(text.as_bytes());
+        let expected = whole.snapshot();
+        let expected_cursor = (expected.cursor_row, expected.cursor_column);
+        let expected_render = render_terminal(expected, settings());
+        let expected_copy = whole.selection_text(0, 0, 23, columns);
+        assert!(expected_copy.contains("⎿"));
+        assert!(expected_copy.contains("P- npmmirror"));
+        assert!(expected_copy.contains("中文 Thought for 4s"));
+        for chunk_size in [1, 2, 3, 7, 31] {
+            let mut chunked = ax_ssh::terminal::TerminalModel::new(columns, 24, 10);
+            for chunk in text.as_bytes().chunks(chunk_size) {
+                chunked.process(chunk);
+            }
+            let actual = chunked.snapshot();
+            assert_eq!(
+                (actual.cursor_row, actual.cursor_column),
+                expected_cursor,
+                "columns={columns}, chunk_size={chunk_size}"
+            );
+            assert_eq!(chunked.selection_text(0, 0, 23, columns), expected_copy);
+            let rendered = render_terminal(actual, settings());
+            assert_eq!(rendered.lines.len(), expected_render.lines.len());
+            for (actual, expected) in rendered.lines.iter().zip(&expected_render.lines) {
+                assert_eq!(actual.runs.len(), expected.runs.len());
+                for (actual, expected) in actual.runs.iter().zip(&expected.runs) {
+                    assert_eq!(actual.text, expected.text);
+                    assert_eq!(actual.column, expected.column);
+                    assert_eq!(actual.cells, expected.cells);
+                    assert_eq!(actual.foreground, expected.foreground);
+                    assert_eq!(actual.font_role, expected.font_role);
+                    assert_eq!(actual.fixed_spacing, expected.fixed_spacing);
+                }
+                assert_eq!(actual.backgrounds, expected.backgrounds);
+            }
+            let prefix = rendered.lines[0]
+                .runs
+                .iter()
+                .find(|run| run.text == "⎿")
+                .unwrap();
+            assert_eq!((prefix.column, prefix.cells), (2, 1));
+            assert_eq!(prefix.foreground, RgbColor::new(230, 190, 70));
+        }
+    }
+}
+
+#[test]
 fn terminal_geometry_preserves_text_colors_and_protocol_cell_positions() {
     let mut terminal = ax_ssh::terminal::TerminalModel::new(80, 3, 10);
     let text = "┌─┬┐\r\n│▁█▉░▒▓▖\u{e0b0}\u{e0b1}中";

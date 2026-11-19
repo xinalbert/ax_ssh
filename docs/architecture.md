@@ -2505,6 +2505,13 @@ same-style ZWJ, skin-tone, and flag components stay together, retaining their or
 protocol cell span. The block cursor uses the same font role as its source glyph. Neither
 classification nor geometry rewrites copied text.
 
+The Hermes nested-output regression checks U+23BF `⎿` through the actual
+Slint window font context: although Iosevka does not contain it, Fontique
+resolves it to bundled Maple Mono NF CN. Missing coverage in an explicit
+family alone does not establish a rendering failure. The regression retains
+the source character, ANSI color, protocol columns and selection text in
+main/detached windows and both text modes.
+
 ASCII remains batched. Same-style one-cell symbols can also share a shaping
 run only when the bundled regular, bold, italic, and bold-italic Iosevka faces
 all have the Latin cell advance for those code points. Real Parley regression
