@@ -16,6 +16,150 @@ const BUNDLED_UI_FONT_FAMILY: &str = "JetBrains Mono";
 const TERMINAL_CJK_FALLBACK_FONT_FAMILY: &str = "Maple Mono NF CN";
 const TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY: &str = "Iosevka Term";
 
+#[derive(Default)]
+struct ShortcutFontState {
+    // Capture before configure_terminal_fallbacks installs the deliberate
+    // bundled-first Common/Han policy used by all other terminal glyphs.
+    native: Option<Vec<String>>,
+    discovered: Vec<String>,
+    cached: Option<(String, i32, [String; 8])>,
+}
+
+thread_local! {
+    static SHORTCUT_FONTS: std::cell::RefCell<ShortcutFontState> = Default::default();
+}
+
+impl ShortcutFontState {
+    fn capture_native(&mut self, collection: &mut fontique::Collection) {
+        self.native
+            .get_or_insert_with(|| native_shortcut_families(collection));
+    }
+}
+
+fn native_shortcut_families(collection: &mut fontique::Collection) -> Vec<String> {
+    // Prefer the platform's monospace choice, not alphabetic discovery order.
+    // Preserve the original native Common/Han candidates as a second tier.
+    let mut ids = collection
+        .generic_families(fontique::GenericFamily::Monospace)
+        .take(MAX_FONT_OPTIONS)
+        .collect::<Vec<_>>();
+    for script in [*b"Zyyy", *b"Hani"] {
+        ids.extend(
+            collection
+                .fallback_families(fontique::FallbackKey::new(
+                    fontique::Script::from_bytes(script),
+                    None,
+                ))
+                .take(MAX_FONT_OPTIONS),
+        );
+    }
+    let mut families = Vec::new();
+    for id in ids {
+        if let Some(name) = collection.family_name(id)
+            && bundled_font(name).is_none()
+            && !families
+                .iter()
+                .any(|family: &String| family.eq_ignore_ascii_case(name))
+        {
+            families.push(name.to_owned());
+        }
+    }
+    families.truncate(MAX_FONT_OPTIONS);
+    families
+}
+
+fn resolve_shortcut_family(
+    collection: &mut fontique::Collection,
+    cache: &mut fontique::SourceCache,
+    primary: &str,
+    system: &[String],
+    character: char,
+    style: usize,
+) -> String {
+    let mut selected = None;
+    {
+        let mut query = collection.query(cache);
+        // Do not call set_fallbacks: it would reintroduce bundled-first
+        // Common/Han fallback before these shortcut-only native candidates.
+        query.set_families(
+            std::iter::once(primary)
+                .chain(
+                    system
+                        .iter()
+                        .take(MAX_FONT_OPTIONS)
+                        .map(String::as_str)
+                        .filter(|family| bundled_font(family).is_none()),
+                )
+                .chain([
+                    TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+                    TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+                    BUNDLED_UI_FONT_FAMILY,
+                ]),
+        );
+        query.set_attributes(fontique::Attributes {
+            weight: fontique::FontWeight::new(if style & 1 != 0 { 700.0 } else { 400.0 }),
+            style: if style & 2 != 0 {
+                fontique::FontStyle::Italic
+            } else {
+                fontique::FontStyle::Normal
+            },
+            ..Default::default()
+        });
+        query.matches_with(|font| {
+            if font
+                .charmap()
+                .and_then(|map| map.map(character as u32))
+                .is_some_and(|glyph| glyph != 0)
+            {
+                selected = Some(font.family.0);
+                fontique::QueryStatus::Stop
+            } else {
+                fontique::QueryStatus::Continue
+            }
+        });
+    }
+    selected
+        .and_then(|id| collection.family_name(id).map(str::to_owned))
+        .unwrap_or_else(|| primary.to_owned())
+}
+
+/// Eight bounded names: control then command; normal/bold/italic/bold-italic.
+/// Coverage is size-independent. Slint keeps the user's unscaled font size and
+/// reshapes on size changes; registration/discovery generations re-resolve names.
+pub(super) fn terminal_shortcut_font_families(primary: &str, generation: i32) -> [String; 8] {
+    SHORTCUT_FONTS.with_borrow_mut(|state| {
+        if let Some((family, cached_generation, names)) = &state.cached
+            && family == primary
+            && *cached_generation == generation
+        {
+            return names.clone();
+        }
+        let mut collection = slint::fontique_011::shared_collection();
+        state.capture_native(&mut collection);
+        let system = state
+            .native
+            .iter()
+            .flatten()
+            .chain(&state.discovered)
+            .take(MAX_FONT_OPTIONS)
+            .cloned()
+            .collect::<Vec<_>>();
+        let mut cache = fontique::SourceCache::default();
+        let names = std::array::from_fn(|index| {
+            resolve_shortcut_family(
+                &mut collection,
+                &mut cache,
+                primary,
+                &system,
+                if index < 4 { '⌃' } else { '⌘' },
+                index % 4,
+            )
+        });
+        state.cached = Some((primary.to_owned(), generation, names.clone()));
+        names
+    })
+}
+
 pub(super) fn terminal_emoji_font_family() -> String {
     // Generic-family resolution is process-local and independent of terminal
     // content. Keep one name per UI thread, rather than querying per glyph.
@@ -329,7 +473,9 @@ impl FontRegistry {
         }
         let mut collection = slint::fontique_011::shared_collection();
         let family = font.family;
+        SHORTCUT_FONTS.with_borrow_mut(|state| state.capture_native(&mut collection));
         register_loaded_font_in_collection(&mut collection, font)?;
+        SHORTCUT_FONTS.with_borrow_mut(|state| state.cached = None);
         self.registered_families.insert(family);
         self.generation = self.generation.wrapping_add(1);
         tracing::info!(family, "bundled font registered from resources");
@@ -337,7 +483,17 @@ impl FontRegistry {
     }
 
     fn register_system_terminal_fallbacks(&mut self, families: &[String]) -> Result<()> {
-        configure_terminal_fallbacks(&mut slint::fontique_011::shared_collection(), families)?;
+        let mut collection = slint::fontique_011::shared_collection();
+        SHORTCUT_FONTS.with_borrow_mut(|state| state.capture_native(&mut collection));
+        configure_terminal_fallbacks(&mut collection, families)?;
+        SHORTCUT_FONTS.with_borrow_mut(|state| {
+            state.discovered = families
+                .iter()
+                .take(MAX_FONT_OPTIONS)
+                .filter_map(|family| valid_font_family(family))
+                .collect();
+            state.cached = None;
+        });
         self.generation = self.generation.wrapping_add(1);
         tracing::info!(
             candidate_families = families.len(),
@@ -352,6 +508,7 @@ fn terminal_bundled_font_families(primary_family: &str) -> Vec<String> {
         .map(|font| vec![font.family.to_owned()])
         .unwrap_or_default();
     for fallback in [
+        BUNDLED_UI_FONT_FAMILY,
         TERMINAL_CJK_FALLBACK_FONT_FAMILY,
         TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
     ] {

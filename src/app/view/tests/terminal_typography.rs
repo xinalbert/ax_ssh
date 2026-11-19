@@ -346,6 +346,292 @@ fn proportional_terminal_fonts_fall_back_without_mutating_the_selected_family() 
     }
 }
 
+// Shape the item's actual properties in its real Slint font context and inspect
+// font bytes, collection index and glyph IDs, not just the requested family.
+fn assert_shortcut_shaping(ui: &AppWindow, item: &ItemRc, expected: &str, size: i32) {
+    use i_slint_core::textlayout::sharedparley::parley;
+    use slint::fontique_011::fontique;
+    let text = item.downcast::<ComplexText>().unwrap();
+    let text = text.as_pin_ref();
+    let value = ComplexText::FIELD_OFFSETS.text().apply_pin(text).get();
+    let pixel_size = ComplexText::FIELD_OFFSETS.font_size().apply_pin(text).get();
+    assert!(
+        (pixel_size.get() - size as f32).abs() < 0.001,
+        "no shortcut shrink"
+    );
+    let weight = ComplexText::FIELD_OFFSETS
+        .font_weight()
+        .apply_pin(text)
+        .get();
+    let italic = ComplexText::FIELD_OFFSETS
+        .font_italic()
+        .apply_pin(text)
+        .get();
+    let ctx = WindowInner::from_pub(ui.window()).context();
+    let mut fonts = ctx.font_context().borrow_mut();
+    let mut expected_font = None;
+    {
+        let fonts = &mut fonts.inner;
+        let mut query = fonts.collection.query(&mut fonts.source_cache);
+        query.set_families([expected]);
+        query.set_attributes(fontique::Attributes {
+            weight: fontique::FontWeight::new(weight as f32),
+            style: if italic {
+                fontique::FontStyle::Italic
+            } else {
+                fontique::FontStyle::Normal
+            },
+            ..Default::default()
+        });
+        query.matches_with(|font| {
+            expected_font = Some(font.clone());
+            fontique::QueryStatus::Stop
+        });
+    }
+    let expected_font = expected_font.unwrap();
+    let mut layouts = parley::LayoutContext::<()>::new();
+    let family = text_family(item);
+    let mut builder = layouts.ranged_builder(&mut fonts.inner, value.as_str(), 1.0, false);
+    builder.push_default(parley::StyleProperty::FontFamily(
+        parley::FontFamily::Single(parley::FontFamilyName::named(family.as_str())),
+    ));
+    builder.push_default(parley::StyleProperty::FontSize(pixel_size.get()));
+    builder.push_default(parley::StyleProperty::FontWeight(parley::FontWeight::new(
+        weight as f32,
+    )));
+    builder.push_default(parley::StyleProperty::FontStyle(if italic {
+        parley::FontStyle::Italic
+    } else {
+        parley::FontStyle::Normal
+    }));
+    let mut layout = builder.build(value.as_str());
+    layout.break_all_lines(None);
+    let runs = layout
+        .lines()
+        .flat_map(|line| line.runs())
+        .collect::<Vec<_>>();
+    assert_eq!(runs.len(), 1);
+    assert!(
+        runs[0].font().data.as_ref() == expected_font.blob.as_ref(),
+        "actual shortcut font must be {expected}, requested {family}"
+    );
+    assert_eq!(runs[0].font().index, expected_font.index);
+    assert!(
+        runs[0]
+            .clusters()
+            .all(|cluster| cluster.glyphs().all(|glyph| glyph.id != 0))
+    );
+}
+
+#[test]
+fn shortcut_modifiers_use_selected_fonts_at_full_size_without_changing_cells() {
+    for detached in [false, true] {
+        std::thread::spawn(move || {
+            let harness = LayoutTestHarness::new();
+            let ui = &harness.ui;
+            let mut terminal = TerminalModel::new(80, 24, 10);
+            setup(&harness, detached, &mut terminal);
+            register_advance_fixture("AxSSH Selected Shortcut Fixture", '⌘', 600);
+            for (family, cell_advance) in [("JetBrains Mono", 0.6), ("AxSSH Selected Shortcut Fixture", 0.6)] {
+                ui.set_terminal_font_family(family.into());
+                for size in [12, 24] {
+                    ui.set_terminal_font_size(size);
+                    for compact in [false, true] {
+                        ui.set_terminal_compact_rendering(compact);
+                        for sgr in ["0", "1", "3", "1;3"] {
+                            terminal.process(format!("\x1b[H\x1b[{sgr}m⌘S\x1b[0m\r\n\x1b[{sgr}m⌃g\x1b[0m\x1b[2 q\x1b[2;1H").as_bytes());
+                            publish(ui, &mut terminal);
+                            harness.settle();
+                            let cell_width = size as f32 * cell_advance;
+                            for (glyph, letter) in [("⌘", "S"), ("⌃", "g")] {
+                                let item = text_item(ui, glyph);
+                                assert_shortcut_shaping(ui, &item, family, size);
+                                let text = item.downcast::<ComplexText>().unwrap();
+                                let advance = harness.window.renderer().text_size(
+                                    text.as_pin_ref(), &item, None, TextWrap::NoWrap,
+                                ).width;
+                                assert!(item.geometry().size.width + 0.02 >= advance, "native advance must not be clipped to one cell");
+                                let next = text_item(ui, letter).map_to_window(Default::default()).x;
+                                assert!((next - item.map_to_window(Default::default()).x - cell_width).abs() < 0.02);
+                            }
+                            let mut cursors = 0;
+                            ItemRc::new_root(WindowInner::from_pub(ui.window()).component()).visit_descendants(|item| {
+                                if item.is_visible()
+                                    && let Some(text) = item.downcast::<ComplexText>()
+                                    && ComplexText::FIELD_OFFSETS.text().apply_pin(text.as_pin_ref()).get() == "⌃"
+                                {
+                                    assert_shortcut_shaping(ui, item, family, size);
+                                    cursors += 1;
+                                }
+                                ControlFlow::<()>::Continue(())
+                            });
+                            assert_eq!(cursors, 2, "row and block cursor");
+                            let pane = ui.get_terminal_panes().row_data(0).unwrap();
+                            for row in [0, 1] {
+                                let run = pane.terminal.render_lines.row_data(row).unwrap().runs.row_data(0).unwrap();
+                                assert_eq!((run.column, run.cells), (0, 1));
+                                assert!(run.fill_path.is_empty() && run.light_path.is_empty() && run.heavy_path.is_empty());
+                            }
+                            assert_eq!(terminal.selection_text(0, 0, 1, 1), "⌘S\n⌃g");
+                            assert_eq!(terminal.snapshot().cursor_column, 0);
+                        }
+                    }
+                }
+            }
+            ui.hide().unwrap();
+        }).join().expect("selected shortcut typography regression");
+    }
+}
+
+#[test]
+fn shortcut_font_choices_refresh_after_registration_without_replacing_text_models() {
+    for detached in [false, true] {
+        std::thread::spawn(move || {
+            let harness = LayoutTestHarness::new();
+            let ui = &harness.ui;
+            let mut terminal = TerminalModel::new(80, 24, 10);
+            terminal.process("⌘S\r\n⌃g\x1b[2 q\x1b[2;1H".as_bytes());
+            setup(&harness, detached, &mut terminal);
+            ui.set_terminal_font_family("AxSSH Late Shortcut Fixture".into());
+            ui.set_terminal_font_size(24);
+            for compact in [false, true] {
+                ui.set_terminal_compact_rendering(compact);
+                publish(ui, &mut terminal);
+                harness.settle();
+                assert_ne!(
+                    text_family(&text_item(ui, "⌘")),
+                    "AxSSH Late Shortcut Fixture"
+                );
+            }
+            let before = ui
+                .get_terminal_panes()
+                .row_data(0)
+                .unwrap()
+                .terminal
+                .render_lines;
+            register_advance_fixture("AxSSH Late Shortcut Fixture", '⌘', 600);
+            set_font_registry_generation(ui, ui.get_font_registry_generation() + 1);
+            publish(ui, &mut terminal);
+            for size in [12, 24] {
+                ui.set_terminal_font_size(size);
+                for compact in [false, true] {
+                    ui.set_terminal_compact_rendering(compact);
+                    publish(ui, &mut terminal);
+                    harness.settle();
+                    assert_shortcut_shaping(
+                        ui,
+                        &text_item(ui, "⌘"),
+                        "AxSSH Late Shortcut Fixture",
+                        size,
+                    );
+                    assert_shortcut_shaping(
+                        ui,
+                        &text_item(ui, "⌃"),
+                        "AxSSH Late Shortcut Fixture",
+                        size,
+                    );
+                    assert_eq!(
+                        ui.get_terminal_panes()
+                            .row_data(0)
+                            .unwrap()
+                            .terminal
+                            .render_lines,
+                        before
+                    );
+                }
+            }
+            assert_eq!(terminal.selection_text(0, 0, 1, 1), "⌘S\n⌃g");
+            ui.hide().unwrap();
+        })
+        .join()
+        .expect("shortcut registration invalidation");
+    }
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn shortcut_native_fonts_keep_selected_menlo_and_use_platform_fallbacks_in_both_windows() {
+    for detached in [false, true] {
+        std::thread::spawn(move || {
+            use slint::fontique_011::fontique;
+            // Inspect an untouched system collection, not AxSSH's overridden
+            // Common/Han list. Fontique's native generic is not always Menlo.
+            let mut native = fontique::Collection::new(fontique::CollectionOptions {
+                shared: false,
+                system_fonts: true,
+            });
+            let mut ids = native
+                .generic_families(fontique::GenericFamily::Monospace)
+                .collect::<Vec<_>>();
+            for script in [*b"Zyyy", *b"Hani"] {
+                ids.extend(native.fallback_families(fontique::FallbackKey::new(
+                    fontique::Script::from_bytes(script),
+                    None,
+                )));
+            }
+            let mut cache = fontique::SourceCache::default();
+            let mut expected = Vec::new();
+            for character in ['⌃', '⌘'] {
+                let mut family_id = None;
+                {
+                    let mut query = native.query(&mut cache);
+                    query.set_families(ids.iter().copied());
+                    query.matches_with(|font| {
+                        if font
+                            .charmap()
+                            .and_then(|map| map.map(character as u32))
+                            .is_some_and(|glyph| glyph != 0)
+                        {
+                            family_id = Some(font.family.0);
+                            fontique::QueryStatus::Stop
+                        } else {
+                            fontique::QueryStatus::Continue
+                        }
+                    });
+                }
+                expected.push(
+                    family_id
+                        .and_then(|id| native.family_name(id).map(str::to_owned))
+                        .unwrap_or_else(|| "JetBrains Mono".to_owned()),
+                );
+            }
+            println!("shortcut native fallback before background discovery: {expected:?}");
+            let harness = LayoutTestHarness::new();
+            let ui = &harness.ui;
+            let mut terminal = TerminalModel::new(80, 24, 10);
+            terminal.process("⌘S\r\n⌃g\x1b[2 q\x1b[2;1H".as_bytes());
+            setup(&harness, detached, &mut terminal);
+            for family in ["Menlo", "Iosevka Term"] {
+                ui.set_terminal_font_family(family.into());
+                for size in [12, 24] {
+                    ui.set_terminal_font_size(size);
+                    for compact in [false, true] {
+                        ui.set_terminal_compact_rendering(compact);
+                        publish(ui, &mut terminal);
+                        harness.settle();
+                        for (index, glyph) in ["⌃", "⌘"].iter().enumerate() {
+                            let expected_family = if family == "Menlo" {
+                                "Menlo"
+                            } else {
+                                &expected[index]
+                            };
+                            assert_shortcut_shaping(
+                                ui,
+                                &text_item(ui, glyph),
+                                expected_family,
+                                size,
+                            );
+                        }
+                    }
+                }
+            }
+            ui.hide().unwrap();
+        })
+        .join()
+        .expect("native shortcut fallback in main/detached windows");
+    }
+}
+
 #[test]
 fn fallback_glyph_paint_bounds_follow_shaping_without_changing_terminal_columns() {
     for detached in [false, true] {

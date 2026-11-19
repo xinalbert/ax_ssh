@@ -8,10 +8,13 @@ pub(in crate::app) enum FontRole {
     Primary,
     Symbol,
     Emoji,
+    Shortcut,
 }
 
 pub(super) fn font_role(text: &str) -> FontRole {
-    if text.contains('\u{fe0f}') || text.contains('\u{20e3}') {
+    if matches!(text, "⌘" | "⌃") {
+        FontRole::Shortcut
+    } else if text.contains('\u{fe0f}') || text.contains('\u{20e3}') {
         FontRole::Emoji
     } else if text.contains('\u{fe0e}') {
         FontRole::Symbol

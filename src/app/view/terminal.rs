@@ -467,6 +467,7 @@ fn terminal_pane_shallow_eq(current: &TerminalPaneView, updated: &TerminalPaneVi
         && current_terminal.content_columns == updated_terminal.content_columns
         && current_terminal.font_family == updated_terminal.font_family
         && current_terminal.emoji_font_family == updated_terminal.emoji_font_family
+        && current_terminal.shortcut_fonts == updated_terminal.shortcut_fonts
         && current_terminal.font_registry_generation == updated_terminal.font_registry_generation
         && current_terminal.font_size == updated_terminal.font_size
         && current_terminal.line_height_percent == updated_terminal.line_height_percent
@@ -682,6 +683,7 @@ pub(super) fn terminal_view_from_snapshot(
         content_columns: snapshot.max_columns.min(i32::MAX as usize) as i32,
         font_family: ui.get_terminal_font_family(),
         emoji_font_family: font_bridge::terminal_emoji_font_family().into(),
+        shortcut_fonts: terminal_shortcut_fonts(ui),
         font_registry_generation: ui.get_font_registry_generation(),
         font_size: ui.get_terminal_font_size() as f32,
         line_height_percent: ui.get_terminal_line_height_percent(),
@@ -796,6 +798,7 @@ fn terminal_view_from_snapshot_incremental(
     terminal.content_columns = snapshot.max_columns.min(i32::MAX as usize) as i32;
     terminal.font_family = ui.get_terminal_font_family();
     terminal.emoji_font_family = font_bridge::terminal_emoji_font_family().into();
+    terminal.shortcut_fonts = terminal_shortcut_fonts(ui);
     terminal.font_registry_generation = ui.get_font_registry_generation();
     terminal.font_size = ui.get_terminal_font_size() as f32;
     terminal.line_height_percent = ui.get_terminal_line_height_percent();
@@ -824,6 +827,32 @@ fn terminal_view_from_snapshot_incremental(
     terminal.select_all_shortcut = ui.get_select_all_shortcut();
     terminal.mouse_local_selection_priority = ui.get_terminal_mouse_local_selection_priority();
     terminal
+}
+
+fn terminal_shortcut_fonts(ui: &AppWindow) -> super::super::TerminalShortcutFonts {
+    let [
+        control,
+        control_bold,
+        control_italic,
+        control_bold_italic,
+        command,
+        command_bold,
+        command_italic,
+        command_bold_italic,
+    ] = font_bridge::terminal_shortcut_font_families(
+        ui.get_terminal_font_family().as_str(),
+        ui.get_font_registry_generation(),
+    );
+    super::super::TerminalShortcutFonts {
+        control: control.into(),
+        control_bold: control_bold.into(),
+        control_italic: control_italic.into(),
+        control_bold_italic: control_bold_italic.into(),
+        command: command.into(),
+        command_bold: command_bold.into(),
+        command_italic: command_italic.into(),
+        command_bold_italic: command_bold_italic.into(),
+    }
 }
 
 fn terminal_cursor_state(

@@ -2462,9 +2462,10 @@ bundled faces are already registered. The UI merges these installed families
 after the bundled choices and before the original platform fallback families.
 It reads the platform defaults before replacing either list and deduplicates
 family IDs, retaining installed coverage across later bundled registrations.
-Missing glyphs are resolved by the shaper's font coverage queries; there are no
-character-specific substitutions or hardcoded platform font names. Installed
-fonts determine the remaining coverage. The terminal presentation layer also assigns an
+Missing glyphs generally use the shaper's font coverage queries. Shortcut glyphs
+use the selected/system/bundled coverage order described below without rewriting
+characters or hardcoding platform family names. Installed fonts determine the
+remaining coverage. The terminal presentation layer also assigns an
 explicit family to text-symbol and emoji runs, because the locked shaper can
 prefer its Emoji generic family before Common-script fallback. Later bundled selections are loaded through the same
 registry when a live Settings preview first selects them. All external reads
@@ -2514,13 +2515,28 @@ Every ordinary Text run measures its actual unwrapped shaping width. Its paint
 box uses the larger of that width and its protocol cell span, capped at the
 remaining pane width. A wide fallback glyph can therefore paint beyond a narrow
 logical cell without being cut in half. Run origins, following columns, cursor,
-selection, and copying continue to use the terminal model's cell coordinates;
-this rule applies independently of the character or fallback font.
+selection, and copying continue to use the terminal model's cell coordinates.
+The single-cell shortcut symbols `⌘` and `⌃` resolve actual glyph coverage per
+normal/bold/italic/bold-italic style: the selected terminal family comes first,
+then captured native Monospace and original Common/Han candidates, then the
+bounded background-discovered system monospace families, and finally registered
+bundled fallbacks. A selected JetBrains Mono glyph is not replaced. The bridge
+caches eight owned family names by selected family and font generation; font
+registration and system discovery invalidate the cache. Initial/incremental
+snapshots and shallow equality carry those names to both window layouts. Other
+symbol, Braille, emoji, and Han policies remain unchanged.
+Normal and compact text and the block cursor use the resolved family at the
+configured font size, with natural-advance paint bounds instead of hand-drawn
+paths, one-cell centering, or a fixed shrink factor. Protocol columns, input,
+and copied Unicode stay unchanged. This is a font-selection experiment, not a
+guarantee of single-cell ink fit: a native glyph may still exceed a narrower
+selected font's cell and overlap its neighbor. Actual font data, glyph IDs,
+styles, sizes, and layout are regression-tested; visual acceptance remains manual.
 `src/app/terminal_render/geometry.rs` independently generates bounded paths in
 128-unit cell coordinates for basic light/heavy orthogonal box drawing,
-block elements, and Powerline U+E0B0–U+E0B7. Other shapes retain
-font rendering. `TerminalGeometryGlyph` scales these paths to physical-pixel
-aligned cell boundaries, using the resolved foreground and shade opacity.
+block elements, and Powerline U+E0B0–U+E0B7. Other shapes retain font rendering.
+`TerminalGeometryGlyph` scales these paths to physical-pixel aligned cell
+boundaries, using the resolved foreground and shade opacity.
 Paths and text share the existing stable run models and optional static row
 cache; selection, cursor, target highlighting, and preedit stay outside it.
 `TerminalPaneGroup` binds its view through a tracked pane-row lookup so a

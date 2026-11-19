@@ -8,6 +8,7 @@ import {
 import {
     TerminalGrid,
     TerminalGridView,
+    TerminalShortcutFonts,
     TerminalRenderLine,
     TerminalTargetHighlight,
     TerminalSelectionView,
@@ -86,6 +87,7 @@ export struct TerminalViewState {
     content_columns: int,
     font_family: string,
     emoji_font_family: string,
+    shortcut_fonts: TerminalShortcutFonts,
     font_registry_generation: int,
     font_size: length,
     line_height_percent: int,
@@ -491,6 +493,7 @@ export component TerminalPane inherits Rectangle {
         cursor_font_role: root.view.cursor_state[0].font_role,
         font_family: root.terminal-font-family,
         emoji_font_family: root.view.emoji_font_family,
+        shortcut_fonts: root.view.shortcut_fonts,
         font_registry_generation: root.view.font_registry_generation,
         font_size: root.terminal-font-size,
         foreground: root.terminal-foreground, background: root.terminal-background,

@@ -9,7 +9,10 @@ selected Terminal family remains primary. Maple Mono NF CN is the first `Hani`
 fallback; Iosevka Term follows it for missing symbols such as `↴` and is also
 the explicit Common-script fallback. No renderer-side substitution path is
 used. Both Settings font lists present these bundled families before discovered
-system monospace fonts.
+system monospace fonts. The exact terminal shortcut glyphs `⌃` and `⌘` are a
+separate coverage policy: selected family first, then native/discovered system
+candidates, with registered bundled families last. They retain the configured
+font size; this does not guarantee their ink fits a narrower terminal cell.
 
 | Family | Files | License |
 | --- | --- | --- |

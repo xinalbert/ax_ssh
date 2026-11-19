@@ -97,6 +97,33 @@ fn compatible_symbol_runs_batch_without_crossing_style_or_combining_boundaries()
 }
 
 #[test]
+fn shortcut_modifiers_use_the_shortcut_font_without_moving_or_rewriting_the_letter() {
+    for (modifier, letter) in [("⌘", "S"), ("⌃", "g"), ("⌃", "t")] {
+        let mut terminal = ax_ssh::terminal::TerminalModel::new(80, 3, 10);
+        let text = format!("按 \x1b[35;1m{modifier}{letter}\x1b[0m 保存后");
+        terminal.process(text.as_bytes());
+        let snapshot = terminal.snapshot();
+        assert_eq!(snapshot.cursor_column, 12);
+        let rendered = render_terminal(snapshot, settings());
+        let runs = &rendered.lines[0].runs;
+        let symbol = runs.iter().find(|run| run.text == modifier).unwrap();
+        let key = runs.iter().find(|run| run.text == letter).unwrap();
+        assert_eq!((symbol.column, symbol.cells), (3, 1));
+        assert_eq!((key.column, key.cells), (4, 1));
+        assert_eq!(symbol.font_role, FontRole::Shortcut);
+        assert_eq!(key.font_role, FontRole::Primary);
+        assert!(symbol.geometry.is_empty());
+        assert!(key.geometry.is_empty());
+        assert_eq!(symbol.foreground, key.foreground);
+        assert_eq!(
+            terminal.selection_text(0, 3, 0, 4),
+            format!("{modifier}{letter}")
+        );
+        assert_eq!(terminal.contents(), format!("按 {modifier}{letter} 保存后"));
+    }
+}
+
+#[test]
 fn mixed_latin_han_and_zwj_emoji_keep_cell_positions_through_reflow() {
     let mut terminal = ax_ssh::terminal::TerminalModel::new(20, 3, 10);
     let text = "A中\u{301}👩\u{200d}💻B文C";

@@ -21,16 +21,17 @@ fn wait_for_fonts(harness: &Harness) {
     loop {
         let status = harness.status();
         let fonts = harness.font_registry.lock().unwrap();
+        let jetbrains = fonts.is_registered("JetBrains Mono");
         let maple = fonts.is_registered("Maple Mono NF CN");
         let iosevka = fonts.is_registered("Iosevka Term");
         let generation = harness.ui.get_font_registry_generation();
-        if maple && iosevka && generation > 0 {
+        if jetbrains && maple && iosevka && generation > 0 {
             return;
         }
         drop(fonts);
         assert!(
             std::time::Instant::now() < deadline,
-            "terminal fonts were never initialized: Maple={maple}, Iosevka={iosevka}, generation={generation}, status={status}"
+            "terminal fonts were never initialized: JetBrains={jetbrains}, Maple={maple}, Iosevka={iosevka}, generation={generation}, status={status}"
         );
         std::thread::yield_now();
     }
@@ -42,6 +43,7 @@ fn bundled_terminal_fonts_are_ready_while_system_font_discovery_is_blocked() {
         "terminal_fonts::bundled_terminal_fonts_are_ready_while_system_font_discovery_is_blocked",
         || {
             let harness = Harness::new();
+            harness.ui.set_terminal_font_family("Iosevka Term".into());
             let (scan_started, scanning) = std::sync::mpsc::sync_channel(1);
             let (release_scan, released) = std::sync::mpsc::sync_channel(1);
             crate::app::font_bridge::load_terminal_fonts_with_discovery(

@@ -515,6 +515,7 @@ pub(super) fn terminal_font_role(role: super::super::terminal_render::FontRole) 
         super::super::terminal_render::FontRole::Primary => 0,
         super::super::terminal_render::FontRole::Symbol => 1,
         super::super::terminal_render::FontRole::Emoji => 2,
+        super::super::terminal_render::FontRole::Shortcut => 3,
     }
 }
 

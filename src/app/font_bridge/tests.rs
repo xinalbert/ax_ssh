@@ -1,5 +1,378 @@
 use super::*;
 
+fn shortcut_test_fonts() -> i_slint_core::textlayout::sharedparley::parley::FontContext {
+    let resources = FontResources {
+        directories: vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/fonts")],
+    };
+    let mut fonts = i_slint_core::textlayout::sharedparley::parley::FontContext {
+        collection: fontique::Collection::new(fontique::CollectionOptions {
+            shared: false,
+            system_fonts: false,
+        }),
+        source_cache: Default::default(),
+    };
+    for family in [
+        BUNDLED_UI_FONT_FAMILY,
+        TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+        TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+    ] {
+        register_loaded_font_in_collection(
+            &mut fonts.collection,
+            resources.load_bundled_font(family).unwrap().unwrap(),
+        )
+        .unwrap();
+    }
+    fonts
+}
+
+fn assert_shortcut_font_bytes(
+    fonts: &mut i_slint_core::textlayout::sharedparley::parley::FontContext,
+    family: &str,
+    character: char,
+    style: usize,
+    expected: &[u8],
+) {
+    use i_slint_core::textlayout::sharedparley::parley;
+    let text = character.to_string();
+    for size in [12.0, 24.0] {
+        let mut layouts = parley::LayoutContext::<()>::new();
+        let mut builder = layouts.ranged_builder(fonts, &text, 1.0, false);
+        builder.push_default(parley::StyleProperty::FontFamily(
+            parley::FontFamily::Single(parley::FontFamilyName::named(family)),
+        ));
+        builder.push_default(parley::StyleProperty::FontSize(size));
+        builder.push_default(parley::StyleProperty::FontWeight(parley::FontWeight::new(
+            if style & 1 != 0 { 700.0 } else { 400.0 },
+        )));
+        builder.push_default(parley::StyleProperty::FontStyle(if style & 2 != 0 {
+            parley::FontStyle::Italic
+        } else {
+            parley::FontStyle::Normal
+        }));
+        let mut layout = builder.build(&text);
+        layout.break_all_lines(None);
+        let runs = layout
+            .lines()
+            .flat_map(|line| line.runs())
+            .collect::<Vec<_>>();
+        assert_eq!(runs.len(), 1);
+        assert!(
+            runs[0].font().data.as_ref() == expected,
+            "actual font bytes for {family} {character}"
+        );
+        assert!(
+            runs[0]
+                .clusters()
+                .all(|cluster| cluster.glyphs().all(|glyph| glyph.id != 0))
+        );
+        assert!(runs[0].advance() > 0.0);
+        if family == "Menlo" {
+            let glyphs = runs[0]
+                .clusters()
+                .flat_map(|cluster| cluster.glyphs())
+                .map(|glyph| glyph.id)
+                .collect::<Vec<_>>();
+            println!(
+                "Menlo {character} style={style} size={size} index={} glyphs={glyphs:?} shaped advance={}",
+                runs[0].font().index,
+                runs[0].advance()
+            );
+        }
+    }
+}
+
+#[test]
+fn shortcut_resolution_selects_coverage_in_selected_system_bundled_order() {
+    let mut fonts = shortcut_test_fonts();
+    let candidate = "AxSSH Native Shortcut Fixture";
+    let system_bytes = include_bytes!("../../../assets/fonts/JetBrainsMono-Bold.ttf");
+    fonts.collection.register_fonts(
+        fontique::Blob::new(Arc::new(system_bytes.to_vec())),
+        Some(fontique::FontInfoOverride {
+            family_name: Some(candidate),
+            ..Default::default()
+        }),
+    );
+    let system = ["Missing system family".to_owned(), candidate.to_owned()];
+    for character in ['⌃', '⌘'] {
+        for (style, bytes) in EMBEDDED_UI_FONT_FILES.iter().enumerate() {
+            let selected = resolve_shortcut_family(
+                &mut fonts.collection,
+                &mut fonts.source_cache,
+                BUNDLED_UI_FONT_FAMILY,
+                &system,
+                character,
+                style,
+            );
+            assert_eq!(selected, BUNDLED_UI_FONT_FAMILY);
+            assert_shortcut_font_bytes(&mut fonts, &selected, character, style, bytes);
+            let native = resolve_shortcut_family(
+                &mut fonts.collection,
+                &mut fonts.source_cache,
+                TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+                &system,
+                character,
+                style,
+            );
+            assert_eq!(
+                native, candidate,
+                "missing selected glyph must use system before bundled"
+            );
+            assert_shortcut_font_bytes(&mut fonts, &native, character, style, system_bytes);
+            let bundled = resolve_shortcut_family(
+                &mut fonts.collection,
+                &mut fonts.source_cache,
+                TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+                &[],
+                character,
+                style,
+            );
+            assert_eq!(bundled, BUNDLED_UI_FONT_FAMILY);
+            assert_shortcut_font_bytes(&mut fonts, &bundled, character, style, bytes);
+        }
+    }
+}
+
+#[test]
+fn shortcut_native_candidates_prefer_platform_monospace_without_mutating_other_fallbacks() {
+    let mut fonts = shortcut_test_fonts();
+    let bytes = EMBEDDED_UI_FONT_FILES[0];
+    for name in ["Native Mono Fixture", "Native Common Fixture"] {
+        fonts.collection.register_fonts(
+            fontique::Blob::new(Arc::new(bytes.to_vec())),
+            Some(fontique::FontInfoOverride {
+                family_name: Some(name),
+                ..Default::default()
+            }),
+        );
+    }
+    let mono = fonts.collection.family_id("Native Mono Fixture").unwrap();
+    let common = fonts.collection.family_id("Native Common Fixture").unwrap();
+    fonts
+        .collection
+        .set_generic_families(fontique::GenericFamily::Monospace, [mono].into_iter());
+    let key = fontique::FallbackKey::new(fontique::Script::from_bytes(*b"Zyyy"), None);
+    fonts.collection.set_fallbacks(key, [common].into_iter());
+    let before = fonts.collection.fallback_families(key).collect::<Vec<_>>();
+    let system = native_shortcut_families(&mut fonts.collection);
+    assert_eq!(
+        &system[..2],
+        ["Native Mono Fixture", "Native Common Fixture"]
+    );
+    for character in ['⌃', '⌘'] {
+        assert_eq!(
+            resolve_shortcut_family(
+                &mut fonts.collection,
+                &mut fonts.source_cache,
+                TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+                &system,
+                character,
+                0
+            ),
+            "Native Mono Fixture"
+        );
+    }
+    assert_eq!(
+        fonts.collection.fallback_families(key).collect::<Vec<_>>(),
+        before
+    );
+}
+
+#[test]
+fn shortcut_discovery_and_registration_invalidate_cached_choices_in_the_slint_collection() {
+    std::thread::spawn(|| {
+        use slint::platform::software_renderer::{MinimalSoftwareWindow, RepaintBufferType};
+        use slint::platform::{Platform, WindowAdapter};
+        struct TestPlatform;
+        impl Platform for TestPlatform {
+            fn create_window_adapter(
+                &self,
+            ) -> Result<std::rc::Rc<dyn WindowAdapter>, slint::PlatformError> {
+                Ok(MinimalSoftwareWindow::new(RepaintBufferType::ReusedBuffer))
+            }
+        }
+        slint::platform::set_platform(Box::new(TestPlatform)).unwrap();
+        let mut collection = slint::fontique_011::shared_collection();
+        let missing = "AxSSH Missing Native Fixture";
+        collection.register_fonts(
+            fontique::Blob::new(Arc::new(
+                include_bytes!("../../../assets/fonts/IosevkaTerm-Regular.ttf").to_vec(),
+            )),
+            Some(fontique::FontInfoOverride {
+                family_name: Some(missing),
+                ..Default::default()
+            }),
+        );
+        let id = collection.family_id(missing).unwrap();
+        collection.set_generic_families(fontique::GenericFamily::Monospace, [id].into_iter());
+        for script in [*b"Zyyy", *b"Hani"] {
+            collection.set_fallbacks(
+                fontique::FallbackKey::new(fontique::Script::from_bytes(script), None),
+                [id].into_iter(),
+            );
+        }
+        let mut registry = FontRegistry::new();
+        for family in [BUNDLED_UI_FONT_FAMILY, TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY] {
+            registry
+                .register_loaded_font(
+                    registry
+                        .resources()
+                        .load_bundled_font(family)
+                        .unwrap()
+                        .unwrap(),
+                )
+                .unwrap();
+        }
+        let primary = "AxSSH Late Primary Fixture";
+        let generation = registry.generation_as_slint_int();
+        let before = terminal_shortcut_font_families(primary, generation);
+        assert!(before.iter().all(|family| family == BUNDLED_UI_FONT_FAMILY));
+        let candidate = "AxSSH Discovered Native Fixture";
+        collection.register_fonts(
+            fontique::Blob::new(Arc::new(EMBEDDED_UI_FONT_FILES[1].to_vec())),
+            Some(fontique::FontInfoOverride {
+                family_name: Some(candidate),
+                ..Default::default()
+            }),
+        );
+        registry
+            .register_system_terminal_fallbacks(&[candidate.to_owned()])
+            .unwrap();
+        let discovered =
+            terminal_shortcut_font_families(primary, registry.generation_as_slint_int());
+        assert!(discovered.iter().all(|family| family == candidate));
+        let mut fonts = i_slint_core::textlayout::sharedparley::parley::FontContext {
+            collection: collection.clone(),
+            source_cache: Default::default(),
+        };
+        for (index, family) in discovered.iter().enumerate() {
+            assert_shortcut_font_bytes(
+                &mut fonts,
+                family,
+                if index < 4 { '⌃' } else { '⌘' },
+                index % 4,
+                EMBEDDED_UI_FONT_FILES[1],
+            );
+        }
+        collection.register_fonts(
+            fontique::Blob::new(Arc::new(EMBEDDED_UI_FONT_FILES[0].to_vec())),
+            Some(fontique::FontInfoOverride {
+                family_name: Some(primary),
+                ..Default::default()
+            }),
+        );
+        let refreshed =
+            terminal_shortcut_font_families(primary, registry.generation_as_slint_int() + 1);
+        assert!(refreshed.iter().all(|family| family == primary));
+        for (index, family) in refreshed.iter().enumerate() {
+            assert_shortcut_font_bytes(
+                &mut fonts,
+                family,
+                if index < 4 { '⌃' } else { '⌘' },
+                index % 4,
+                EMBEDDED_UI_FONT_FILES[0],
+            );
+        }
+    })
+    .join()
+    .expect("shortcut discovery and registry refresh");
+}
+
+#[cfg(target_os = "macos")]
+#[test]
+fn native_menlo_shortcut_coverage_and_shaping_metrics_are_real() {
+    use i_slint_core::textlayout::sharedparley::parley;
+    let mut fonts = parley::FontContext {
+        collection: fontique::Collection::new(fontique::CollectionOptions {
+            shared: false,
+            system_fonts: true,
+        }),
+        source_cache: Default::default(),
+    };
+    let system = native_shortcut_families(&mut fonts.collection);
+    println!("native shortcut candidates: {system:?}");
+    let resources = FontResources {
+        directories: vec![PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/fonts")],
+    };
+    for family in [
+        BUNDLED_UI_FONT_FAMILY,
+        TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+        TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+    ] {
+        register_loaded_font_in_collection(
+            &mut fonts.collection,
+            resources.load_bundled_font(family).unwrap().unwrap(),
+        )
+        .unwrap();
+    }
+    let system = system
+        .into_iter()
+        .chain(discover_system_monospace_families())
+        .collect::<Vec<_>>();
+    for character in ['⌃', '⌘'] {
+        for style in 0..4 {
+            let selected = resolve_shortcut_family(
+                &mut fonts.collection,
+                &mut fonts.source_cache,
+                "Menlo",
+                &system,
+                character,
+                style,
+            );
+            assert_eq!(selected, "Menlo");
+            let fallback = resolve_shortcut_family(
+                &mut fonts.collection,
+                &mut fonts.source_cache,
+                TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+                &system,
+                character,
+                style,
+            );
+            assert!(
+                bundled_font(&fallback).is_none(),
+                "installed system glyph must beat bundled: {fallback}"
+            );
+            for expected_family in [&selected, &fallback] {
+                let mut query = fonts.collection.query(&mut fonts.source_cache);
+                query.set_families([expected_family.as_str()]);
+                query.set_attributes(fontique::Attributes {
+                    weight: fontique::FontWeight::new(if style & 1 != 0 { 700.0 } else { 400.0 }),
+                    style: if style & 2 != 0 {
+                        fontique::FontStyle::Italic
+                    } else {
+                        fontique::FontStyle::Normal
+                    },
+                    ..Default::default()
+                });
+                let mut actual = None;
+                query.matches_with(|font| {
+                    if font
+                        .charmap()
+                        .and_then(|map| map.map(character as u32))
+                        .is_some_and(|glyph| glyph != 0)
+                    {
+                        actual = Some(font.blob.clone());
+                        fontique::QueryStatus::Stop
+                    } else {
+                        fontique::QueryStatus::Continue
+                    }
+                });
+                drop(query);
+                assert_shortcut_font_bytes(
+                    &mut fonts,
+                    expected_family,
+                    character,
+                    style,
+                    actual.unwrap().as_ref(),
+                );
+            }
+            println!(
+                "Iosevka Term missing {character} style={style}: actual system fallback={fallback}"
+            );
+        }
+    }
+}
+
 #[test]
 fn real_parley_shaping_selects_the_explicit_symbol_face_before_emoji_fallback() {
     use i_slint_core::textlayout::sharedparley::parley;
@@ -258,11 +631,11 @@ fn embedded_ui_font_registers_regular_bold_and_italic_faces() {
 }
 
 #[test]
-fn terminal_font_loading_includes_cjk_and_symbol_fallbacks() {
+fn terminal_font_loading_includes_required_font_families_without_duplicates() {
     assert_eq!(
         terminal_bundled_font_families("JetBrains Mono"),
         [
-            "JetBrains Mono",
+            BUNDLED_UI_FONT_FAMILY,
             TERMINAL_CJK_FALLBACK_FONT_FAMILY,
             TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
         ]
@@ -271,6 +644,7 @@ fn terminal_font_loading_includes_cjk_and_symbol_fallbacks() {
         terminal_bundled_font_families(TERMINAL_CJK_FALLBACK_FONT_FAMILY),
         [
             TERMINAL_CJK_FALLBACK_FONT_FAMILY,
+            BUNDLED_UI_FONT_FAMILY,
             TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
         ]
     );
@@ -278,12 +652,14 @@ fn terminal_font_loading_includes_cjk_and_symbol_fallbacks() {
         terminal_bundled_font_families(TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY),
         [
             TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
+            BUNDLED_UI_FONT_FAMILY,
             TERMINAL_CJK_FALLBACK_FONT_FAMILY,
         ]
     );
     assert_eq!(
         terminal_bundled_font_families("System Monospace"),
         [
+            BUNDLED_UI_FONT_FAMILY,
             TERMINAL_CJK_FALLBACK_FONT_FAMILY,
             TERMINAL_SYMBOL_FALLBACK_FONT_FAMILY,
         ]
