@@ -2,7 +2,7 @@
 
 [English](README.md) · [名称索引](names.zh.md) · [离线预览](preview.html) · [来源清单](manifest.json) · [检索覆盖/缺口](search-coverage.json) · [检查结果](validation.json)
 
-共 **329 个文件**（313 SVG, 16 PNG），覆盖 **179 个系统/平台条目**。本轮补充 193 个图标、122 个条目，原先 135 个 SVG 完整保留。另新增一个经典 Windows 旗帜。打开 `preview.html` 可离线比较每个文件在白色和深色背景下的显示。
+共 **339 个文件**（323 SVG、16 PNG），覆盖 **179 个系统/平台条目**。打开 `preview.html` 可离线比较图标在白色和深色背景下的显示。
 
 图标来源包括 [Iconify](https://icon-sets.iconify.design/?query=Linux)、项目官网/品牌页/官方仓库、[Papirus](https://github.com/PapirusDevelopmentTeam/papirus-icon-theme) 和 [Font Logos](https://github.com/lukas-w/font-logos)。优先符号，保留必要的字母徽记；只找到带完整名称的标志时，原样保留并标记。原生 SVG/PNG 字节未改动；Iconify 图形只添加 SVG 外壳，没有裁字或裁图。新增 Simple Icons 历史旗帜保留 currentColor 路径，SVG 外壳提供蓝色默认值；此前资源原色保持。
 
@@ -22,14 +22,18 @@
 
 `linux/generic/` 为 Tux；Windows 子目录保留 Windows Server、Windows 8/11 和旧版旗帜。`licenses/` 保存来源集合许可、官网品牌说明和政策。目录不代表所有条目都是发行版，准确类型见清单的 `kind`。
 
-[catalog.json](catalog.json) 统一定义应用使用的 128 个图标标识、显示名称、识别别名及资源路径，
-包括三类系统家族、113 个 Linux 条目和 12 个 Windows 版本/世代选项。[名称索引](names.zh.md) 提供可检索表格和生成命令。
+[catalog.json](catalog.json) 统一定义应用使用的 138 个图标标识、显示名称、识别别名及资源路径，
+包括三类系统家族、113 个 Linux 条目、12 个 Windows 版本/世代选项及十个 macOS 版本。[名称索引](names.zh.md) 提供可检索表格和生成命令。
 Rust 识别表及侧栏/标签共用的 Slint 图标组件均由此目录生成；已识别发行版使用自己的图标，
 `linux` 使用 Tux 兜底。默认保留资源原色，既有 `system_icons_follow_theme` 配置可启用主题着色。
 
 Windows 自动映射区分 XP、Vista、7、8、8.1、10、11 与 Server。XP/Vista/7 和 Server 2003/2008 共用历史旗帜轮廓；8/8.1/10 与现代 Server 使用透视窗格；11 使用方形窗格。Windows 95/98/Me/2000 保留更早的旗帜。同一图形世代共用资源，保留具体产品名。未知版本仍用 `windows`，不按内核 `10.0` 猜测桌面版本。本机 Windows 未探测版本时继续通用图标，可手动指定。自动检测的旧 `windows` 缓存按已存 release 细化展示，手动选择仍优先。
 
-只有上游实际存在的变体才保存；缺少 light/dark 表示检查的来源未发现该变体。
+macOS 自动模式按本机或 SSH 返回的产品版本选择图标。未知版本和只返回 Darwin
+内核版本时使用通用 macOS 图标。也可在选择器中搜索 `macOS` 并手动指定版本。
+[macos/releases](macos/releases/) 中的 AxSSH SVG 使用简化图形，适配 16–20 px 显示。
+
+上游素材缺少 light/dark 表示检查的来源未发现该变体。
 
 - **selfh.st**：light 是白/浅色图形，通常用于深色背景；dark 是黑/深色图形，通常用于浅色背景。
 - **Skill Icons**：light/dark 指圆角徽章背景。

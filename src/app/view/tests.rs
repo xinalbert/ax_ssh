@@ -1625,11 +1625,11 @@ fn session_rows_derive_system_icons_from_each_profiles_release() {
         .iter()
         .map(|profile| profile.system_platform.to_string())
         .collect::<Vec<_>>();
-    assert_eq!(platforms, ["windows-server", "ubuntu", "macos", "", ""]);
+    assert_eq!(platforms, ["windows-server", "ubuntu", "macos-15", "", ""]);
 }
 
 #[test]
-fn windows_version_icons_refine_old_detection_without_overriding_manual_choices() {
+fn version_icons_refine_old_detection_without_overriding_manual_choices() {
     for (release, expected) in [
         ("Microsoft Windows 11 Pro", "windows-11"),
         ("Microsoft Windows 10 Enterprise", "windows-10"),
@@ -1640,19 +1640,28 @@ fn windows_version_icons_refine_old_detection_without_overriding_manual_choices(
         ("Microsoft Windows Server 2008 R2", "windows-server-2008-r2"),
         ("Microsoft Windows Server 2022", "windows-server"),
         ("Microsoft Windows NT 10.0", "windows"),
+        ("macOS 10.15.7", "macos-10-15"),
+        ("macOS 15.5", "macos-15"),
+        ("macOS 26.1", "macos-26"),
+        ("macOS 28.0", "macos"),
     ] {
-        let mut profile = SessionProfile::new("Windows", "windows.example", "alice");
+        let family = if expected.starts_with("macos") {
+            "macos"
+        } else {
+            "windows"
+        };
+        let mut profile = SessionProfile::new("Server", "server.example", "alice");
         profile.detected_system =
-            ax_ssh::config::SystemDetection::new(&profile, release, "windows").map(Box::new);
+            ax_ssh::config::SystemDetection::new(&profile, release, family).map(Box::new);
         let mut sessions = SessionStore::default();
         sessions.upsert(profile.clone());
-        let mut state = AppState::new(ConfigStore::new("/unused/windows-icons.json"), sessions);
+        let mut state = AppState::new(ConfigStore::new("/unused/system-icons.json"), sessions);
         state.open_terminal_tab(&profile);
         state.open_sftp_tab(&profile);
 
         for (manual, expected) in [
             (None, expected),
-            (Some("windows"), "windows"),
+            (Some(family), family),
             (Some("windows-10"), "windows-10"),
             (Some("debian"), "debian"),
         ] {
@@ -1680,7 +1689,7 @@ fn windows_version_icons_refine_old_detection_without_overriding_manual_choices(
                 .cached_system()
                 .unwrap()
                 .icon_id(),
-            Some("windows")
+            Some(family)
         );
         state.sessions.sessions[0].system_icon_override = None;
         assert!(state.open_session_editor_for_profile(profile.id));

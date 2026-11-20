@@ -1,12 +1,12 @@
 {
   "schema_version": 2,
-  "checked_at": "2026-11-16T02:41:00+00:00",
+  "checked_at": "2026-11-20T04:07:00+00:00",
   "status": "passed",
   "counts": {
     "systems": 179,
-    "assets": 329,
+    "assets": 339,
     "formats": {
-      "svg": 313,
+      "svg": 323,
       "png": 16
     },
     "platforms": {
@@ -21,7 +21,7 @@
       "desktop": 11
     },
     "variants": {
-      "color": 152,
+      "color": 162,
       "light": 74,
       "dark": 71,
       "original": 30,
@@ -30,7 +30,7 @@
     }
   },
   "original_assets_unchanged": 135,
-  "checked_assets": 329,
+  "checked_assets": 339,
   "checks": [
     {
       "path": "linux/generic/selfhst-linux.svg",
@@ -1531,6 +1531,136 @@
         "local-rendering-references",
         "no-script-text-font-or-embedded-raster"
       ]
+    },
+    {
+      "path": "macos/releases/macos-10-13.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "project-original",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ],
+      "render_check": "passed: nonempty with transparency at 16, 20, 32, 40 and 64 px"
+    },
+    {
+      "path": "macos/releases/macos-10-14.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "project-original",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ],
+      "render_check": "passed: nonempty with transparency at 16, 20, 32, 40 and 64 px"
+    },
+    {
+      "path": "macos/releases/macos-10-15.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "project-original",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ],
+      "render_check": "passed: nonempty with transparency at 16, 20, 32, 40 and 64 px"
+    },
+    {
+      "path": "macos/releases/macos-11.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "project-original",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ],
+      "render_check": "passed: nonempty with transparency at 16, 20, 32, 40 and 64 px"
+    },
+    {
+      "path": "macos/releases/macos-12.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "project-original",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ],
+      "render_check": "passed: nonempty with transparency at 16, 20, 32, 40 and 64 px"
+    },
+    {
+      "path": "macos/releases/macos-13.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "project-original",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ],
+      "render_check": "passed: nonempty with transparency at 16, 20, 32, 40 and 64 px"
+    },
+    {
+      "path": "macos/releases/macos-14.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "project-original",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ],
+      "render_check": "passed: nonempty with transparency at 16, 20, 32, 40 and 64 px"
+    },
+    {
+      "path": "macos/releases/macos-15.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "project-original",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ],
+      "render_check": "passed: nonempty with transparency at 16, 20, 32, 40 and 64 px"
+    },
+    {
+      "path": "macos/releases/macos-26.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "project-original",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ],
+      "render_check": "passed: nonempty with transparency at 16, 20, 32, 40 and 64 px"
+    },
+    {
+      "path": "macos/releases/macos-27.svg",
+      "format": "svg",
+      "sha256": "passed",
+      "source_artwork": "project-original",
+      "structural_checks": [
+        "xml",
+        "positive-viewport",
+        "local-rendering-references",
+        "no-script-text-font-or-embedded-raster"
+      ],
+      "render_check": "passed: nonempty with transparency at 16, 20, 32, 40 and 64 px"
     },
     {
       "path": "windows/selfhst-microsoft-windows.svg",
@@ -3971,8 +4101,8 @@
       16,
       64
     ],
-    "successful_renders": 658,
-    "nonempty_renders": 658,
+    "successful_renders": 678,
+    "nonempty_renders": 678,
     "tool": "ImageMagick",
     "source_artwork_unmodified": false,
     "source_artwork_note": "Existing files unchanged; classic Simple Icons currentColor path/viewBox unchanged with a blue wrapper default."
@@ -3995,22 +4125,22 @@
       "Wordmarks and fine-detail marks remain legible only at larger sizes; nonempty rendering does not guarantee small-size readability.",
       "Windows Server Microsoft wordmark is retained as a wordmark because no dedicated Iconify symbol was found; the unofficial Windows Server 2025 candidate was excluded."
     ],
-    "scope": "Previous 193 assets; the added classic flag received numerical nonempty checks only, not visual acceptance."
+    "scope": "Previous 193 assets. The classic flag and the ten original macOS SVGs received numerical nonempty checks. Application visual acceptance is pending."
   },
   "licenses": {
     "collection_notices": 10,
     "official_assets_have_explicit_publisher_status": true
   },
   "observed_svg_tags": {
-    "svg": 313,
-    "path": 1122,
-    "g": 78,
+    "svg": 323,
+    "path": 1176,
+    "g": 88,
     "rect": 43,
-    "defs": 37,
-    "clipPath": 31,
+    "defs": 47,
+    "clipPath": 41,
     "linearGradient": 66,
     "stop": 326,
-    "circle": 72,
+    "circle": 93,
     "radialGradient": 91,
     "filter": 13,
     "feGaussianBlur": 13,

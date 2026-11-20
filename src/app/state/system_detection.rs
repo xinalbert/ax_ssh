@@ -208,8 +208,9 @@ mod tests {
     fn discovery_persists_once_and_is_available_after_restart_without_tabs() {
         let (mut app, profile, tab, attempt, path) = fixture();
         let system = app
-            .accept_system_detection(&profile, tab, attempt, Some("Ubuntu 24.04 LTS"))
+            .accept_system_detection(&profile, tab, attempt, Some("macOS 15.7.7"))
             .unwrap();
+        assert_eq!(system.icon_id(), Some("macos-15"));
         assert!(
             app.accept_system_detection(&profile, tab, attempt, Some("Debian 12"))
                 .is_none()
@@ -225,7 +226,7 @@ mod tests {
         let mut restored = AppState::new(app.config.clone(), disk);
         assert_eq!(
             restored.profile_system_releases()[&profile.id],
-            "Ubuntu 24.04 LTS"
+            "macOS 15.7.7"
         );
         let tab = restored.open_sftp_tab(&profile);
         restored
@@ -236,7 +237,7 @@ mod tests {
         assert!(restored.system_release_probes.is_empty());
         assert_eq!(
             restored.terminal(tab).unwrap().system_release.as_deref(),
-            Some("Ubuntu 24.04 LTS")
+            Some("macOS 15.7.7")
         );
         std::fs::remove_dir_all(path).unwrap();
     }

@@ -1,6 +1,6 @@
 use super::*;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(in crate::app) fn load_local_system_platform(
     runtime: &Handle,
     state: Arc<Mutex<AppState>>,

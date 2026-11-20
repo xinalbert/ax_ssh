@@ -28,7 +28,7 @@ use self::sidebar::*;
 use self::terminal::*;
 use self::workspace::*;
 
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 pub(super) use self::options::load_local_system_platform;
 pub(super) use self::options::{
     clear_private_key_option_model, clear_session_editor_option_models,

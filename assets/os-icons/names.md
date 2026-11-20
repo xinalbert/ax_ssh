@@ -131,6 +131,16 @@ python3 scripts/generate_system_icons.py --check
 | `xubuntu` | Xubuntu | linux | `xubuntu` | [linux/xubuntu/selfhst-xubuntu.svg](linux/xubuntu/selfhst-xubuntu.svg) |
 | `zorin-os` | Zorin OS | linux | `zorin os`, `zorin` | [linux/zorin-os/selfhst-zorin-os.svg](linux/zorin-os/selfhst-zorin-os.svg) |
 | `macos` | macOS | macos | `macos`, `mac os`, `darwin` | [macos/selfhst-apple-retro.svg](macos/selfhst-apple-retro.svg) |
+| `macos-10-13` | macOS 10.13 High Sierra | macos | `macos 10 13`, `macos high sierra` | [macos/releases/macos-10-13.svg](macos/releases/macos-10-13.svg) |
+| `macos-10-14` | macOS 10.14 Mojave | macos | `macos 10 14`, `macos mojave` | [macos/releases/macos-10-14.svg](macos/releases/macos-10-14.svg) |
+| `macos-10-15` | macOS 10.15 Catalina | macos | `macos 10 15`, `macos catalina` | [macos/releases/macos-10-15.svg](macos/releases/macos-10-15.svg) |
+| `macos-11` | macOS 11 Big Sur | macos | `macos 11`, `macos big sur` | [macos/releases/macos-11.svg](macos/releases/macos-11.svg) |
+| `macos-12` | macOS 12 Monterey | macos | `macos 12`, `macos monterey` | [macos/releases/macos-12.svg](macos/releases/macos-12.svg) |
+| `macos-13` | macOS 13 Ventura | macos | `macos 13`, `macos ventura` | [macos/releases/macos-13.svg](macos/releases/macos-13.svg) |
+| `macos-14` | macOS 14 Sonoma | macos | `macos 14`, `macos sonoma` | [macos/releases/macos-14.svg](macos/releases/macos-14.svg) |
+| `macos-15` | macOS 15 Sequoia | macos | `macos 15`, `macos sequoia` | [macos/releases/macos-15.svg](macos/releases/macos-15.svg) |
+| `macos-26` | macOS 26 Tahoe | macos | `macos 26`, `macos tahoe` | [macos/releases/macos-26.svg](macos/releases/macos-26.svg) |
+| `macos-27` | macOS 27 Golden Gate | macos | `macos 27`, `macos golden gate` | [macos/releases/macos-27.svg](macos/releases/macos-27.svg) |
 | `windows` | Windows | windows | `windows`, `microsoft` | [windows/selfhst-microsoft-windows.svg](windows/selfhst-microsoft-windows.svg) |
 | `windows-10` | Windows 10 | windows | `windows 10`, `windows10`, `win10` | [windows/windows-8/thesvg-color-windows8.svg](windows/windows-8/thesvg-color-windows8.svg) |
 | `windows-11` | Windows 11 | windows | `windows 11`, `windows11`, `win11` | [windows/windows-11/thesvg-color-windows11.svg](windows/windows-11/thesvg-color-windows11.svg) |

@@ -1281,19 +1281,24 @@ tab-local terminal connection notice deliberately remains non-blocking.
     selected shell names do not determine platform identity. On Linux, one startup
     blocking worker reads at most 8 KiB from `/etc/os-release` (with
     `/usr/lib/os-release` fallback), caches the canonical platform ID and refreshes
-    Local Shell's sidebar entry and all routed tabs through UI dispatch. No shell
-    command or synthetic release label is needed. Local distribution mapping
-    uses `ID` and does not inherit an `ID_LIKE` parent icon. Known distribution
+    Local Shell's sidebar entry and all routed tabs through UI dispatch. On
+    macOS, the same startup worker reads the product version from
+    `kern.osproductversion` into a bounded buffer. Local Linux mapping uses
+    `ID` and does not inherit an `ID_LIKE` parent icon. Known distribution
     names/editions in remote release labels select their own artwork; known Linux
     without a recognized dedicated mark uses Tux.
     `assets/os-icons/catalog.json` owns canonical IDs, display names, aliases and
     icon paths for the three families, 113 Linux entries and 12 Windows version/
-    generation choices. Explicit Windows product names select XP, Vista, 7, 8,
+    generation choices, plus ten macOS release icons. macOS automatic mode
+    maps the local or authenticated SSH product version to High Sierra, Mojave,
+    Catalina, Big Sur, Monterey, Ventura, Sonoma, Sequoia, Tahoe or Golden Gate.
+    Unknown versions and Darwin kernel-only labels use the generic macOS icon.
+    Explicit Windows product names select XP, Vista, 7, 8,
     8.1, 10, 11 or Server; older Server 2003/2008 names select the classic flag.
     Within each artwork generation, products share a symbol and retain their
     release labels. Unknown versions and undetected local Windows use the generic
     mark; kernel `10.0` alone never selects a desktop version. Linux/WSL identity
-    takes priority. Old automatic `windows` caches are refined from their stored
+    takes priority. Old automatic `windows` and `macos` caches are refined from their stored
     release in sidebar, tabs, focused-session summaries and editor previews;
     manual choices still win and the stored detection is unchanged. The offline
     `scripts/generate_system_icons.py` generates private Rust recognition constants,

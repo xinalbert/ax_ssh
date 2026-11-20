@@ -2,7 +2,7 @@
 
 [中文说明](README.zh.md) · [Name index](names.md) · [Offline preview](preview.html) · [Source manifest](manifest.json) · [Search coverage / gaps](search-coverage.json) · [Checks](validation.json)
 
-**329 files** (313 SVG, 16 PNG) cover **179 system/platform entries**. This expansion adds 193 icons and 122 entries; the original 135 SVGs are unchanged. One additional classic Windows flag is now included. Open `preview.html` locally to compare every file on white and dark backgrounds.
+**339 files** (323 SVG, 16 PNG) cover **179 system/platform entries**. Open `preview.html` locally to compare the icons on white and dark backgrounds.
 
 Sources include [Iconify](https://icon-sets.iconify.design/?query=Linux), project websites/brand pages/official repositories, [Papirus](https://github.com/PapirusDevelopmentTeam/papirus-icon-theme), and [Font Logos](https://github.com/lukas-w/font-logos). Symbols are preferred, with native letter emblems retained. Full-name exceptions are explicitly marked. Native SVG/PNG bytes are unchanged; Iconify bodies only receive an SVG wrapper. No logo was cropped. The new historical Simple Icons flag retains its currentColor path with a blue SVG wrapper default; the previous source-colored artwork is unchanged.
 
@@ -22,8 +22,9 @@ Sources include [Iconify](https://icon-sets.iconify.design/?query=Linux), projec
 
 `linux/generic/` contains Tux; Windows subdirectories preserve Windows Server, Windows 8/11 and the legacy flag. `licenses/` contains collection licenses and publisher notices/policies. Entries are not all distributions; the manifest `kind` records their actual category.
 
-[catalog.json](catalog.json) defines 128 application icon IDs, display names,
-recognition aliases and asset paths: three system families, 113 Linux entries, and 12 Windows version/generation choices.
+[catalog.json](catalog.json) defines 138 application icon IDs, display names,
+recognition aliases and asset paths covering three system families, 113 Linux entries,
+12 Windows version/generation choices, and ten macOS release icons.
 The [name index](names.md) provides a searchable table and generation commands.
 Rust recognition and the shared Slint icon component are generated from this
 catalog. Known Linux distributions use their own artwork; `linux` uses Tux as
@@ -32,7 +33,12 @@ the fallback. Default display preserves source colors, while the existing
 
 Windows automatic mapping distinguishes XP, Vista, 7, 8, 8.1, 10, 11 and Server. XP/Vista/7 and Server 2003/2008 use a shared historical flag silhouette; 8/8.1/10 and modern Server use the perspective window; 11 uses square panes. Windows 95/98/Me/2000 retain the older flag. Versions within an artwork generation share art and keep their product names. Unknown versions retain `windows`; no desktop version is inferred from kernel `10.0`. Local Windows stays generic unless manually selected. Existing automatic `windows` caches are refined from their stored release for display; manual choices retain priority.
 
-Only native upstream variants are saved. A missing light/dark entry means no matching variant was found in the inspected source.
+macOS automatic mode selects a release icon from the local or SSH product version.
+Unknown versions and Darwin-only labels use the generic macOS icon. Search
+`macOS` in the icon picker to choose a version manually. The AxSSH artwork in
+[macos/releases](macos/releases/) uses simple SVG shapes for 16–20 px display.
+
+A missing upstream light/dark entry means no matching variant was found in the inspected source.
 
 - **selfh.st**: light means white/light ink for dark backgrounds; dark means black/dark ink for light backgrounds.
 - **Skill Icons**: light/dark refer to the rounded badge background.

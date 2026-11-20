@@ -319,7 +319,7 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
             detached_windows: detached_windows.clone(),
         },
     );
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", target_os = "macos"))]
     load_local_system_platform(runtime.handle(), state.clone(), ui.as_weak());
     if let Some(ref snapshot) = workspace_snapshot {
         match snapshot.validate() {

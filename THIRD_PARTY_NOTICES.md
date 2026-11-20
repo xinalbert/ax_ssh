@@ -51,7 +51,7 @@ copyright holders and recorded in the Cargo dependency metadata.
 
 ## Operating-System And Distribution Icon Assets
 
-The SVG/PNG files under `assets/os-icons/` were obtained through Iconify,
+Third-party SVG/PNG files under `assets/os-icons/` were obtained through Iconify,
 publisher websites and official repositories, and community icon projects.
 The collection authors and licenses are:
 

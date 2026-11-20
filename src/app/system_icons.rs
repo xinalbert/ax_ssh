@@ -1,15 +1,15 @@
-//! Pure platform/icon identity mapping and bounded local Linux discovery.
+//! Platform icon identity mapping and bounded local system discovery.
 
 #[cfg(target_os = "linux")]
 use std::fs::File;
 #[cfg(any(target_os = "linux", test))]
 use std::io::Read;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 use std::sync::OnceLock;
 
 #[cfg(any(target_os = "linux", test))]
 const MAX_OS_RELEASE_BYTES: u64 = 8192;
-#[cfg(target_os = "linux")]
+#[cfg(any(target_os = "linux", target_os = "macos"))]
 static LOCAL_PLATFORM: OnceLock<&'static str> = OnceLock::new();
 
 mod catalog;
@@ -21,14 +21,50 @@ pub(super) fn local_platform() -> &'static str {
     {
         LOCAL_PLATFORM.get().copied().unwrap_or("linux")
     }
-    #[cfg(not(target_os = "linux"))]
+    #[cfg(target_os = "macos")]
+    {
+        LOCAL_PLATFORM.get().copied().unwrap_or("macos")
+    }
+    #[cfg(not(any(target_os = "linux", target_os = "macos")))]
     {
         match std::env::consts::OS {
             "windows" => "windows",
-            "macos" => "macos",
             _ => "",
         }
     }
+}
+
+#[cfg(target_os = "macos")]
+pub(super) fn discover_local_platform() -> &'static str {
+    LOCAL_PLATFORM.get_or_init(discover_macos_platform)
+}
+
+#[cfg(target_os = "macos")]
+fn discover_macos_platform() -> &'static str {
+    let mut version = [0u8; 64];
+    let mut length = version.len();
+    // SAFETY: The name is NUL-terminated. The writable output buffer matches
+    // the initial length, and both pointers remain valid for the call.
+    let status = unsafe {
+        libc::sysctlbyname(
+            c"kern.osproductversion".as_ptr(),
+            version.as_mut_ptr().cast(),
+            &mut length,
+            std::ptr::null_mut(),
+            0,
+        )
+    };
+    if status != 0 {
+        let error = std::io::Error::last_os_error();
+        tracing::debug!(%error, "could not read the local macOS product version");
+        return "macos";
+    }
+    version
+        .get(..length)
+        .and_then(|bytes| std::ffi::CStr::from_bytes_with_nul(bytes).ok())
+        .and_then(|version| version.to_str().ok())
+        .map(|version| macos_platform(&normalized(version)))
+        .unwrap_or("macos")
 }
 
 // Called only from the startup blocking worker; UI mappings read the cache.
@@ -124,8 +160,9 @@ fn platform_for_os_release(content: &str) -> &'static str {
 }
 
 pub(super) fn platform_for_release(release: &str) -> &'static str {
-    let release = format!(" {} ", normalized(release));
-    let contains = |alias: &str| release.contains(&format!(" {alias} "));
+    let release = normalized(release);
+    let words = format!(" {release} ");
+    let contains = |alias: &str| words.contains(&format!(" {alias} "));
     if let Some((platform, _)) = LINUX_DISTRIBUTIONS
         .iter()
         .find(|(_, aliases)| aliases.iter().any(|alias| contains(alias)))
@@ -134,15 +171,13 @@ pub(super) fn platform_for_release(release: &str) -> &'static str {
     }
     // A Linux kernel label can contain "microsoft" under WSL.
     if !contains("linux") {
-        let windows = ax_ssh::config::system_icon_choices()
+        if let Some(product) = ["macos ", "mac os x ", "mac os ", "os x "]
             .iter()
-            .filter(|icon| {
-                icon.family == "windows" && icon.id != "windows" && icon.id != "windows-server"
-            })
-            .flat_map(|icon| icon.aliases.iter().map(move |alias| (icon.id, *alias)))
-            .filter(|(_, alias)| contains(alias))
-            .max_by_key(|(_, alias)| alias.len());
-        if let Some((platform, _)) = windows {
+            .find_map(|prefix| release.strip_prefix(prefix))
+        {
+            return macos_platform(product);
+        }
+        if let Some(platform) = versioned_platform("windows", contains) {
             return platform;
         }
         if contains("windows server") {
@@ -158,15 +193,37 @@ pub(super) fn platform_for_release(release: &str) -> &'static str {
         .unwrap_or("")
 }
 
-// Reinterpret only old automatic Windows cache entries; callers retain manual
-// override priority and no persisted destination or discovery data is changed.
+fn macos_platform(product: &str) -> &'static str {
+    let label = format!("macos {product}");
+    versioned_platform("macos", |alias| {
+        label
+            .strip_prefix(alias)
+            .is_some_and(|suffix| suffix.is_empty() || suffix.starts_with(' '))
+    })
+    .unwrap_or("macos")
+}
+
+fn versioned_platform(family: &str, matches_alias: impl Fn(&str) -> bool) -> Option<&'static str> {
+    ax_ssh::config::system_icon_choices()
+        .iter()
+        .filter(|icon| icon.family == family && icon.id != family && icon.id != "windows-server")
+        .flat_map(|icon| icon.aliases.iter().map(move |alias| (icon.id, *alias)))
+        .filter(|(_, alias)| matches_alias(alias))
+        .max_by_key(|(_, alias)| alias.len())
+        .map(|(id, _)| id)
+}
+
+// Older automatic caches can refine their family using the stored release.
 pub(super) fn platform_for_detection(
     system: &ax_ssh::config::SystemDetection,
 ) -> Option<&'static str> {
     let icon = system.icon_id().and_then(ax_ssh::config::system_icon_id)?;
-    if icon == "windows" {
+    if matches!(icon, "windows" | "macos") {
         let refined = platform_for_release(system.release());
-        if refined.starts_with("windows-") {
+        if refined
+            .strip_prefix(icon)
+            .is_some_and(|suffix| suffix.starts_with('-'))
+        {
             return Some(refined);
         }
     }
@@ -206,7 +263,31 @@ mod tests {
             ("FreeBSD 14.3", ""),
             ("Archival Server", ""),
             ("Microsoft Windows Server 2022", "windows-server"),
-            ("macOS 15.5", "macos"),
+        ] {
+            assert_eq!(platform_for_release(release), expected, "{release}");
+        }
+    }
+
+    #[test]
+    fn macos_uses_product_versions_and_names() {
+        for (release, expected) in [
+            ("macOS 10.13.6", "macos-10-13"),
+            ("Mac OS X 10.14.6", "macos-10-14"),
+            ("macOS Catalina", "macos-10-15"),
+            ("macOS 11.7.10", "macos-11"),
+            ("macOS 12.7.6", "macos-12"),
+            ("macOS 13.7.8", "macos-13"),
+            ("macOS 14.8.2", "macos-14"),
+            ("macOS 15.7.7", "macos-15"),
+            ("macOS 26.1", "macos-26"),
+            ("macOS 27 Golden Gate", "macos-27"),
+            ("macOS 10.12.6", "macos"),
+            ("macOS 15.0.26", "macos-15"),
+            ("macOS 150.0", "macos"),
+            ("macOS 28.0", "macos"),
+            ("macOS", "macos"),
+            ("Darwin 26.1.0", "macos"),
+            ("Ubuntu on macOS 15", "ubuntu"),
         ] {
             assert_eq!(platform_for_release(release), expected, "{release}");
         }
@@ -259,6 +340,41 @@ mod tests {
         assert_eq!((pixels.width(), pixels.height()), (24, 24));
         assert!(pixels.as_slice().iter().any(|pixel| pixel.a > 0));
         assert!(pixels.as_slice().iter().any(|pixel| pixel.a == 0));
+    }
+
+    #[test]
+    fn macos_release_icons_decode_with_color_and_transparency() {
+        let root =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("assets/os-icons/macos/releases");
+        for icon in ax_ssh::config::system_icon_choices()
+            .iter()
+            .filter(|icon| icon.id.starts_with("macos-"))
+        {
+            let path = root.join(format!("{}.svg", icon.id));
+            let image = slint::Image::load_from_path(&path).expect("bundled macOS release SVG");
+            let pixels = image.to_rgba8().expect("macOS release icon raster");
+            assert_eq!((pixels.width(), pixels.height()), (32, 32));
+            assert!(pixels.as_slice().iter().any(|pixel| pixel.a == 0));
+            assert!(
+                pixels
+                    .as_slice()
+                    .iter()
+                    .any(|pixel| { pixel.a == 255 && (pixel.r != pixel.g || pixel.g != pixel.b) })
+            );
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    #[test]
+    fn local_macos_icon_matches_the_product_version() {
+        let output = std::process::Command::new("/usr/bin/sw_vers")
+            .arg("-productVersion")
+            .output()
+            .expect("read macOS product version");
+        assert!(output.status.success());
+        let version = std::str::from_utf8(&output.stdout).expect("UTF-8 product version");
+        let expected = platform_for_release(&format!("macOS {}", version.trim()));
+        assert_eq!(discover_macos_platform(), expected);
     }
 
     #[test]

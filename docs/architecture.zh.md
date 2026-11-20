@@ -773,14 +773,18 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
     标签；不支持的本机系统保留终端 glyph。运行时标签名称和所选 shell 名称不决定系统身份，
     Linux 上在启动时通过单个 blocking worker 有界读取 `/etc/os-release`，不可用时尝试
     `/usr/lib/os-release`，每个来源最多读取 8 KiB；缓存规范图标标识后通过 UI dispatch 更新
-    Local Shell 入口及全部路由窗口的标签。无需 shell 命令或合成 release；本机发行版按
+    Local Shell 入口及全部路由窗口的标签。macOS 复用启动后台任务，从
+    `kern.osproductversion` 有界读取本机产品版本。本机 Linux 发行版按
     `ID` 识别，不按 `ID_LIKE` 继承母发行版图标。远端 release 中可识别的发行版/版本名
     优先选择自己的图标，已知 Linux 但无法识别专用图标时才使用 Tux。
     `assets/os-icons/catalog.json` 统一保存三类系统家族、113 个 Linux 条目和 12 个 Windows
-    版本/世代选项的规范标识、显示名称、识别别名及图标路径。Windows 根据明确产品名区分
+    版本/世代选项及十个 macOS 版本的规范标识、显示名称、识别别名及图标路径。macOS 自动模式按
+    本机或已认证 SSH 返回的产品版本选择 High Sierra、Mojave、Catalina、Big Sur、Monterey、
+    Ventura、Sonoma、Sequoia、Tahoe 或 Golden Gate。未知版本和只有 Darwin 内核版本时显示
+    通用 macOS 图标。Windows 根据明确产品名区分
     XP、Vista、7、8、8.1、10、11 与 Server；Server 2003/2008 使用经典旗帜。
     同一图形世代共用资源并保留具体 release。未知版本和本机尚未探测版本时使用通用标识，
-    不根据内核 `10.0` 猜测桌面版本，Linux/WSL 身份优先。自动检测的旧 `windows` 缓存按
+    不根据内核 `10.0` 猜测桌面版本，Linux/WSL 身份优先。自动检测的旧 `windows` 和 `macos` 缓存按
     已保存 release 细化侧栏、标签、聚焦会话摘要和编辑器预览，手动选择仍优先，不改写缓存。
     离线 `scripts/generate_system_icons.py` 生成私有 Rust
     识别常量、config 校验与有界可搜索选择器共用的领域选择表、侧栏/标签共用的 `SystemPlatformIcon`

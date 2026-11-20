@@ -107,6 +107,76 @@
       "icon": "macos/selfhst-apple-retro.svg"
     },
     {
+      "id": "macos-10-13",
+      "name": "macOS 10.13 High Sierra",
+      "family": "macos",
+      "aliases": ["macos 10 13", "macos high sierra"],
+      "icon": "macos/releases/macos-10-13.svg"
+    },
+    {
+      "id": "macos-10-14",
+      "name": "macOS 10.14 Mojave",
+      "family": "macos",
+      "aliases": ["macos 10 14", "macos mojave"],
+      "icon": "macos/releases/macos-10-14.svg"
+    },
+    {
+      "id": "macos-10-15",
+      "name": "macOS 10.15 Catalina",
+      "family": "macos",
+      "aliases": ["macos 10 15", "macos catalina"],
+      "icon": "macos/releases/macos-10-15.svg"
+    },
+    {
+      "id": "macos-11",
+      "name": "macOS 11 Big Sur",
+      "family": "macos",
+      "aliases": ["macos 11", "macos big sur"],
+      "icon": "macos/releases/macos-11.svg"
+    },
+    {
+      "id": "macos-12",
+      "name": "macOS 12 Monterey",
+      "family": "macos",
+      "aliases": ["macos 12", "macos monterey"],
+      "icon": "macos/releases/macos-12.svg"
+    },
+    {
+      "id": "macos-13",
+      "name": "macOS 13 Ventura",
+      "family": "macos",
+      "aliases": ["macos 13", "macos ventura"],
+      "icon": "macos/releases/macos-13.svg"
+    },
+    {
+      "id": "macos-14",
+      "name": "macOS 14 Sonoma",
+      "family": "macos",
+      "aliases": ["macos 14", "macos sonoma"],
+      "icon": "macos/releases/macos-14.svg"
+    },
+    {
+      "id": "macos-15",
+      "name": "macOS 15 Sequoia",
+      "family": "macos",
+      "aliases": ["macos 15", "macos sequoia"],
+      "icon": "macos/releases/macos-15.svg"
+    },
+    {
+      "id": "macos-26",
+      "name": "macOS 26 Tahoe",
+      "family": "macos",
+      "aliases": ["macos 26", "macos tahoe"],
+      "icon": "macos/releases/macos-26.svg"
+    },
+    {
+      "id": "macos-27",
+      "name": "macOS 27 Golden Gate",
+      "family": "macos",
+      "aliases": ["macos 27", "macos golden gate"],
+      "icon": "macos/releases/macos-27.svg"
+    },
+    {
       "id": "linux",
       "name": "Linux",
       "family": "linux",

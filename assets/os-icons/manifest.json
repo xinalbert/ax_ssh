@@ -3,7 +3,7 @@
   "retrieved_at": "2026-10-09T02:10:00+00:00",
   "search_url": "https://icon-sets.iconify.design/?query=Linux",
   "selection_policy": "Prefer symbols over wordmarks; retain available upstream light/dark variants without recoloring.",
-  "export_policy": "Iconify body in an SVG wrapper, or unmodified upstream SVG/PNG bytes; no artwork recoloring or cropping.",
+  "export_policy": "Iconify body in an SVG wrapper, unmodified upstream SVG/PNG bytes, or original AxSSH SVG artwork.",
   "collections": {
     "selfhst": {
       "name": "selfh.st/icons",
@@ -206,6 +206,23 @@
       "data_source": {
         "type": "commons-file",
         "description": "The file page records Microsoft Corporation as artist and the 2017 Windows Server artwork as public domain."
+      }
+    },
+    "axssh": {
+      "name": "AxSSH system icon artwork",
+      "author": {
+        "name": "AxSSH contributors",
+        "url": "https://github.com/xinalbert/ax_ssh"
+      },
+      "license": {
+        "title": "GNU General Public License v3.0 only",
+        "spdx": "GPL-3.0-only",
+        "url": "https://www.gnu.org/licenses/gpl-3.0.html"
+      },
+      "license_file": "../../LICENSE",
+      "data_source": {
+        "type": "project-original",
+        "description": "SVGs drawn using simple shapes for small system icons."
       }
     },
     "simple-icons": {
@@ -1180,7 +1197,17 @@
         "macos/selfhst-apple-dark.svg",
         "macos/skill-icons-apple-light.svg",
         "macos/skill-icons-apple-dark.svg",
-        "macos/selfhst-apple-retro.svg"
+        "macos/selfhst-apple-retro.svg",
+        "macos/releases/macos-10-13.svg",
+        "macos/releases/macos-10-14.svg",
+        "macos/releases/macos-10-15.svg",
+        "macos/releases/macos-11.svg",
+        "macos/releases/macos-12.svg",
+        "macos/releases/macos-13.svg",
+        "macos/releases/macos-14.svg",
+        "macos/releases/macos-15.svg",
+        "macos/releases/macos-26.svg",
+        "macos/releases/macos-27.svg"
       ],
       "preferred_asset": "macos/selfhst-apple.svg",
       "kind": "operating-system",
@@ -5546,6 +5573,156 @@
       "format": "svg"
     },
     {
+      "path": "macos/releases/macos-10-13.svg",
+      "system_id": "macos",
+      "collection": "axssh",
+      "variant": "color",
+      "presentation": "badge",
+      "text_kind": "symbol",
+      "format": "svg",
+      "source_class": "project-original",
+      "width": 32,
+      "height": 32,
+      "sha256": "c5f0014321f744e17cc8114616b6fd46e9c02007e56f903d62ad488e1105fc4f",
+      "asset_license_status": "project-license",
+      "license": "GPL-3.0-only"
+    },
+    {
+      "path": "macos/releases/macos-10-14.svg",
+      "system_id": "macos",
+      "collection": "axssh",
+      "variant": "color",
+      "presentation": "badge",
+      "text_kind": "symbol",
+      "format": "svg",
+      "source_class": "project-original",
+      "width": 32,
+      "height": 32,
+      "sha256": "109edf8889fcf3a4663d060d17d6cc23da3a8126b6228387b5de5601766f3499",
+      "asset_license_status": "project-license",
+      "license": "GPL-3.0-only"
+    },
+    {
+      "path": "macos/releases/macos-10-15.svg",
+      "system_id": "macos",
+      "collection": "axssh",
+      "variant": "color",
+      "presentation": "badge",
+      "text_kind": "symbol",
+      "format": "svg",
+      "source_class": "project-original",
+      "width": 32,
+      "height": 32,
+      "sha256": "305a38fc1ca81b5025b8c7a24d765f9d616d6d20d67902e53fcf467dc6e6e2c7",
+      "asset_license_status": "project-license",
+      "license": "GPL-3.0-only"
+    },
+    {
+      "path": "macos/releases/macos-11.svg",
+      "system_id": "macos",
+      "collection": "axssh",
+      "variant": "color",
+      "presentation": "badge",
+      "text_kind": "symbol",
+      "format": "svg",
+      "source_class": "project-original",
+      "width": 32,
+      "height": 32,
+      "sha256": "bf4cdd2b013057abb810025c29d2a487b9c029d0f59b4ea0f1bdb0d068e83421",
+      "asset_license_status": "project-license",
+      "license": "GPL-3.0-only"
+    },
+    {
+      "path": "macos/releases/macos-12.svg",
+      "system_id": "macos",
+      "collection": "axssh",
+      "variant": "color",
+      "presentation": "badge",
+      "text_kind": "symbol",
+      "format": "svg",
+      "source_class": "project-original",
+      "width": 32,
+      "height": 32,
+      "sha256": "9d3f45603c53b4a28ce53813a0e55fc49534663359aa693d6e079b7c43c0d50a",
+      "asset_license_status": "project-license",
+      "license": "GPL-3.0-only"
+    },
+    {
+      "path": "macos/releases/macos-13.svg",
+      "system_id": "macos",
+      "collection": "axssh",
+      "variant": "color",
+      "presentation": "badge",
+      "text_kind": "symbol",
+      "format": "svg",
+      "source_class": "project-original",
+      "width": 32,
+      "height": 32,
+      "sha256": "2001c4a5e74aca006262d0cfcffc398e523d17ab9d3107114a3457d6c5b0c794",
+      "asset_license_status": "project-license",
+      "license": "GPL-3.0-only"
+    },
+    {
+      "path": "macos/releases/macos-14.svg",
+      "system_id": "macos",
+      "collection": "axssh",
+      "variant": "color",
+      "presentation": "badge",
+      "text_kind": "symbol",
+      "format": "svg",
+      "source_class": "project-original",
+      "width": 32,
+      "height": 32,
+      "sha256": "72164fcb0539fc4634745e7618fd481ef4959d4f7334aac2e833a54d03decfa9",
+      "asset_license_status": "project-license",
+      "license": "GPL-3.0-only"
+    },
+    {
+      "path": "macos/releases/macos-15.svg",
+      "system_id": "macos",
+      "collection": "axssh",
+      "variant": "color",
+      "presentation": "badge",
+      "text_kind": "symbol",
+      "format": "svg",
+      "source_class": "project-original",
+      "width": 32,
+      "height": 32,
+      "sha256": "8bd0a80ea2c133906fe4f0693aa01e11ba2eff8eec4a1829fa64fe0d99992841",
+      "asset_license_status": "project-license",
+      "license": "GPL-3.0-only"
+    },
+    {
+      "path": "macos/releases/macos-26.svg",
+      "system_id": "macos",
+      "collection": "axssh",
+      "variant": "color",
+      "presentation": "badge",
+      "text_kind": "symbol",
+      "format": "svg",
+      "source_class": "project-original",
+      "width": 32,
+      "height": 32,
+      "sha256": "9faff22e831569e38aef0ec24622942df7e671b458a07ffe40d71c9892b22837",
+      "asset_license_status": "project-license",
+      "license": "GPL-3.0-only"
+    },
+    {
+      "path": "macos/releases/macos-27.svg",
+      "system_id": "macos",
+      "collection": "axssh",
+      "variant": "color",
+      "presentation": "badge",
+      "text_kind": "symbol",
+      "format": "svg",
+      "source_class": "project-original",
+      "width": 32,
+      "height": 32,
+      "sha256": "92ba02e1b5a51b2a6d6e42609a1dc763b244f6a08ee3bd988ff488412f65a72b",
+      "asset_license_status": "project-license",
+      "license": "GPL-3.0-only"
+    },
+    {
       "path": "windows/selfhst-microsoft-windows.svg",
       "system_id": "windows",
       "iconify_id": "selfhst:microsoft-windows",
@@ -9847,9 +10024,9 @@
   "coverage_report": "search-coverage.json",
   "counts": {
     "systems": 179,
-    "assets": 329,
+    "assets": 339,
     "formats": {
-      "svg": 313,
+      "svg": 323,
       "png": 16
     },
     "platforms": {
@@ -9864,7 +10041,7 @@
       "desktop": 11
     },
     "variants": {
-      "color": 152,
+      "color": 162,
       "light": 74,
       "dark": 71,
       "original": 30,

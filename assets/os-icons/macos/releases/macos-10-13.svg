@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <defs>
+    <clipPath id="disc"><circle cx="16" cy="16" r="14"/></clipPath>
+  </defs>
+  <g clip-path="url(#disc)">
+    <path fill="#8bc5e4" d="M0 0h32v32H0z"/>
+    <path fill="#596779" d="m0 19 9-14 5 6 4-3 15 12v12H0z"/>
+    <path fill="#f1f3f6" d="m3 15 6-10 6 8-5-2-3 3z"/>
+    <path fill="#bebbaf" d="m14 16 4-8 10 8-9-3z"/>
+    <path fill="#d58323" d="M0 21c5-1 9 1 14 0 7-2 13-3 18 0v11H0z"/>
+    <path fill="#e6b657" d="M0 25h32v7H0z"/>
+    <path fill="#a96a32" d="M7 28h17v2H7z"/>
+  </g>
+  <circle cx="16" cy="16" r="14" fill="none" stroke="#e5e9f8" stroke-width="1.2"/>
+</svg>

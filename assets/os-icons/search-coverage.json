@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "retrieved_at": "2026-10-09T02:10:00+00:00",
-  "scope": "Follow-up missing-icon audit plus BSD, appliances, platforms and desktop environments; not an exhaustive list of every operating system.",
+  "scope": "Historical upstream-source audit covering operating systems, BSD, appliances, platforms and desktop environments. Counts exclude subsequent original AxSSH artwork.",
   "original_asset_count": 135,
   "new_asset_count": 194,
   "new_system_count": 123,
