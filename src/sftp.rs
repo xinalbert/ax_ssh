@@ -715,7 +715,7 @@ where
 
     let initial = resolve_remote_path(&home, &home, &initial_path)?;
     let mut initial_cursor = open_directory(&session, initial).await?;
-    emit_page(&session, &mut initial_cursor, None, false, event_tx).await?;
+    emit_directory(&session, &mut initial_cursor, None, event_tx).await?;
     let mut cursor = Some(initial_cursor);
 
     loop {
@@ -736,7 +736,7 @@ where
                     let resolved = resolve_remote_path(&current, &home, &path)?;
                     let canonical = canonicalize(&session, &resolved).await?;
                     let mut next = open_directory(&session, canonical).await?;
-                    emit_page(&session, &mut next, request_id, false, event_tx).await?;
+                    emit_directory(&session, &mut next, request_id, event_tx).await?;
                     Ok::<_, anyhow::Error>(next)
                 }
                 .await;
@@ -876,6 +876,34 @@ async fn emit_page(
         if !handle.is_empty() {
             close_handle(session, handle).await;
         }
+    }
+    Ok(())
+}
+
+async fn emit_directory(
+    session: &RawSftpSession,
+    cursor: &mut DirectoryCursor,
+    request_id: Option<u64>,
+    event_tx: &mpsc::Sender<SftpBrowserEvent>,
+) -> Result<()> {
+    let mut entries = Vec::new();
+    while !cursor.done {
+        entries.extend(read_page(session, cursor).await?);
+    }
+    event_tx
+        .send(SftpBrowserEvent::DirectoryPage {
+            request_id,
+            path: cursor.path.clone(),
+            entries,
+            append: false,
+            has_more: false,
+            truncated: cursor.truncated,
+        })
+        .await
+        .context("SFTP event receiver dropped")?;
+    let handle = std::mem::take(&mut cursor.handle);
+    if !handle.is_empty() {
+        close_handle(session, handle).await;
     }
     Ok(())
 }

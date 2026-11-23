@@ -59,7 +59,7 @@ fn browser_reconnects_only_after_transport_or_protocol_failure() {
 }
 
 #[tokio::test]
-async fn directory_page_does_not_wait_for_another_batch_or_close_ack() {
+async fn directory_snapshot_reads_until_eof_before_publishing() {
     use russh_sftp::protocol::{Name, Status};
 
     let (stream, mut peer) = tokio::io::duplex(4096);
@@ -79,7 +79,7 @@ async fn directory_page_does_not_wait_for_another_batch_or_close_ack() {
         let mut packet = vec![104];
         packet.extend_from_slice(&russh_sftp::ser::to_bytes(&name).expect("name payload"));
         write_test_packet(&mut peer, &packet).await;
-        // No EOF response is available until the caller requests More.
+        // The complete snapshot waits for EOF before publishing.
         let request = read_test_packet(&mut peer).await;
         assert_eq!(request[0], 12);
         let id = u32::from_be_bytes(request[1..5].try_into().expect("request id"));
@@ -115,18 +115,11 @@ async fn directory_page_does_not_wait_for_another_batch_or_close_ack() {
         done: false,
         truncated: false,
     };
-    let page = timeout(Duration::from_secs(1), read_page(&session, &mut cursor))
-        .await
-        .expect("first page before EOF")
-        .expect("page");
-    assert_eq!(page.len(), 1);
-    assert_eq!(page[0].name, "first.txt");
-    assert!(!cursor.done);
     let (events, mut receiver) = mpsc::channel(2);
     let emitter = tokio::spawn(async move {
-        emit_page(&session, &mut cursor, Some(1), true, &events)
+        emit_directory(&session, &mut cursor, Some(1), &events)
             .await
-            .expect("final page");
+            .expect("directory snapshot");
         session.close_session().expect("close session");
     });
     let event = timeout(Duration::from_secs(1), receiver.recv())
@@ -137,8 +130,11 @@ async fn directory_page_does_not_wait_for_another_batch_or_close_ack() {
         event,
         SftpBrowserEvent::DirectoryPage {
             has_more: false,
+            append: false,
+            entries,
             ..
         }
+        if entries.len() == 1 && entries[0].name == "first.txt"
     ));
     allow_close.send(()).expect("release server");
     emitter.await.expect("emitter joined");

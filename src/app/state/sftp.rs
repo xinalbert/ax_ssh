@@ -1502,10 +1502,10 @@ impl LocalDirectoryState {
         let mut entries = std::mem::take(&mut self.entries);
         entries.extend(self.pending_entries.drain(..));
         sort_local_entries(&mut entries, self.sort);
-        self.pending_entries = entries.into();
-        self.entries.clear();
+        self.entries = entries;
+        self.pending_entries.clear();
         self.has_more = false;
-        self.load_more();
+        self.update_status();
     }
 
     fn update_status(&mut self) {

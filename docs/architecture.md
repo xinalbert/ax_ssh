@@ -75,7 +75,7 @@ Process startup (src/main.rs)
   and save. The tab ID and close flag select persistence; bundled-font reads run
   on Tokio blocking tasks and registration stays on the Slint UI thread.
 - Local and remote SFTP directories share the bounded history transition.
-  Directory reads, path validation, pagination and request IDs keep their
+  Directory reads, path validation and request IDs keep their
   existing owners. Each native window creates only its visible `SftpPane`;
   detached windows do not create the hidden main-layout copy or export its geometry.
 - Telnet and Serial retain separate workers and adapt their events into one
@@ -1828,7 +1828,7 @@ splitter collapses or expands the queue. No splitter state enters Rust, the
 configuration schema, or the SFTP transport, and the Name/Size/Modified columns
 remain responsive columns; clicking a header sorts the current snapshot, with
 Modified descending (newest first) as the default. Application state reapplies
-the selected sort after remote pages arrive and before local pages are released.
+the selected sort when a complete directory snapshot arrives.
 Accepted names remain complete in the bounded row DTO; the UI elides a name to
 the available column width and shows the full name in a character-wrapped hover
 tooltip when it overflows.
@@ -1844,8 +1844,8 @@ The remote side remains the bounded SFTP browser, while
 boundary. Local results carry a Tab-local request identity so late reads cannot
 replace a newer path. The blocking read builds a complete snapshot of readable entries without
 client-imposed name, path, or aggregate-text limits; unavailable entries are
-counted separately. Application state releases the local snapshot in 250-entry
-pages while keeping the complete snapshot available for sorting. The remote and local
+counted separately. Application state presents the complete local snapshot after
+the blocking read. The remote and local
 browsers each keep bounded per-Tab back/forward path history in
 application state. Parent navigation resolves against the currently displayed
 directory, is unavailable at the root, and enters that history only after the
@@ -1856,16 +1856,14 @@ and clear-all; selection is retained
 only for entries still present in the current directory snapshot and does not
 start a transfer. Commands and events use bounded channels, directory requests are
 serialized and timed out, inbound SFTP frames are rejected above 256 KiB before
-`russh-sftp` parsing, and a raw directory cursor emits at most 250 entries per
-page. A page publishes the first useful server batch without waiting to fill
-250 rows or receive EOF; the final page is published before awaiting CLOSE.
-More may remain available until a later request confirms EOF. There is no
-directory-wide text budget or client-imposed path/name character-count cap;
-unsafe components are still rejected before they enter the application
-snapshot. `More` releases another local page or requests
-another remote page while one is available. `russh-sftp` still has an internal
-unbounded packet sender, so AxSSH limits the browser exposure to one session
-with one request in flight.
+`russh-sftp` parsing, and a raw directory cursor reads at most 250 entries per
+protocol batch. The worker combines those batches into one directory snapshot
+before publishing it. There is no directory-wide text budget or client-imposed
+path/name character-count cap; unsafe components are still rejected before
+they enter the application snapshot. The directory view presents the complete
+snapshot in one update and does not expose a More control.
+`russh-sftp` still has an internal unbounded packet sender, so AxSSH limits the
+browser exposure to one session with one request in flight.
 
 Each row receives a 24x24 owned RGBA icon from `src/app/file_icons.rs`. The UI
 only reads an in-memory result or a built-in folder, symlink, or generic-file
@@ -1881,7 +1879,7 @@ fixed fallback icons remain available.
 
 The Slint bridge reuses up to 128 thread-local image values while their cached
 pixel allocation is unchanged. File/transfer models retain their identity for
-unchanged rows, selection/progress updates, and page appends. Only changed rows
+unchanged rows and selection/progress updates. Only changed rows
 notify Slint; unchanged file sources, selection, and icon revisions skip row
 formatting and image conversion entirely. Navigation or reordering replaces a
 model. A prewarm batch that

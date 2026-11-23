@@ -685,9 +685,6 @@ msgstr "浅色"
 msgid "Line height"
 msgstr "行高"
 
-msgid "Loading"
-msgstr "正在加载"
-
 msgid "Loading..."
 msgstr "正在加载..."
 
@@ -774,9 +771,6 @@ msgstr "单声道 (1)"
 
 msgid "Mono, stereo, or multi-channel; adapted from the local device"
 msgstr "单声道、立体声或多声道，由本机设备格式转换"
-
-msgid "More"
-msgstr "更多"
 
 msgid "Move Current Workspace to New Window"
 msgstr "将当前工作区移至新窗口"

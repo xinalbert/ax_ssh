@@ -290,14 +290,16 @@ pub(super) fn spawn_session_monitor(
                                     format!("Connected to {}", profile_endpoint(&profile));
                             }
                             apply_sftp_event(&mut terminal.sftp, event);
-                            match terminal.sftp.begin_pending_auto_refresh() {
-                                Ok(Some(request)) => {
-                                    if let Err(error) = send_remote_directory_request(terminal, request) {
-                                        refresh_error = Some(error);
+                            if !terminal.sftp.loading {
+                                match terminal.sftp.begin_pending_auto_refresh() {
+                                    Ok(Some(request)) => {
+                                        if let Err(error) = send_remote_directory_request(terminal, request) {
+                                            refresh_error = Some(error);
+                                        }
                                     }
+                                    Ok(None) => {}
+                                    Err(error) => refresh_error = Some(error),
                                 }
-                                Ok(None) => {}
-                                Err(error) => refresh_error = Some(error),
                             }
                         },
                     ) else {

@@ -685,9 +685,6 @@ msgstr "Light"
 msgid "Line height"
 msgstr "Line height"
 
-msgid "Loading"
-msgstr "Loading"
-
 msgid "Loading..."
 msgstr "Loading..."
 
@@ -774,9 +771,6 @@ msgstr "Mono (1)"
 
 msgid "Mono, stereo, or multi-channel; adapted from the local device"
 msgstr "Mono, stereo, or multi-channel; adapted from the local device"
-
-msgid "More"
-msgstr "More"
 
 msgid "Move Current Workspace to New Window"
 msgstr "Move Current Workspace to New Window"

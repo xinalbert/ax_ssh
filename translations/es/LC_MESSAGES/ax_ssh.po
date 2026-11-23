@@ -685,9 +685,6 @@ msgstr "Claro"
 msgid "Line height"
 msgstr "Altura de línea"
 
-msgid "Loading"
-msgstr "Cargando"
-
 msgid "Loading..."
 msgstr "Cargando…"
 
@@ -774,9 +771,6 @@ msgstr "Mono (1)"
 
 msgid "Mono, stereo, or multi-channel; adapted from the local device"
 msgstr "Mono, estéreo o multicanal; adaptado al dispositivo local"
-
-msgid "More"
-msgstr "Más"
 
 msgid "Move Current Workspace to New Window"
 msgstr "Mover espacio de trabajo actual a una ventana nueva"

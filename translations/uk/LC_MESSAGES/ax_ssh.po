@@ -685,9 +685,6 @@ msgstr "Світлий"
 msgid "Line height"
 msgstr "Висота рядка"
 
-msgid "Loading"
-msgstr "Завантаження"
-
 msgid "Loading..."
 msgstr "Завантаження…"
 
@@ -774,9 +771,6 @@ msgstr "Моно (1)"
 
 msgid "Mono, stereo, or multi-channel; adapted from the local device"
 msgstr "Моно, стерео або кілька каналів; адаптується до локального пристрою"
-
-msgid "More"
-msgstr "Ще"
 
 msgid "Move Current Workspace to New Window"
 msgstr "Перемістити поточну робочу область до нового вікна"

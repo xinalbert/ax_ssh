@@ -685,9 +685,6 @@ msgstr "Hell"
 msgid "Line height"
 msgstr "Zeilenhöhe"
 
-msgid "Loading"
-msgstr "Wird geladen"
-
 msgid "Loading..."
 msgstr "Wird geladen…"
 
@@ -774,9 +771,6 @@ msgstr "Mono (1)"
 
 msgid "Mono, stereo, or multi-channel; adapted from the local device"
 msgstr "Mono, Stereo oder Mehrkanal; an das lokale Gerät angepasst"
-
-msgid "More"
-msgstr "Mehr"
 
 msgid "Move Current Workspace to New Window"
 msgstr "Aktuellen Arbeitsbereich in ein neues Fenster verschieben"

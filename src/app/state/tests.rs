@@ -2763,7 +2763,7 @@ fn sftp_file_sort_defaults_to_newest_modified_first() {
 }
 
 #[test]
-fn local_directory_pages_are_bounded_and_keep_global_sort_order() {
+fn local_directory_snapshot_is_complete_and_keeps_global_sort_order() {
     let directory = std::env::temp_dir().join(format!("ax-ssh-local-pages-{}", Uuid::new_v4()));
     std::fs::create_dir(&directory).expect("test directory should be created");
     for index in 0..501 {
@@ -2782,24 +2782,16 @@ fn local_directory_pages_are_bounded_and_keep_global_sort_order() {
         listing.skipped_entries,
     );
 
-    assert_eq!(local.entries.len(), 250);
-    assert!(local.has_more);
-    assert_eq!(local.entries[0].name, "entry-000");
-    assert_eq!(local.entries[249].name, "entry-249");
-
-    assert!(local.load_more());
-    assert_eq!(local.entries.len(), 500);
-    assert!(local.has_more);
-    assert!(local.load_more());
     assert_eq!(local.entries.len(), 501);
     assert!(!local.has_more);
+    assert_eq!(local.entries[0].name, "entry-000");
     assert!(!local.load_more());
 
     std::fs::remove_dir_all(&directory).expect("test directory should be removed");
 }
 
 #[test]
-fn local_directory_refresh_retains_selection_in_a_pending_page() {
+fn local_directory_refresh_retains_selection_in_complete_snapshot() {
     let directory = std::env::temp_dir().join(format!("ax-ssh-local-selection-{}", Uuid::new_v4()));
     std::fs::create_dir(&directory).expect("test directory should be created");
     for index in 0..251 {
@@ -2835,15 +2827,9 @@ fn local_directory_refresh_retains_selection_in_a_pending_page() {
         refreshed.skipped_entries,
     );
     assert!(local.selected.contains(&pending_path));
-    assert!(!local.entries.iter().any(|entry| entry.path == pending_path));
-
-    assert!(local.load_more());
-    assert!(
-        local
-            .entries
-            .iter()
-            .any(|entry| entry.path == pending_path && local.selected.contains(&entry.path))
-    );
+    assert!(local.entries.iter().any(|entry| entry.path == pending_path));
+    assert!(!local.has_more);
+    assert!(!local.load_more());
 
     std::fs::remove_dir_all(&directory).expect("test directory should be removed");
 }

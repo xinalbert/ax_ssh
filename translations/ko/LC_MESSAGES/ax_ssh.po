@@ -685,9 +685,6 @@ msgstr "밝은 모드"
 msgid "Line height"
 msgstr "줄 높이"
 
-msgid "Loading"
-msgstr "불러오는 중"
-
 msgid "Loading..."
 msgstr "불러오는 중..."
 
@@ -774,9 +771,6 @@ msgstr "모노 (1)"
 
 msgid "Mono, stereo, or multi-channel; adapted from the local device"
 msgstr "모노, 스테레오 또는 다중 채널, 로컬 장치에 맞춰 조정"
-
-msgid "More"
-msgstr "더 보기"
 
 msgid "Move Current Workspace to New Window"
 msgstr "현재 작업 공간을 새 창으로 이동"
