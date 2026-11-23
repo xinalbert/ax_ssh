@@ -1,5 +1,13 @@
 # 项目环境变化记录
 
+## 2026-11-23 Rust 1.92-compatible dependency refresh
+
+- Reason: User authorized applying the Cargo update preview.
+- Affected files: Cargo.toml, Cargo.lock, CI/Release audit steps, bilingual development/architecture/usage docs.
+- Updated commands: cargo update, cargo audit --file Cargo.lock, locked/offline checks, Clippy, tests and macOS ARM64 target validation.
+- Verification: russh 0.65.4 now resolves rsa 0.10.0 and pkcs1 0.8.0. The current RustSec snapshot scanned without ignores and found no vulnerabilities, with seven unmaintained-dependency warnings. Rust 1.92 check, stable full tests, Clippy and macOS ARM64 check/Clippy/build passed.
+- Remaining risk: Windows, Linux and Intel macOS native CI remain the authoritative cross-platform verification.
+
 ## 2026-11-03 Cargo.lock 依赖刷新环境验证
 
 - 日期：2026-11-03

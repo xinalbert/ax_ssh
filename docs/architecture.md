@@ -1507,14 +1507,10 @@ terminal Meta input.
 ## SSH security contract
 
 `russh::client::Handler::check_server_key` is the trust boundary. The application
-locks `russh 0.65.1` with its optional RSA feature enabled for compatibility with
-existing servers. In addition to the earlier fixes for unbounded client `EXT_INFO`
-messages and zero maximum packet sizes, this patch calls `kex_done` only after
-host-key verification succeeds and rechecks agent lock status after confirmation.
-RSA 0.10.0 fixes RUSTSEC-2023-0071, but russh still pins 0.10.0-rc.18;
-the existing explicit audit exception remains until that upstream dependency is
-migrated. Deployments where an attacker can observe signing timing should prefer
-Ed25519 or ECDSA. The application
+locks `russh 0.65.4` with its optional RSA feature enabled for compatibility
+with existing servers. The locked RSA 0.10.0 release fixes
+`RUSTSEC-2023-0071`, so CI and Release audit the lockfile without exceptions.
+The application
 handles the `PublicKeyOrCertificate` callback by
 accepting only the concrete `PublicKey` variant. Server certificates are
 rejected because this profile/known_hosts contract does not implement

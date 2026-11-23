@@ -37,9 +37,7 @@ cargo run --locked
    加密保险库记录。之后使用用户管理的保险库记录仍需输入其保险库口令，自动生成的记录会在后台解锁。
    密码、保险库口令和私钥 passphrase 字段不能复制、剪切或选择，但可通过键盘或右键菜单粘贴；应用接收已提交的秘密后
    或用户取消提示时会清空它们。
-   当前版本支持 RSA 私钥和 RSA agent identity，以兼容现有服务器。该版本有意接受
-   RUSTSEC-2023-0071（当前锁定 RSA 实现没有修复版本的 Marvin 时序侧信道 advisory）。
-   如果攻击者能够观察签名时序，请不要使用 RSA 认证；条件允许时优先使用 Ed25519 或 ECDSA。
+   当前版本支持 RSA 私钥和 RSA agent identity，以兼容现有服务器。
    关闭正在探测或等待认证的 Tab，只会取消或丢弃该 Tab 自己的连接流程。
 6. 使用 **SSH agent** 时，AxSSH 在连接开始时访问当时可用的 agent，不显示密码或 passphrase
    弹窗。Unix/macOS 读取当前 `SSH_AUTH_SOCK`；Windows 优先使用该变量，未设置时使用 OpenSSH

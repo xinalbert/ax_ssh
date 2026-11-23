@@ -35,8 +35,8 @@ macOS 麦克风测试应运行含麦克风用途声明的打包 `.app`；
 
 ## 依赖基线
 
-锁文件使用 Tokio 1.54.1、arboard 3.7.0、serde_json 1.0.154、uuid 1.29.2、
-notify 8.2.2、russh 0.65.1、rubato 5.1.0、rand 0.10.4 和 base64 0.23.1。CPAL 仍固定为
+锁文件使用 Tokio 1.54.1、arboard 3.7.0、serde_json 1.0.154、uuid 1.29.3、
+notify 8.2.2、russh 0.65.4、rubato 5.1.0、rand 0.10.4 和 base64 0.23.1。CPAL 仍固定为
 0.17.3，以保留 macOS 11 支持；Slint 及其本地补丁保持 1.18.1。notify 8.2.2 要求 Rust 1.88，
 仍符合应用的 Rust 1.92 基线，并修复 Windows watcher 关闭死锁。
 
@@ -87,13 +87,12 @@ CI 和 Release 直接运行 `cargo-audit` 0.22.2，固定安装器版本，仅�
 审计以 job 退出码判定结果，不再创建或更新额外的 GitHub Check。本机使用相同工具版本复现：
 
 ```bash
-cargo audit --file Cargo.lock --ignore RUSTSEC-2023-0071
+cargo audit --file Cargo.lock
 ```
 
-`RUSTSEC-2023-0071` 仍是 russh 所用 RSA 依赖的唯一已接受例外。RSA 0.10.0 已是修复版，
-但 russh 0.65.1 仍精确锁定 0.10.0-rc.18，普通锁文件更新无法采用该修复。其他漏洞使 job 失败并
-阻止发布构建；依赖停止维护的警告仍会输出，但不单独导致失败。更新安全公告数据库和
-registry 需要联网；审计命令执行失败会使 job 失败。
+锁文件使用已修复 `RUSTSEC-2023-0071` 的 RSA 0.10.0。CI 和 Release 对所有公告执行无豁免审计。
+漏洞会使 job 失败并阻止发布构建。依赖停止维护的警告仍会输出，级别为非阻断。更新安全公告
+数据库和 registry 需要联网。
 
 ## 界面翻译
 

@@ -60,10 +60,7 @@ cargo run --locked
    selected, and are cleared after a submitted secret is accepted or the prompt
    is cancelled.
    RSA private keys and RSA agent identities are supported for compatibility
-   with existing servers. This build intentionally accepts RUSTSEC-2023-0071,
-   a Marvin timing-side-channel advisory with no patched release in the pinned
-   RSA implementation. Do not use RSA authentication where an attacker can
-   observe signing timing; prefer Ed25519 or ECDSA when possible.
+   with existing servers.
    Closing a probing or pending-authentication Tab cancels or discards only that
    Tab's connection flow.
 6. For **SSH agent**, AxSSH uses the agent available when the connection starts

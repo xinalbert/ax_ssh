@@ -1,5 +1,15 @@
 # 项目研究记录
 
+## 2026-11-23 russh 0.65.4 与 RSA 正式版
+
+- 时间：2026-11-23 14:06 +0800
+- 检索问题：当前 Rust 1.92 基线能否更新 russh 并移除 RSA 审计豁免？
+- 检索原因：用户授权应用 Cargo 预演中的兼容更新。
+- 来源列表：[russh 0.65.4](https://github.com/Eugeny/russh/releases/tag/v0.65.4)、[RSA 公告](https://rustsec.org/advisories/RUSTSEC-2023-0071.html)、[RustSec 公告库](https://github.com/RustSec/advisory-db)，以及 Cargo registry 中已下载的 russh 0.65.4 manifest 与本机锁文件。
+- 关键结论：russh 0.65.4 声明 Rust 1.89，启用 RSA 时依赖 RSA 0.10 和 PKCS#1 0.8。当前锁文件解析到 RSA 0.10.0，满足 RSA 公告的修复版本范围。
+- 对实施计划的影响：同时更新五项直接和 24 项传递依赖，CI/Release 恢复无豁免审计。
+- 未解决问题：其他平台的编译与链接由原生 CI 验证。
+
 ## 2026-11-19 终端文本区与 PTY 像素度量
 
 - 时间：2026-11-19 11:55 +0800
