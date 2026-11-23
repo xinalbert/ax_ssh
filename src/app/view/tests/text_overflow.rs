@@ -326,6 +326,51 @@ fn shared_text_buttons_fit_session_actions_across_languages_and_fonts() {
 }
 
 #[test]
+fn sftp_transfer_counts_fit_their_labels_when_the_toolbar_has_room() {
+    std::thread::spawn(|| {
+        let harness = LayoutTestHarness::new();
+        let ui = &harness.ui;
+        ui.set_active_tab_kind("sftp".into());
+        ui.set_sftp_available(true);
+        ui.set_sftp_open(true);
+        ui.global::<Theme>()
+            .set_application_font_family("JetBrains Mono".into());
+        ui.show().expect("SFTP layout window");
+        harness.window.set_size(slint::PhysicalSize::new(1180, 740));
+        for (locale, labels) in [
+            ("en", ["Transferring", "Failed", "Success"]),
+            ("de", ["Wird übertragen", "Fehlgeschlagen", "Erfolg"]),
+            ("zh-CN", ["传输中", "失败", "成功"]),
+        ] {
+            super::super::settings::apply_ui_language_to_open_windows(
+                ui,
+                UiLanguage::from_setting(locale),
+            )
+            .expect("bundled locale");
+            for counts in [[1, 2, 3], [1234, 5678, 9012]] {
+                ui.set_sftp_transfer_active_count(counts[0]);
+                ui.set_sftp_transfer_failed_count(counts[1]);
+                ui.set_sftp_transfer_completed_count(counts[2]);
+                harness.settle();
+                for (label, count) in labels.into_iter().zip(counts) {
+                    let label = format!("{label} ({count})");
+                    let item = displayed_text(&harness, &label);
+                    let required = natural_width(&harness, &item);
+                    let allocated = item.geometry().size.width;
+                    assert!(
+                        allocated + 0.5 >= required,
+                        "{locale}: {label} has {allocated}px and needs {required}px"
+                    );
+                }
+            }
+        }
+        ui.hide().expect("hide SFTP layout window");
+    })
+    .join()
+    .expect("SFTP transfer count sizing regression");
+}
+
+#[test]
 fn shared_text_overflow_hover_preserves_full_label_and_button_click() {
     std::thread::spawn(|| {
         let harness = LayoutTestHarness::new();

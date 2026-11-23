@@ -367,7 +367,7 @@ export component SftpTransferQueue inherits Rectangle {
                 spacing: Theme.space-sm;
 
                 SftpActionButton {
-                    width: 126px;
+                    min-width: Theme.sftp-control-min-width;
                     height: parent.height;
                     font-size: Theme.font-caption;
                     text: @tr("Transferring ({0})", root.active-count);
@@ -377,7 +377,7 @@ export component SftpTransferQueue inherits Rectangle {
                     clicked => { root.page = "active"; }
                 }
                 SftpActionButton {
-                    width: 82px;
+                    min-width: Theme.sftp-control-min-width;
                     height: parent.height;
                     font-size: Theme.font-caption;
                     text: @tr("Failed ({0})", root.failed-count);
@@ -387,7 +387,7 @@ export component SftpTransferQueue inherits Rectangle {
                     clicked => { root.page = "failed"; }
                 }
                 SftpActionButton {
-                    width: 94px;
+                    min-width: Theme.sftp-control-min-width;
                     height: parent.height;
                     font-size: Theme.font-caption;
                     text: @tr("Success ({0})", root.completed-count);

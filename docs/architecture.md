@@ -1836,6 +1836,9 @@ the selected sort after remote pages arrive and before local pages are released.
 Accepted names remain complete in the bounded row DTO; the UI elides a name to
 the available column width and shows the full name in a character-wrapped hover
 tooltip when it overflows.
+The three transfer status tabs size to their translated labels and current
+counts. When the toolbar is too narrow, the labels can elide and show the full
+text on hover.
 Each directory header also emits only its current, already-bounded path through
 the existing clipboard callback; the copy button does not read a directory or
 access an SFTP worker.
