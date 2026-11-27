@@ -1016,3 +1016,13 @@
 - 关键结论：常用 VT/ANSI 和部分 xterm 扩展已接通，但 SGR 21 为取消粗体而非 xterm 双下划线，备用屏 47/1047/1048 未分派，DCS/图形/8 位 C1 不完整。OSC 的颜色查询同批时序、剪贴板参数和链接 id 存在边界；其中时序问题仅为静态推导。Unicode 支持 UTF-8/中文双格/零宽附着，Emoji 排字合并不改变按码点累计的格宽；已有测试将 👩‍💻 记作 4 格，不能宣称完整字素/Bidi 合规。策略限制与语义差异分开记录。
 - 对实施计划的影响：新增 [base 计划](notes/base/plan.md)，B0 仅文档归档完成，B1–B7 均 pending、暂缓开工；当前 SFTP 目标和活动步骤不变，不创建 Worker。
 - 未解决问题：没有本次运行的协议专项、vttest、UAX 一致性、真实 transport/GUI 或跨平台验收；未来用户授权后先重读锁文件与源码、复现差异并决定支持范围，不自动补齐所有历史或厂商指令。
+
+## 2026-11-27 P0 基础终端范围与完成判定
+
+- 时间：2026-11-27 17:46 +0800
+- 检索问题：UTF-8/Unicode、C0/ESC、CSI、SGR、光标、屏幕、16 色、滚动如何依据 ECMA-48、DEC VT、xterm 和 Unicode 定义可验收的 P0，而不是以 B 阶段完成推断全面兼容。
+- 检索原因：用户确认这些类别尚未全部完成后，要求根据项目和各标准写入计划；本次授权仅文档。
+- 来源列表：[ECMA-48 第 5 版官方说明](https://ecma-international.org/publications-and-standards/standards/ecma-48/)、[DEC VT100 User Guide 第 3 章原手册转录](https://vt100.net/docs/vt100-ug/chapter3.html)、[xterm](https://invisible-island.net/xterm/ctlseqs/ctlseqs.html)、[RFC 3629](https://www.rfc-editor.org/rfc/rfc3629)、[UAX #29](https://www.unicode.org/reports/tr29/)、[UAX #11](https://www.unicode.org/reports/tr11/)、[UAX #9](https://www.unicode.org/reports/tr9/)、[VTTEST](https://invisible-island.net/vttest/)，以及当前 `src/terminal/`、本地 VTE/Alacritty 补丁与 base B7/B8 记录。DEC 页面在网页工具中不支持 XHTML，本次通过标准库读取原页面正文核对。
+- 关键结论：ECMA-48 允许按用途选择子集，但支持范围和偏离必须明示；DEC VT 应具体到功能/型号，VT100 手册将文字闪烁列入基本属性。当前 SGR 21/LNM/1048/OSC 时序及宽字符修复已记录，但文字闪烁、部分屏幕模式、完整字素/Bidi 仍有缺口。UTF-8、字符宽度表、字素分段和双向布局不能互相代替；已有总测试数、交叉构建或旧 B 阶段完成都不能证明 P0 整体验收。
+- 对实施计划的影响：base 新增 P0 八类当前判断、建议必选检查、范围待决定项、证据格式和关闭条件；新增 pending 的 P0A–P0J。保留 B0–B8 历史状态与 B7 人工验收待办，不实施功能、不自动扩大远程权限。
+- 未解决问题：P0 的最终支持清单及字素/宽度/Bidi 目标仍待冻结；本次未运行新增协议或一致性用例，真实 SSH、vttest、UAX、原生平台及用户 GUI 验收仍待完成。

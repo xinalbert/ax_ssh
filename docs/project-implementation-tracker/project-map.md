@@ -37,7 +37,7 @@
 
 | Path | Role | Key Symbols / Sections | Read For |
 | --- | --- | --- | --- |
-| [notes/base/plan.md](notes/base/plan.md) | 终端协议 base 基线与实施计划 | CSI/SGR、DEC VT、XTerm Control Sequences、OSC、Unicode 矩阵及 B0–B8 | 核对兼容性与阶段范围；区分静态观察、历史测试与本轮验证 |
+| [notes/base/plan.md](notes/base/plan.md) | 终端协议 base、选定子集与 P0 验收计划 | P0 八类能力、标准/源码映射、B0–B8 与待办 P0A–P0J | 先读 P0 节的当前状态和关闭条件；P0 整体未完成，B 阶段 completed 不代表完整标准覆盖，本次新增范围仅写计划 |
 | `src/terminal/protocol.rs`、`src/terminal/tests/protocol_base.rs` | VTE 回调、扩展模式及有界协议样本 | `ProtocolHandler`、`ExtendedMouseModes`、`terminal::tests::protocol_base` | 共用终端的事件队列和格模型；应用负责连接、授权和同一 worker 的应答 |
 | `scripts/check_repository.py`、`scripts/test_repository.py` | 仓库所有文档的本地链接/中英配对与固定源入口检查 | `validate_markdown`、`validate_source_layout` | 现代 Rust 文件名、单一 Slint build/type 入口；跳过上游文档/代码示例/外部 URL，不替代 Cargo 语义、依赖图或平台验证 |
 | `packaging/macos/build-app.sh`、`packaging/macos/sign-app.sh`、`scripts/test_macos_signing.py` | 本机/单架构/通用包共用最终临时签名与原生身份回归 | `com.axssh.AxSSH`、默认 code-hash requirement | 资源与切片准备完成后签名并严格验证；复制、重复签名、进程重新启动保持同一代码身份；代码变化不能继承旧 requirement，不修改钥匙串 ACL 或读取真实秘密 |
@@ -265,11 +265,11 @@
 
 ## 刷新规则
 
-- Base 参考入口：2026-11-27 按用户要求归档终端协议矩阵到 [notes/base/plan.md](notes/base/plan.md)，后续按用户要求启动 B1–B8，进度见 [current.md](current.md)。
+- Base 参考入口：2026-11-27 归档后实施选定 B 子集；同日按用户要求补充 [P0 范围和验收](notes/base/plan.md#p0-基础终端核心)，明确 P0 整体未完成，新增 P0A–P0J 仅为待办，不自动开工。实际进度见 [current.md](current.md)。
 - 刷新触发：新增/删除模块、入口、跨层契约、构建/CI 或持久化事实时更新相应路径和定位；功能实现和验证历史追加到月度记录。
 - 最近依据：2026-11-26 新增独立 Forwarding Manager 工作区页，按 saved SSH profile 聚合 forwarding 规则并持久化 enabled 状态；沿用已有 SSH 工具、OpenSSH 配置迁移入口和 SOCKS5/远程/Unix socket 转发。2026-11-19 网格像素度量统一，`⌘`、`⌃` 改为所选字体/系统/内置覆盖回退试验，移除固定缩字号；2026-11-17 三平台共享 SFTP 系统杂项预设、可复制只读列表及独立过滤计数，避免正常目录误报失败；同日 Settings/SFTP 共用轻量 ActionButtonSurface、统一间距与图文居中，保留标准文本按钮事件语义；2026-11-16 上传共存候选名跳过各类已占用条目、原目标精确类型校验及协议回归；同日五项兼容依赖升级与 RSA 稳定修复受上游 pin 限制的说明；同日 Windows 版本目录、历史旗帜及自动缓存展示细化；同日 Settings 标签复用内置 SVG 齿轮；灰底汉字预编辑覆盖层的状态/damage 数值回归；2026-11-13 Windows SFTP 盘符地址展示/复制与原生绝对路径粘贴，保留原始文件身份和 POSIX 字面路径；同日下载冲突逐文件覆盖/跳过/自动改名、本批次策略和共享弹窗，普通目录合并，原生 promise 维持不覆盖。保留 Tab/窗口拖动隔离、原生 macOS 标题栏及主窗口创建/首个事件初始化、Windows/Linux 既有布局；保留 Xming/VcXsrv 独立程序路径、.xlaunch 发现和配置导入、CI/Release 与传输/签名/凭据边界。
 - 地图只保留当前路由，不继续累积旧任务的“当前/最近”段落。此前地图逐字保存在[历史地图快照](project-map-before-2026-10-20.md)，实施状态见 [current.md](current.md)，历史见 [changes/2026/11.md](changes/2026/11.md)。
 
 ## 最后更新时间
 
-- 2026-11-27 17:25 +0800
+- 2026-11-27 17:46 +0800
