@@ -786,7 +786,7 @@ pub(super) enum ActiveSecurityPrompt {
     HostKey(PendingHostKey),
     Authentication {
         tab_id: Uuid,
-        profile: SessionProfile,
+        profile: Box<SessionProfile>,
         vault_unlock_only: bool,
         credential_unavailable: bool,
     },

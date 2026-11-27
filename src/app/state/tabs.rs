@@ -595,7 +595,6 @@ impl AppState {
             .sessions
             .iter()
             .find(|profile| profile.id == profile_id)
-            .cloned()
         else {
             return ActiveSecurityPrompt::None;
         };
@@ -609,7 +608,7 @@ impl AppState {
             | Some(SshConnectionPhase::StoredCredentialUnavailable { vault_unlock_only }) => {
                 ActiveSecurityPrompt::Authentication {
                     tab_id,
-                    profile,
+                    profile: Box::new(profile.clone()),
                     vault_unlock_only: *vault_unlock_only,
                     credential_unavailable: matches!(
                         terminal.ssh_phase(),
