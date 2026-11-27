@@ -993,3 +993,15 @@
 - 关键结论：tcpip-forward 端口为 0 时服务端返回实际端口，远程连接使用 forwarded-tcpip。StreamLocal 使用 direct-streamlocal@openssh.com、forwarded-streamlocal@openssh.com 和对应全局请求。SOCKS5 仅启用无认证 TCP CONNECT，地址支持 IPv4、IPv6 和域名。
 - 对实施计划的影响：监听、规则、入站通道和取消操作全部归 terminal worker，remote handler 只接受已登记规则。TCP 远端规则要求 loopback address 和 origin，Unix 本地 listener 检查 owner-only parent 和文件 identity。
 - 未解决问题：真实 OpenSSH server 的 GatewayPorts、AllowTcpForwarding、AllowStreamLocalForwarding 策略和 GUI 原生操作仍待实机验收。
+
+## 2026-11-27 SFTP 字节级续传语义
+
+- 时间：2026-11-27 13:05 +0800
+- 检索问题：OpenSSH `sftp -a` 的续传假设以及 AxSSH 如何实现安全的偏移恢复。
+- 检索原因：P2 要求补充失败传输的字节级续传、内容校验和应用重启恢复。
+- 来源列表：
+  - [OpenBSD sftp manual](https://man.openbsd.org/sftp.1#-a)
+  - [OpenSSH protocol extensions](https://github.com/openssh/openssh-portable/blob/master/PROTOCOL)
+- 关键结论：OpenSSH `-a` 会尝试从已有部分或完整文件继续，但假设已有内容与源内容一致，内容不同可能产生损坏结果。AxSSH 因此保留自有部分文件身份，记录连续确认 offset，并在恢复前读回远端或本地前缀计算 SHA-256。`fsync@openssh.com` 可用于服务端文件句柄同步，但普通续传不依赖该扩展。
+- 对实施计划的影响：R1 先实现下载断点和前缀验证，R2 复用同一任务的远端临时文件并截去未确认尾部，R3 使用私有 checkpoint 目录在应用启动后提供恢复行。远端 rename 回复不确定时进入人工检查。
+- 未解决问题：真实 OpenSSH daemon、断网时系统文件锁行为及 GUI 文案需要人工验收。

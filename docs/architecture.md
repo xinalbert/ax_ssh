@@ -2093,17 +2093,27 @@ records for late accepted requests. New user batches receive a fresh page contro
 Page and individual pause intent is reapplied before automatic reconnect replay;
 explicit disconnect clears it and invalidates producers.
 Pause/resume is a worker-lifetime contract: the writer retains its partial file
-and the stream resumes at its current offset only while that worker lives.
+and the stream resumes at its current offset while that worker lives. SFTP file
+transfers also use a private per-tab checkpoint directory. Each bounded,
+atomically replaced checkpoint contains the transfer identity, source metadata,
+owned partial-file identity, confirmed offset, and SHA-256 digest of the confirmed
+prefix. A resumed download verifies the source, local partial file, and remote
+prefix before reading at the confirmed offset. A resumed upload verifies the
+source and owned remote temporary file, truncates any unconfirmed tail, and
+continues from the last confirmed write. A lost publication response remains for
+manual inspection and is never replayed automatically.
 When an SSH transport closes, the application retains each accepted, unfinished
 transfer intent as owned paths, sizes, filters, and batch metadata. Active,
 queued, directory-discovery, and conflict-waiting rows move to a waiting
 state; worker admission remains bounded while the application replays retained
-intents in order after a new SFTP attempt reports `Connected`. Directory roots are rediscovered and child IDs
-are stable for the root and remote path, so stale child rows cannot be duplicated.
-The old worker's events remain fenced by the attempt ID. This is retry recovery,
-not byte-level resume: existing `.part` and remote temporary files are still
-discarded on failure and are never reused without an integrity proof. User
-disconnect and Tab close clear the intents and do not schedule replay.
+intents in order after a new SFTP attempt reports `Connected`. Application
+startup reads the same private checkpoint directory and offers unfinished files
+as **Ready to resume** rows after the normal host-key and authentication flow.
+Directory roots are rediscovered and child IDs are stable for the root and remote
+path, so stale child rows cannot be duplicated. The old worker's events remain
+fenced by the attempt ID. A `.part` or remote temporary file is reused only after
+identity, source metadata, and prefix digest checks succeed. User disconnect and
+Tab close clear the intents and mark their checkpoints cancelled.
 
 Each transfer row retains its optional local path and remote target only
 inside application state. Terminal records can reveal a non-symlink local path

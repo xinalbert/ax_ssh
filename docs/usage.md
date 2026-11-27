@@ -308,17 +308,16 @@ platform preset; settings changes follow the normal Settings draft/save flow.
 The Transfers area has separate **Transferring**, **Failed**, and **Success**
 pages. Select active rows with their checkboxes to pause, resume, or cancel
 them in a batch from the right side of the **Transferring** page bar. These
-actions share the page bar instead of reserving a separate row. Pause/resume
-preserves the downloaded prefix through the live
-worker and continues from that offset; it is available only while this
-application and SFTP worker remain running. Each SFTP Tab runs at most two
+actions share the page bar instead of reserving a separate row. Pause/resume preserves the downloaded prefix through the live worker and continues from that offset. AxSSH also saves a private checkpoint for accepted file transfers. After reconnect or application restart, the queue can show **Ready to resume**. AxSSH verifies source metadata, the owned partial file, and the SHA-256 digest of the confirmed prefix before continuing. Download resumes read the remote prefix before appending. Upload resumes reuse only the matching AxSSH temporary file and truncate writes that were not acknowledged. A changed source or prefix stops the transfer and asks for a fresh transfer. An uncertain remote publish remains for manual inspection. Each SFTP Tab runs at most two
+
 active transfers at once by default; **Transfers per SFTP tab** in
 **Settings > SFTP** changes this limit from 1 to 16. **Global simultaneous
 uploads** changes the process-wide upload limit from 1 to 32 (the default is
 8); additional files wait in the queue or are subject to the existing transfer
-state. Cancel removes the task's partial content,
-including a file published just before cancellation wins; failures remove the
-`.part` file, while completed local downloads remain in the chosen directory.
+state. Cancel removes unverified partial content, including a file published just
+before cancellation wins. Cancelling a waiting recovery marks its checkpoint as
+cancelled and removes its partial content on the next authenticated SFTP worker.
+Completed local downloads remain in the chosen directory.
 Closing the SFTP Tab cancels and joins pending discovery, subsystem-opening, and
 active download work before closing the browser and SSH transport.
 
