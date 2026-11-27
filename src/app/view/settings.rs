@@ -230,6 +230,13 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
         "open-sftp",
         &settings.shortcuts.open_sftp,
     ));
+    let forwarding = &settings.shortcuts.open_forwarding_manager;
+    ui.set_open_forwarding_manager_shortcut(forwarding.as_str().into());
+    ui.set_forwarding_manager_menu_shortcut(if forwarding.is_empty() {
+        slint::Keys::default()
+    } else {
+        menu_shortcut_keys("forwarding-manager", forwarding)
+    });
     let defaults = ShortcutSettings::default();
     ui.set_default_open_settings_shortcut(defaults.open_settings.into());
     ui.set_default_new_session_shortcut(defaults.new_session.into());
@@ -239,6 +246,7 @@ pub(in crate::app) fn apply_settings_to_component(ui: &AppWindow, settings: &App
     ui.set_default_copy_selection_shortcut(defaults.copy_selection.into());
     ui.set_default_paste_shortcut(defaults.paste.into());
     ui.set_default_open_sftp_shortcut(defaults.open_sftp.into());
+    ui.set_default_open_forwarding_manager_shortcut(defaults.open_forwarding_manager.into());
     ui.set_terminal_appearance_revision(ui.get_terminal_appearance_revision().wrapping_add(1));
     #[cfg(target_os = "macos")]
     schedule_macos_application_menu_configuration(ui);

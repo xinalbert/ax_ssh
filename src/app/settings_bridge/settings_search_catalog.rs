@@ -245,6 +245,11 @@ pub(super) const SETTINGS_SEARCH_CATALOG: &[SearchRow] = &[
     ),
     (
         "Shortcuts",
+        "Forwarding Manager",
+        "Workspace command shortcut",
+    ),
+    (
+        "Shortcuts",
         "Copy Terminal Selection",
         "Terminal command shortcut",
     ),
@@ -528,6 +533,11 @@ const SETTINGS_SEARCH_DE: &[SearchRow] = &[
     ),
     (
         "Tastenkürzel",
+        "Weiterleitungsverwaltung",
+        "Tastenkürzel für Arbeitsbereichsbefehle",
+    ),
+    (
+        "Tastenkürzel",
         "Terminalauswahl kopieren",
         "Tastenkürzel für Terminalbefehle",
     ),
@@ -803,6 +813,11 @@ const SETTINGS_SEARCH_EN_GB: &[SearchRow] = &[
     (
         "Shortcuts",
         "Switch SSH/SFTP Tab",
+        "Workspace command shortcut",
+    ),
+    (
+        "Shortcuts",
+        "Forwarding Manager",
         "Workspace command shortcut",
     ),
     (
@@ -1086,6 +1101,11 @@ const SETTINGS_SEARCH_ES: &[SearchRow] = &[
     (
         "Atajos",
         "Cambiar pestaña SSH/SFTP",
+        "Atajo de comando del espacio de trabajo",
+    ),
+    (
+        "Atajos",
+        "Gestor de reenvíos",
         "Atajo de comando del espacio de trabajo",
     ),
     (
@@ -1385,6 +1405,11 @@ const SETTINGS_SEARCH_FR: &[SearchRow] = &[
     ),
     (
         "Raccourcis",
+        "Gestionnaire des transferts",
+        "Raccourci de commande de l’espace de travail",
+    ),
+    (
+        "Raccourcis",
         "Copier la sélection du terminal",
         "Raccourci de commande du terminal",
     ),
@@ -1644,6 +1669,11 @@ const SETTINGS_SEARCH_JA: &[SearchRow] = &[
     ),
     (
         "ショートカット",
+        "転送マネージャー",
+        "ワークスペースコマンドのショートカット",
+    ),
+    (
+        "ショートカット",
         "端末の選択範囲をコピー",
         "端末コマンドのショートカット",
     ),
@@ -1873,6 +1903,7 @@ const SETTINGS_SEARCH_KO: &[SearchRow] = &[
     ),
     ("단축키", "세션 사이드바 표시 전환", "작업 공간 명령 단축키"),
     ("단축키", "SSH/SFTP 탭 전환", "작업 공간 명령 단축키"),
+    ("단축키", "포워딩 관리자", "작업 공간 명령 단축키"),
     ("단축키", "터미널 선택 영역 복사", "터미널 명령 단축키"),
     ("단축키", "터미널에 붙여넣기", "터미널 명령 단축키"),
     ("단축키", "모두 선택", "터미널 명령 단축키"),
@@ -2142,6 +2173,11 @@ const SETTINGS_SEARCH_PT_BR: &[SearchRow] = &[
     (
         "Atalhos",
         "Alternar aba SSH/SFTP",
+        "Atalho de comando do espaço de trabalho",
+    ),
+    (
+        "Atalhos",
+        "Gerenciador de encaminhamento",
         "Atalho de comando do espaço de trabalho",
     ),
     (
@@ -2441,6 +2477,11 @@ const SETTINGS_SEARCH_RU: &[SearchRow] = &[
     ),
     (
         "Сочетания клавиш",
+        "Менеджер перенаправлений",
+        "Сочетание клавиш для команды рабочей области",
+    ),
+    (
+        "Сочетания клавиш",
         "Копировать выделение терминала",
         "Сочетание клавиш для команды терминала",
     ),
@@ -2732,6 +2773,11 @@ const SETTINGS_SEARCH_UK: &[SearchRow] = &[
     ),
     (
         "Сполучення клавіш",
+        "Менеджер перенаправлень",
+        "Сполучення клавіш для команди робочої області",
+    ),
+    (
+        "Сполучення клавіш",
         "Копіювати виділення термінала",
         "Сполучення клавіш для команди термінала",
     ),
@@ -2881,6 +2927,7 @@ const SETTINGS_SEARCH_ZH_CN: &[SearchRow] = &[
     ("快捷键", "导出所选项", "会话传输命令快捷键"),
     ("快捷键", "切换会话侧栏", "工作区命令快捷键"),
     ("快捷键", "切换 SSH/SFTP 标签页", "工作区命令快捷键"),
+    ("快捷键", "转发管理器", "工作区命令快捷键"),
     ("快捷键", "复制终端选择", "终端命令快捷键"),
     ("快捷键", "粘贴到终端", "终端命令快捷键"),
     ("快捷键", "全选", "终端命令快捷键"),
@@ -3008,6 +3055,7 @@ const SETTINGS_SEARCH_ZH_TW: &[SearchRow] = &[
     ("快捷鍵", "匯出所選項", "會話傳輸命令快捷鍵"),
     ("快捷鍵", "切換會話側欄", "工作區命令快捷鍵"),
     ("快捷鍵", "切換 SSH/SFTP 分頁", "工作區命令快捷鍵"),
+    ("快捷鍵", "轉送管理員", "工作區命令快捷鍵"),
     ("快捷鍵", "複製終端機選擇", "終端機命令快捷鍵"),
     ("快捷鍵", "貼上到終端機", "終端機命令快捷鍵"),
     ("快捷鍵", "全選", "終端機命令快捷鍵"),

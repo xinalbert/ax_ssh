@@ -125,6 +125,12 @@ impl AppState {
                 title: tab.title.clone(),
                 ..ActiveTabSnapshot::default()
             },
+            WorkspaceTabKind::ForwardingManager => ActiveTabSnapshot {
+                id: Some(tab.id),
+                kind: "forwarding-manager",
+                title: tab.title.clone(),
+                ..ActiveTabSnapshot::default()
+            },
             WorkspaceTabKind::SessionEditor(editor) => {
                 let editor = editor.snapshot(&self.sessions);
                 ActiveTabSnapshot {
@@ -168,6 +174,14 @@ impl AppState {
                             String::new(),
                             String::new(),
                         ),
+                        WorkspaceTabKind::ForwardingManager => (
+                            "forwarding-manager".to_owned(),
+                            None,
+                            String::new(),
+                            String::new(),
+                            String::new(),
+                            String::new(),
+                        ),
                         WorkspaceTabKind::SessionEditor(editor) => (
                             "session-editor".to_owned(),
                             editor.profile_id,
@@ -179,9 +193,9 @@ impl AppState {
                     };
                 let title = match tab.kind {
                     WorkspaceTabKind::Terminal(_) => tab.default_title.clone(),
-                    WorkspaceTabKind::Settings | WorkspaceTabKind::SessionEditor(_) => {
-                        tab.title.clone()
-                    }
+                    WorkspaceTabKind::Settings
+                    | WorkspaceTabKind::ForwardingManager
+                    | WorkspaceTabKind::SessionEditor(_) => tab.title.clone(),
                 };
                 ax_ssh::config::WorkspaceTabSnapshot {
                     id: tab.id,
@@ -410,6 +424,7 @@ impl AppState {
                     WorkspaceTabKind::Terminal(terminal)
                 }
                 "settings" => WorkspaceTabKind::Settings,
+                "forwarding-manager" => WorkspaceTabKind::ForwardingManager,
                 "session-editor" => WorkspaceTabKind::SessionEditor(SessionEditorState {
                     draft_id: Uuid::new_v4(),
                     profile_id: snapshot.profile_id,

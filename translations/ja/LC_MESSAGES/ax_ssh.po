@@ -91,6 +91,9 @@ msgstr "X認証なしのローカル接続を許可"
 msgid "Allow remote OSC 52 clipboard access"
 msgstr "リモートのOSC 52クリップボードアクセスを許可"
 
+msgid "Allow this server to request signatures from your local SSH agent."
+msgstr "このサーバーがローカル SSH エージェントに署名を要求することを許可します。"
+
 msgid "Allow writes to the default clipboard; ask before remote reads"
 msgstr "既定のクリップボードへの書き込みを許可し、リモートからの読み取りは確認"
 
@@ -196,6 +199,9 @@ msgstr "キャンセル"
 msgid "Cancel all"
 msgstr "すべてキャンセル"
 
+msgid "Cancel command"
+msgstr "コマンドをキャンセル"
+
 msgid "Cancel selected"
 msgstr "選択した項目をキャンセル"
 
@@ -207,6 +213,12 @@ msgstr "Canvas（未対応）"
 
 msgid "Changes take effect after restarting AxSSH"
 msgstr "AxSSHの再起動後に反映"
+
+msgid "Check forwarding"
+msgstr "転送を確認"
+
+msgid "Checking forwarding…"
+msgstr "転送を確認中…"
 
 msgid "Choose Custom to launch this path without a command shell"
 msgstr "「カスタム」を選ぶとコマンドシェルを使わずこのパスを実行"
@@ -267,6 +279,15 @@ msgstr "配色"
 
 msgid "Compact terminal rendering"
 msgstr "端末の描画を簡略化"
+
+msgid "Configuration valid. Listener status is unavailable."
+msgstr "設定は有効です。待ち受け状態を取得できません。"
+
+msgid "Configuration valid. SSH server is offline."
+msgstr "設定は有効です。SSH サーバーはオフラインです。"
+
+msgid "Configuration valid. This rule is not listening."
+msgstr "設定は有効です。このルールは待ち受けていません。"
 
 msgid "Connect"
 msgstr "接続"
@@ -400,6 +421,9 @@ msgstr "グループを削除"
 msgid "Delete Server"
 msgstr "サーバーを削除"
 
+msgid "Delete forwarding"
+msgstr "転送を削除"
+
 msgid "Delete group"
 msgstr "グループを削除"
 
@@ -414,6 +438,12 @@ msgstr "{0}を削除しますか？このグループのサーバーは「未分
 
 msgid "Deny"
 msgstr "拒否"
+
+msgid "Destination"
+msgstr "宛先"
+
+msgid "Destination host:port or Unix socket path"
+msgstr "接続先 ホスト:ポート または Unix ソケットのパス"
 
 msgid "Destination: {0}"
 msgstr "転送先: {0}"
@@ -463,6 +493,9 @@ msgstr "複製"
 msgid "Duplicate Group"
 msgstr "グループを複製"
 
+msgid "Dynamic SOCKS5 (-D)"
+msgstr "動的 SOCKS5 (-D)"
+
 msgid "ETA"
 msgstr "残り時間"
 
@@ -472,6 +505,9 @@ msgstr "編集"
 msgid "Edit Server"
 msgstr "サーバーを編集"
 
+msgid "Edit forwarding"
+msgstr "転送を編集"
+
 msgid "Edit path"
 msgstr "パスを編集"
 
@@ -480,6 +516,9 @@ msgstr "選択したリモートファイルを編集"
 
 msgid "Enable semantic highlighting"
 msgstr "意味に応じた色分けを有効化"
+
+msgid "Enabled"
+msgstr "有効"
 
 msgid "Encrypted application vault"
 msgstr "暗号化されたアプリケーション保管庫"
@@ -579,6 +618,24 @@ msgstr "前景"
 
 msgid "Forward"
 msgstr "進む"
+
+msgid "Forward SSH agent"
+msgstr "SSH エージェントを転送"
+
+msgid "Forwarding Manager"
+msgstr "転送マネージャー"
+
+msgid "Forwarding is listening."
+msgstr "転送は待ち受け中です。"
+
+msgid "Forwarding is starting."
+msgstr "転送を開始しています。"
+
+msgid "Forwarding mode"
+msgstr "転送モード"
+
+msgid "Forwarding rule actions"
+msgstr "転送ルールの操作"
 
 msgid "GPU"
 msgstr "GPU"
@@ -685,8 +742,17 @@ msgstr "明色"
 msgid "Line height"
 msgstr "行の高さ"
 
+msgid "Listen"
+msgstr "リッスン"
+
+msgid "Listening port or Unix socket path"
+msgstr "待受ポートまたは Unix ソケットのパス"
+
 msgid "Loading..."
 msgstr "読み込み中…"
+
+msgid "Local (-L)"
+msgstr "ローカル (-L)"
 
 msgid "Local SFTP file open snapshot limit in MiB"
 msgstr "ローカルSFTPファイルを開く際のコピー上限（MiB）"
@@ -718,6 +784,9 @@ msgstr "ローカルファイル: {0} - 更新日時: {1}"
 msgid "Local files"
 msgstr "ローカルファイル"
 
+msgid "Local port (0 for automatic)"
+msgstr "ローカルポート（0 で自動割り当て）"
+
 msgid "Local selection priority"
 msgstr "ローカル選択を優先"
 
@@ -742,6 +811,9 @@ msgstr "マイク"
 msgid "MOUSE"
 msgstr "マウス"
 
+msgid "Manage forwarding rules from all saved SSH servers."
+msgstr "保存したすべての SSH サーバーの転送ルールを管理します。"
+
 msgid "Manual selection takes priority over automatic detection."
 msgstr "手動の選択が自動検出より優先されます。"
 
@@ -762,6 +834,9 @@ msgstr "すべてのSFTPタブで共有するアップロード数の上限"
 
 msgid "Minimize Window"
 msgstr "ウィンドウを最小化"
+
+msgid "Mode"
+msgstr "モード"
 
 msgid "Modified"
 msgstr "更新日時"
@@ -802,6 +877,9 @@ msgstr "新しいサーバー"
 msgid "New Server shortcut"
 msgstr "新しいサーバーのショートカット"
 
+msgid "New forwarding"
+msgstr "転送を新規作成"
+
 msgid "New group"
 msgstr "新しいグループ"
 
@@ -816,6 +894,9 @@ msgstr "失敗した転送はありません"
 
 msgid "No files"
 msgstr "ファイルはありません"
+
+msgid "No forwarding rules"
+msgstr "転送ルールはありません"
 
 msgid "No known local X server was found"
 msgstr "既知のローカルXサーバーが見つかりません"
@@ -843,6 +924,9 @@ msgstr "進行中の転送はありません"
 
 msgid "Off"
 msgstr "オフ"
+
+msgid "Offline"
+msgstr "オフライン"
 
 msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
 msgstr "オン：Alt/Optionでマウス操作を転送；オフ：標準xterm方式、Shiftでローカル選択"
@@ -970,6 +1054,9 @@ msgstr "プラットフォームのホームディレクトリ"
 msgid "Port"
 msgstr "ポート"
 
+msgid "Port Forwarding"
+msgstr "ポート転送"
+
 msgid "Positive status indicators"
 msgstr "正常状態の表示"
 
@@ -1009,6 +1096,9 @@ msgstr "プロバイダー"
 msgid "RENDERING"
 msgstr "描画"
 
+msgid "Recent forwarding rules"
+msgstr "最近の転送ルール"
+
 msgid "Reduce terminal items and omit default background rectangles"
 msgstr "端末の描画要素を減らし、既定の背景矩形を省略"
 
@@ -1021,6 +1111,9 @@ msgstr "シリアルポートを再検出"
 msgid "Remembered password storage"
 msgstr "保存するパスワードの保存先"
 
+msgid "Remote (-R)"
+msgstr "リモート (-R)"
+
 msgid "Remote and local file pane sizes"
 msgstr "リモート／ローカルのファイルペインのサイズ"
 
@@ -1029,6 +1122,9 @@ msgstr "リモートのチャンネル数"
 
 msgid "Remote clipboard request"
 msgstr "リモートからのクリップボード要求"
+
+msgid "Remote command"
+msgstr "リモートコマンド"
 
 msgid "Remote default directory"
 msgstr "リモートの既定ディレクトリ"
@@ -1056,6 +1152,9 @@ msgstr "削除"
 
 msgid "Remove revoked record"
 msgstr "失効した記録を削除"
+
+msgid "Remove this saved rule? It will no longer start on reconnect."
+msgstr "保存済みのルールを削除しますか？再接続時に自動で開始されなくなります。"
 
 msgid "Rename"
 msgstr "名前を変更"
@@ -1096,6 +1195,9 @@ msgstr "プラットフォームの既定値に戻す"
 msgid "Restore the default filters for this platform"
 msgstr "このプラットフォームの既定フィルターを復元"
 
+msgid "Result"
+msgstr "結果"
+
 msgid "Resume"
 msgstr "再開"
 
@@ -1131,6 +1233,12 @@ msgstr "右クリックで常に貼り付け"
 
 msgid "Right-click copy or paste"
 msgstr "右クリックでコピーまたは貼り付け"
+
+msgid "Run"
+msgstr "実行"
+
+msgid "Run Remote Command"
+msgstr "リモートコマンドを実行"
 
 msgid "Runtime logs"
 msgstr "実行時ログ"
@@ -1212,6 +1320,9 @@ msgstr "今後の接続用にSSHパスワードを保存"
 
 msgid "Save Workspace"
 msgstr "ワークスペースを保存"
+
+msgid "Save an SSH server to add forwarding rules."
+msgstr "転送ルールを追加するには、SSH サーバーを保存してください。"
 
 msgid "Save audio settings"
 msgstr "音声設定を保存"
@@ -1314,6 +1425,9 @@ msgstr "シリアルのストップビット"
 
 msgid "Serial transport"
 msgstr "シリアル通信"
+
+msgid "Server"
+msgstr "サーバー"
 
 msgid "Server SFTP bandwidth limit in MiB per second"
 msgstr "サーバーのSFTP帯域幅上限（MiB/秒）"
@@ -1423,6 +1537,9 @@ msgstr "縦に分割（Alt+Shift+L）"
 msgid "Start for first X11 application"
 msgstr "最初のX11アプリで起動"
 
+msgid "Start forwarding"
+msgstr "転送を開始"
+
 msgid "Status"
 msgstr "状態"
 
@@ -1434,6 +1551,9 @@ msgstr "ストップビット"
 
 msgid "Stop editing"
 msgstr "編集を終了"
+
+msgid "Stop forwarding"
+msgstr "転送を停止"
 
 msgid "Success"
 msgstr "成功"
@@ -1904,6 +2024,10 @@ msgstr "フォント"
 msgctxt "settings-search"
 msgid "Font size"
 msgstr "フォントサイズ"
+
+msgctxt "settings-search"
+msgid "Forwarding Manager"
+msgstr "転送マネージャー"
 
 msgctxt "settings-search"
 msgid "General"

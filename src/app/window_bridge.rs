@@ -240,6 +240,9 @@ fn initialize_detached_component(ui: &AppWindow, state: &Arc<Mutex<AppState>>) -
     apply_settings_to_component(ui, &settings);
     apply_active_snapshot(ui, ActiveTabSnapshot::default(), None);
     ui.set_workspace_tabs(ModelRc::new(VecModel::from(Vec::<WorkspaceTabRow>::new())));
+    ui.set_forwarding_manager_rows(ModelRc::new(VecModel::from(
+        Vec::<ForwardingManagerRow>::new(),
+    )));
     ui.set_status("".into());
     Ok(())
 }
@@ -253,6 +256,12 @@ fn initialize_detached_component(ui: &AppWindow, state: &Arc<Mutex<AppState>>) -
 pub(super) fn release_window_resources(ui: &AppWindow) {
     ui.set_sessions(ModelRc::new(VecModel::from(Vec::<SessionGroupRow>::new())));
     ui.set_workspace_tabs(ModelRc::new(VecModel::from(Vec::<WorkspaceTabRow>::new())));
+    ui.set_forwarding_manager_rows(ModelRc::new(VecModel::from(
+        Vec::<ForwardingManagerRow>::new(),
+    )));
+    ui.set_forwarding_manager_rows(ModelRc::new(VecModel::from(
+        Vec::<ForwardingManagerRow>::new(),
+    )));
     ui.set_connection_options(ModelRc::new(VecModel::from(
         Vec::<ConnectableSessionRow>::new(),
     )));
@@ -289,6 +298,7 @@ pub(super) fn release_window_resources(ui: &AppWindow) {
     ui.set_editor_credential_storage("".into());
     ui.set_editor_default_credential_storage("".into());
     ui.set_editor_x11_forwarding_mode("off".into());
+    ui.set_editor_forward_agent(false);
     ui.set_editor_serial_port("".into());
     ui.set_editor_serial_baud_rate("".into());
     ui.set_editor_serial_data_bits("".into());

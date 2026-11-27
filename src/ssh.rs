@@ -15,11 +15,12 @@ use zeroize::Zeroizing;
 
 use crate::config::{AuthMethod, SessionProfile};
 
+pub use self::forwarding::{ForwardListener, ForwardRule, ForwardTarget};
 pub use self::known_hosts::TrustDecision;
 pub use self::private_keys::discover_private_keys;
 pub use self::worker::{
     SftpDownloadSubmitter, SftpSubmissionError, SftpUploadSubmitter, SshSessionEvent,
-    SshSessionHandle, SshTerminalSettings,
+    SshSessionHandle, SshTerminalSettings, SshTool, SshToolResult,
 };
 
 /// Startup and final results for a worker-owned remote audio channel.
@@ -50,6 +51,8 @@ pub fn remove_known_host(host: &str, port: u16, fingerprint: &str) -> Result<boo
     known_hosts::Snapshot::remove_key(known_hosts::default_path()?, host, port, fingerprint)
 }
 
+mod agent_forwarding;
+mod forwarding;
 mod known_hosts;
 mod private_keys;
 mod sftp_stream;
@@ -216,6 +219,8 @@ struct ClientHandler {
     port: u16,
     observation: FingerprintObservation,
     x11_dispatcher: Option<x11::X11Dispatcher>,
+    agent_dispatcher: agent_forwarding::Dispatcher,
+    remote_forwarding: forwarding::RemoteDispatcher,
     worker_span: tracing::Span,
 }
 
@@ -235,6 +240,8 @@ impl ClientHandler {
             port,
             observation,
             x11_dispatcher,
+            agent_dispatcher: agent_forwarding::Dispatcher::default(),
+            remote_forwarding: forwarding::RemoteDispatcher::default(),
             worker_span: tracing::Span::current(),
         }
     }
@@ -395,6 +402,45 @@ impl client::Handler for ClientHandler {
         Ok(trusted)
     }
 
+    async fn server_channel_open_forwarded_tcpip(
+        &mut self,
+        channel: Channel<client::Msg>,
+        address: &str,
+        port: u32,
+        origin: &str,
+        _: u32,
+        reply: client::ChannelOpenHandle,
+        _: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        self.remote_forwarding
+            .incoming_tcp(address, port, origin, channel, reply)
+            .await;
+        Ok(())
+    }
+
+    async fn server_channel_open_forwarded_streamlocal(
+        &mut self,
+        channel: Channel<client::Msg>,
+        path: &str,
+        reply: client::ChannelOpenHandle,
+        _: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        self.remote_forwarding
+            .incoming(ForwardListener::UnixSocket(path.to_owned()), channel, reply)
+            .await;
+        Ok(())
+    }
+
+    async fn server_channel_open_agent_forward(
+        &mut self,
+        channel: Channel<client::Msg>,
+        reply: client::ChannelOpenHandle,
+        _: &mut client::Session,
+    ) -> Result<(), Self::Error> {
+        self.agent_dispatcher.dispatch(channel, reply).await;
+        Ok(())
+    }
+
     fn server_channel_open_x11(
         &mut self,
         channel: Channel<client::Msg>,
@@ -434,11 +480,18 @@ fn client_config() -> Arc<client::Config> {
     })
 }
 
+#[derive(Default)]
+struct ForwardingDispatchers {
+    x11: Option<x11::X11Dispatcher>,
+    agent: agent_forwarding::Dispatcher,
+    remote: forwarding::RemoteDispatcher,
+}
+
 async fn connect_transport(
     profile: &SessionProfile,
     expected_fingerprint: Option<String>,
     observation: FingerprintObservation,
-    x11_dispatcher: Option<x11::X11Dispatcher>,
+    dispatchers: ForwardingDispatchers,
 ) -> Result<client::Handle<ClientHandler>> {
     let ssh = profile
         .ssh()
@@ -450,14 +503,16 @@ async fn connect_transport(
             known_hosts::Snapshot::default()
         }
     };
-    let handler = ClientHandler::new(
+    let mut handler = ClientHandler::new(
         expected_fingerprint.clone(),
         known_hosts.clone(),
         ssh.host.clone(),
         ssh.port,
         observation.clone(),
-        x11_dispatcher,
+        dispatchers.x11,
     );
+    handler.agent_dispatcher = dispatchers.agent;
+    handler.remote_forwarding = dispatchers.remote;
     // Keep TCP setup separate from russh's banner/KEX handshake.  Apart from
     // making Windows failures actionable, this prevents a refused or filtered
     // socket from being reported as if the server had rejected its host key.
@@ -633,7 +688,7 @@ pub struct HostKeyProbe {
 pub async fn probe_host_key(profile: &SessionProfile) -> Result<HostKeyProbe> {
     profile.validate()?;
     let observation = FingerprintObservation::default();
-    let result = connect_transport(profile, None, observation.clone(), None).await;
+    let result = connect_transport(profile, None, observation.clone(), Default::default()).await;
     let observed = observation.get()?;
 
     match (result, observed) {
@@ -724,13 +779,13 @@ impl SshConnection {
         profile: &SessionProfile,
         secret: Zeroizing<String>,
     ) -> Result<Self> {
-        Self::connect_with_x11(profile, secret, None).await
+        Self::connect_with_dispatchers(profile, secret, Default::default()).await
     }
 
-    async fn connect_with_x11(
+    async fn connect_with_dispatchers(
         profile: &SessionProfile,
         secret: Zeroizing<String>,
-        x11_dispatcher: Option<x11::X11Dispatcher>,
+        dispatchers: ForwardingDispatchers,
     ) -> Result<Self> {
         profile.validate()?;
         let ssh = profile
@@ -748,7 +803,7 @@ impl SshConnection {
             profile,
             ssh.host_key_fingerprint.clone(),
             observation,
-            x11_dispatcher,
+            dispatchers,
         )
         .await?;
 
@@ -886,8 +941,14 @@ impl SshConnection {
         size: crate::terminal_dimensions::TerminalSize,
         x11: Option<&x11::X11Forwarding>,
         audio_source: Option<&str>,
+        agent_forwarding: Option<&agent_forwarding::AgentForwarding>,
     ) -> Result<(SshShell, X11RequestStatus)> {
-        let channel = self.handle.channel_open_session().await?;
+        let mut channel = self.handle.channel_open_session().await?;
+        if let Some(forwarding) = agent_forwarding {
+            // Send this before PTY, X11 and shell requests so their replies
+            // cannot be mistaken for the agent-forwarding reply.
+            forwarding.request(&mut channel).await;
+        }
         channel
             .request_pty(
                 true,

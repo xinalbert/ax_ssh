@@ -127,6 +127,7 @@ export struct SettingsViewState {
     copy_selection_shortcut: string,
     paste_shortcut: string,
     open_sftp_shortcut: string,
+    open_forwarding_manager_shortcut: string,
     default_open_settings_shortcut: string,
     default_new_session_shortcut: string,
     default_import_sessions_shortcut: string,
@@ -135,6 +136,7 @@ export struct SettingsViewState {
     default_copy_selection_shortcut: string,
     default_paste_shortcut: string,
     default_open_sftp_shortcut: string,
+    default_open_forwarding_manager_shortcut: string,
     app_version: string,
     status: string,
 }
@@ -253,6 +255,7 @@ export component SettingsPane inherits Rectangle {
     private property <string> copy-selection-shortcut: root.source.copy_selection_shortcut;
     private property <string> paste-shortcut: root.source.paste_shortcut;
     private property <string> open-sftp-shortcut: root.source.open_sftp_shortcut;
+    private property <string> open-forwarding-manager-shortcut: root.source.open_forwarding_manager_shortcut;
     private property <string> default-open-settings-shortcut: root.source.default_open_settings_shortcut;
     private property <string> default-new-session-shortcut: root.source.default_new_session_shortcut;
     private property <string> default-import-sessions-shortcut: root.source.default_import_sessions_shortcut;
@@ -261,6 +264,7 @@ export component SettingsPane inherits Rectangle {
     private property <string> default-copy-selection-shortcut: root.source.default_copy_selection_shortcut;
     private property <string> default-paste-shortcut: root.source.default_paste_shortcut;
     private property <string> default-open-sftp-shortcut: root.source.default_open_sftp_shortcut;
+    private property <string> default-open-forwarding-manager-shortcut: root.source.default_open_forwarding_manager_shortcut;
     private property <string> app-version: root.source.app_version;
 
     callback save(
@@ -268,7 +272,7 @@ export component SettingsPane inherits Rectangle {
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, bool, bool, string, string, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
-        string, bool, bool, string, int, int, int, int, int, string, bool,
+        string, string, bool, bool, string, int, int, int, int, int, string, bool,
     );
     callback save-audio-settings(int, int, string, string);
     callback save-ui-language(int);
@@ -386,6 +390,7 @@ export component SettingsPane inherits Rectangle {
     private property <string> draft-copy-selection-shortcut: root.copy-selection-shortcut;
     private property <string> draft-paste-shortcut: root.paste-shortcut;
     private property <string> draft-open-sftp-shortcut: root.open-sftp-shortcut;
+    private property <string> draft-open-forwarding-manager-shortcut: root.open-forwarding-manager-shortcut;
     private property <bool> preview-pending: false;
 
     pure function localized-section-title(section: string) -> string {
@@ -511,6 +516,7 @@ export component SettingsPane inherits Rectangle {
             root.draft-copy-selection-shortcut,
             root.draft-paste-shortcut,
             root.draft-open-sftp-shortcut,
+            root.draft-open-forwarding-manager-shortcut,
             root.draft-credential-storage,
             root.draft-sftp-filter-enabled,
             root.draft-sftp-filter-use-platform-defaults,
@@ -611,6 +617,7 @@ export component SettingsPane inherits Rectangle {
     changed draft-copy-selection-shortcut => { root.schedule-preview(); }
     changed draft-paste-shortcut => { root.schedule-preview(); }
     changed draft-open-sftp-shortcut => { root.schedule-preview(); }
+    changed draft-open-forwarding-manager-shortcut => { root.schedule-preview(); }
 
     Timer {
         running: root.preview-pending;
@@ -937,6 +944,7 @@ export component SettingsPane inherits Rectangle {
                         draft-copy-selection-shortcut <=> root.draft-copy-selection-shortcut;
                         draft-paste-shortcut <=> root.draft-paste-shortcut;
                         draft-open-sftp-shortcut <=> root.draft-open-sftp-shortcut;
+                        draft-open-forwarding-manager-shortcut <=> root.draft-open-forwarding-manager-shortcut;
                         default-open-settings-shortcut: root.default-open-settings-shortcut;
                         default-new-session-shortcut: root.default-new-session-shortcut;
                         default-import-sessions-shortcut: root.default-import-sessions-shortcut;
@@ -945,6 +953,7 @@ export component SettingsPane inherits Rectangle {
                         default-copy-selection-shortcut: root.default-copy-selection-shortcut;
                         default-paste-shortcut: root.default-paste-shortcut;
                         default-open-sftp-shortcut: root.default-open-sftp-shortcut;
+                        default-open-forwarding-manager-shortcut: root.default-open-forwarding-manager-shortcut;
                         apple-platform: root.apple-platform;
                         format-shortcut(event) => {
                 return root.format-shortcut(event);

@@ -2,6 +2,10 @@ import { AuthenticationDialog, CredentialAccessDialog, HostKeyDialog } from "sec
 import { SessionManagementDialog } from "session-management-dialog.slint";
 import { SftpTransferConflictDialog } from "sftp-transfer-conflict-dialog.slint";
 import { SftpRenameDialog } from "sftp-rename-dialog.slint";
+import { SshForwardingHistoryRow, SshToolsDialog } from "ssh-tools-dialog.slint";
+import { ForwardingRuleDialog } from "forwarding-rule-dialog.slint";
+import { ForwardingManagerRow, ForwardingManagerRequest } from "forwarding-manager-page.slint";
+import { ServerOption } from "themed-combo-box.slint";
 import { WorkspaceFileDialog } from "workspace-file-dialog.slint";
 import { TerminalNoticeCard, TerminalNoticeViewState } from "../terminal-pane.slint";
 import { Theme } from "../theme.slint";
@@ -47,13 +51,181 @@ export component OverlayHost inherits Rectangle {
     callback cancel-password-dialog();
     callback resolve-credential-access(bool);
     callback workspace-file-action(string, string);
+    pure callback ssh-tool-history(string) -> [string];
+    pure callback ssh-tool-history-entry(string, int) -> SshForwardingHistoryRow;
+    callback ssh-tool-action(string, string, string, string, string, int);
+    callback forwarding-manager-submit(ForwardingManagerRequest, int);
     callback resolve-sftp-transfer-conflict(string, string, bool);
     callback rename-remote-sftp(string, string, string);
 
     private property <bool> security-open: root.security.host_key_open || root.security.password_open;
     out property <bool> modal-open: root.security-open
         || root.workspace-file-open || root.session-management-open || root.transfer-conflict-open
-        || root.sftp-rename-open;
+        || root.sftp-rename-open || !root.ssh-tool-mode.is-empty
+        || !root.forwarding-manager-action.is-empty;
+
+    private property <string> forwarding-manager-action;
+    private property <ForwardingManagerRow> forwarding-manager-rule;
+    private property <[ServerOption]> forwarding-manager-profiles;
+    private property <int> forwarding-manager-revision;
+    private property <bool> forwarding-manager-busy;
+    private property <string> forwarding-manager-result;
+    private property <string> forwarding-manager-details;
+
+    public function show-forwarding-manager(action: string, row: ForwardingManagerRow,
+            profiles: [ServerOption]) {
+        if root.modal-open { return; }
+        root.forwarding-manager-rule = row;
+        root.forwarding-manager-profiles = profiles;
+        root.forwarding-manager-result = "";
+        root.forwarding-manager-details = "";
+        root.forwarding-manager-busy = false;
+        root.forwarding-manager-action = action;
+        if action == "check" {
+            root.submit-forwarding-manager({ action: action, original: row });
+        }
+    }
+
+    function submit-forwarding-manager(request: ForwardingManagerRequest) {
+        root.forwarding-manager-revision += 1;
+        root.forwarding-manager-busy = true;
+        root.forwarding-manager-result = "";
+        root.forwarding-manager-details = "";
+        root.forwarding-manager-submit(request, root.forwarding-manager-revision);
+    }
+
+    function close-forwarding-manager() {
+        root.forwarding-manager-action = "";
+        root.forwarding-manager-revision += 1;
+    }
+
+    public function finish-forwarding-manager(revision: int, result: string, details: string) {
+        if revision != root.forwarding-manager-revision || root.forwarding-manager-action.is-empty { return; }
+        root.forwarding-manager-busy = false;
+        if result == "saved" { root.close-forwarding-manager(); }
+        else {
+            root.forwarding-manager-result = result;
+            root.forwarding-manager-details = details;
+        }
+    }
+
+    if !root.security-open && !root.forwarding-manager-action.is-empty : ForwardingRuleDialog {
+        action: root.forwarding-manager-action;
+        original: root.forwarding-manager-rule;
+        profiles: root.forwarding-manager-profiles;
+        busy: root.forwarding-manager-busy;
+        result: root.forwarding-manager-result;
+        details: root.forwarding-manager-details;
+        submit(request) => { root.submit-forwarding-manager(request); }
+        close => { root.close-forwarding-manager(); }
+    }
+
+    private property <string> ssh-tool-mode;
+    private property <string> ssh-tool-target;
+    private property <int> ssh-tool-revision;
+    private property <bool> ssh-tool-busy;
+    private property <bool> ssh-tool-alternate;
+    private property <string> ssh-tool-action-name;
+    private property <string> ssh-tool-result;
+    private property <[string]> ssh-tool-history-options;
+    private property <int> ssh-tool-history-index: -1;
+    private property <bool> ssh-tool-history-enabled: true;
+    public function show-ssh-tool(mode: string, target: string) {
+        if root.modal-open || target.is-empty { return; }
+        root.ssh-tool-target = target;
+        root.ssh-tool-revision += 1;
+        root.ssh-tool-mode = mode;
+        root.ssh-tool-result = "";
+        root.ssh-tool-alternate = false;
+        root.ssh-tool-history-options = root.ssh-tool-history(target);
+        root.ssh-tool-history-index = -1;
+        root.ssh-tool-history-enabled = true;
+        root.ssh-tool-action-name = mode == "forward" ? "status" : "";
+        root.ssh-tool-busy = mode == "forward";
+        if mode == "forward" {
+            root.ssh-tool-action(target, "status", "", "", "", root.ssh-tool-revision);
+        }
+    }
+
+    public function finish-ssh-tool(revision: int, text: string, alternate: bool) {
+        if revision == root.ssh-tool-revision && !root.ssh-tool-mode.is-empty {
+            root.ssh-tool-result = text;
+            root.ssh-tool-busy = false;
+            root.ssh-tool-alternate = alternate;
+            if root.ssh-tool-mode == "forward" && alternate {
+                root.ssh-tool-history-options = root.ssh-tool-history(root.ssh-tool-target);
+            }
+            if root.ssh-tool-mode == "forward"
+                && (root.ssh-tool-action-name == "enable-forward"
+                    || root.ssh-tool-action-name == "disable-forward")
+                && root.ssh-tool-history-index >= 0 {
+                root.ssh-tool-history-enabled = root.ssh-tool-history-entry(
+                    root.ssh-tool-target,
+                    root.ssh-tool-history-index,
+                ).enabled;
+            }
+        }
+    }
+
+    if !root.security-open && !root.ssh-tool-mode.is-empty : SshToolsDialog {
+        mode: root.ssh-tool-mode;
+        result: root.ssh-tool-result;
+        busy: root.ssh-tool-busy;
+        alternate-available: root.ssh-tool-alternate;
+        history-options: root.ssh-tool-history-options;
+        history-enabled: root.ssh-tool-history-enabled;
+        history-selected(index) => {
+            root.ssh-tool-history-index = index;
+            root.ssh-tool-history-enabled = root.ssh-tool-history-entry(
+                root.ssh-tool-target,
+                index,
+            ).enabled;
+        }
+        history-toggle(listen, target, mode, enabled) => {
+            root.ssh-tool-revision += 1;
+            root.ssh-tool-busy = true;
+            root.ssh-tool-alternate = false;
+            root.ssh-tool-action-name = enabled ? "enable-forward" : "disable-forward";
+            root.ssh-tool-action(
+                root.ssh-tool-target,
+                enabled ? "enable-forward" : "disable-forward",
+                listen,
+                target,
+                mode,
+                root.ssh-tool-revision,
+            );
+        }
+        history-entry(index) => {
+            return root.ssh-tool-history-entry(root.ssh-tool-target, index);
+        }
+        submit(first, second, third) => {
+            root.ssh-tool-revision += 1;
+            root.ssh-tool-result = "";
+            root.ssh-tool-busy = true;
+            root.ssh-tool-alternate = root.ssh-tool-mode == "exec";
+            root.ssh-tool-action-name = root.ssh-tool-mode;
+            root.ssh-tool-action(root.ssh-tool-target, root.ssh-tool-mode, first, second, third, root.ssh-tool-revision);
+        }
+        alternate => {
+            root.ssh-tool-revision += 1;
+            root.ssh-tool-busy = true;
+            root.ssh-tool-alternate = false;
+            root.ssh-tool-action-name = root.ssh-tool-mode == "exec" ? "cancel" : "stop";
+            root.ssh-tool-action(root.ssh-tool-target, root.ssh-tool-mode == "exec" ? "cancel" : "stop",
+                "", "", "", root.ssh-tool-revision);
+        }
+        close => {
+            if root.ssh-tool-mode == "exec" && root.ssh-tool-alternate {
+                root.ssh-tool-action(root.ssh-tool-target, "cancel", "", "", "", root.ssh-tool-revision);
+            }
+            root.ssh-tool-mode = "";
+            root.ssh-tool-history-options = [];
+            root.ssh-tool-history-index = -1;
+            root.ssh-tool-action-name = "";
+            root.ssh-tool-revision += 1;
+        }
+    }
+
     private property <bool> workspace-file-open: false;
     private property <string> workspace-file-mode;
     private property <string> workspace-file-path;
@@ -170,7 +342,7 @@ export component OverlayHost inherits Rectangle {
     }
 
     if !root.security-open && !root.workspace-file-open && !root.session-management-open && !root.sftp-rename-open
-        && root.transfer-conflict-open : SftpTransferConflictDialog {
+        && root.ssh-tool-mode.is-empty && root.transfer-conflict-open : SftpTransferConflictDialog {
         upload: root.transfer-conflict-upload;
         conflict-id: root.transfer-conflict-id;
         file-name: root.transfer-conflict-name;

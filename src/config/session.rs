@@ -28,6 +28,107 @@ const MAX_SERIAL_PORT_CHARS: usize = 512;
 const MAX_USB_SERIAL_CHARS: usize = 256;
 const MAX_SFTP_REMOTE_PATH_CHARS: usize = 4_096;
 const MAX_SFTP_LOCAL_PATH_BYTES: usize = 4_096;
+pub const MAX_FORWARDING_HISTORY: usize = 16;
+const MAX_FORWARDING_ENDPOINT_CHARS: usize = 4_096;
+
+#[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(rename_all = "kebab-case")]
+pub enum ForwardingPresetMode {
+    #[default]
+    Local,
+    Remote,
+    Dynamic,
+}
+
+impl ForwardingPresetMode {
+    pub fn from_setting(value: &str) -> Option<Self> {
+        match value.trim().to_ascii_lowercase().as_str() {
+            "local" => Some(Self::Local),
+            "remote" => Some(Self::Remote),
+            "dynamic" => Some(Self::Dynamic),
+            _ => None,
+        }
+    }
+
+    pub const fn as_setting(self) -> &'static str {
+        match self {
+            Self::Local => "local",
+            Self::Remote => "remote",
+            Self::Dynamic => "dynamic",
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
+pub struct ForwardingPreset {
+    pub mode: ForwardingPresetMode,
+    pub listen: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub target: String,
+    #[serde(
+        default = "default_forwarding_enabled",
+        skip_serializing_if = "is_true"
+    )]
+    pub enabled: bool,
+}
+
+impl ForwardingPreset {
+    pub fn same_endpoints(&self, other: &Self) -> bool {
+        self.mode == other.mode && self.listen == other.listen && self.target == other.target
+    }
+
+    pub fn new(
+        mode: ForwardingPresetMode,
+        listen: impl Into<String>,
+        target: impl Into<String>,
+    ) -> Result<Self> {
+        let target = target.into();
+        let preset = Self {
+            mode,
+            listen: listen.into().trim().to_owned(),
+            target: if mode == ForwardingPresetMode::Dynamic {
+                String::new()
+            } else {
+                target.trim().to_owned()
+            },
+            enabled: true,
+        };
+        preset.validate()?;
+        Ok(preset)
+    }
+
+    pub fn label(&self) -> String {
+        if self.mode == ForwardingPresetMode::Dynamic {
+            format!("-D · {}", self.listen)
+        } else {
+            let mode = if self.mode == ForwardingPresetMode::Local {
+                "-L"
+            } else {
+                "-R"
+            };
+            format!("{mode} · {} → {}", self.listen, self.target)
+        }
+    }
+
+    pub fn validate(&self) -> Result<()> {
+        validate_required_text(
+            "forwarding listen endpoint",
+            &self.listen,
+            MAX_FORWARDING_ENDPOINT_CHARS,
+        )?;
+        if self.mode != ForwardingPresetMode::Dynamic {
+            validate_required_text(
+                "forwarding target endpoint",
+                &self.target,
+                MAX_FORWARDING_ENDPOINT_CHARS,
+            )?;
+        }
+        if self.mode == ForwardingPresetMode::Dynamic && !self.target.is_empty() {
+            anyhow::bail!("dynamic forwarding cannot have a target endpoint");
+        }
+        Ok(())
+    }
+}
 
 #[derive(Clone, Copy, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "kebab-case")]
@@ -191,6 +292,8 @@ pub struct SshConfig {
         deserialize_with = "deserialize_x11_forwarding_mode"
     )]
     pub x11_forwarding: X11ForwardingMode,
+    #[serde(default, skip_serializing_if = "is_false")]
+    pub forward_agent: bool,
     /// Initial remote directory for a dedicated SFTP tab.
     #[serde(default = "default_sftp_remote_path")]
     pub sftp_remote_path: String,
@@ -201,6 +304,39 @@ pub struct SshConfig {
     /// Optional per-server transfer limits. Missing means use application defaults.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub sftp_transfer_policy: Option<SftpTransferPolicy>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub forwarding_history: Vec<ForwardingPreset>,
+}
+
+impl SshConfig {
+    pub fn record_forwarding_preset(&mut self, mut preset: ForwardingPreset) -> Result<bool> {
+        preset.validate()?;
+        let before = self.forwarding_history.clone();
+        if let Some(known) = before.iter().find(|known| known.same_endpoints(&preset)) {
+            preset.enabled = known.enabled;
+            self.forwarding_history
+                .retain(|known| !known.same_endpoints(&preset));
+        } else {
+            anyhow::ensure!(
+                self.forwarding_history.len() < MAX_FORWARDING_HISTORY,
+                "this server already has {MAX_FORWARDING_HISTORY} saved forwarding rules"
+            );
+        }
+        self.forwarding_history.insert(0, preset);
+        Ok(self.forwarding_history != before)
+    }
+
+    pub fn set_forwarding_preset_enabled(&mut self, index: usize, enabled: bool) -> Result<bool> {
+        let preset = self
+            .forwarding_history
+            .get_mut(index)
+            .context("forwarding history entry not found")?;
+        if preset.enabled == enabled {
+            return Ok(false);
+        }
+        preset.enabled = enabled;
+        Ok(true)
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -457,9 +593,11 @@ impl<'de> Deserialize<'de> for SessionProfile {
                 x11_forwarding: wire
                     .x11_forwarding
                     .unwrap_or_else(default_x11_forwarding_mode),
+                forward_agent: false,
                 sftp_remote_path: default_sftp_remote_path(),
                 sftp_local_path: String::new(),
                 sftp_transfer_policy: None,
+                forwarding_history: Vec::new(),
             })
         };
         let mut profile = Self {
@@ -505,9 +643,11 @@ impl SessionProfile {
                 credential_vault_key_saved: false,
                 host_key_fingerprint: None,
                 x11_forwarding: X11ForwardingMode::default(),
+                forward_agent: false,
                 sftp_remote_path: default_sftp_remote_path(),
                 sftp_local_path: String::new(),
                 sftp_transfer_policy: None,
+                forwarding_history: Vec::new(),
             }),
         }
     }
@@ -588,6 +728,14 @@ const fn is_false(value: &bool) -> bool {
     !*value
 }
 
+const fn is_true(value: &bool) -> bool {
+    *value
+}
+
+const fn default_forwarding_enabled() -> bool {
+    true
+}
+
 fn default_sftp_remote_path() -> String {
     "~".to_owned()
 }
@@ -636,6 +784,12 @@ fn validate_connection_consistency(connection: &ConnectionProfile) -> Result<()>
             }
             if let Some(policy) = config.sftp_transfer_policy {
                 policy.validate()?;
+            }
+            if config.forwarding_history.len() > MAX_FORWARDING_HISTORY {
+                anyhow::bail!("forwarding history cannot exceed {MAX_FORWARDING_HISTORY} entries");
+            }
+            for preset in &config.forwarding_history {
+                preset.validate()?;
             }
         }
         ConnectionProfile::Telnet(config) => validate_host_and_port(&config.host, config.port)?,

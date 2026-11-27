@@ -51,6 +51,52 @@ fn configure_terminal(ui: &AppWindow, id: Uuid, detached: bool) {
 }
 
 #[test]
+fn forwarding_manager_shortcut_uses_active_settings_and_modal_gate() {
+    std::thread::spawn(|| {
+        let harness = LayoutTestHarness::new();
+        let ui = &harness.ui;
+        configure_terminal(ui, Uuid::from_u128(1), false);
+        let opens = Rc::new(std::cell::Cell::new(0));
+        let captured = opens.clone();
+        ui.on_open_forwarding_manager(move || captured.set(captured.get() + 1));
+        ui.show().expect("headless shortcut window");
+        ui.window().set_size(slint::PhysicalSize::new(900, 600));
+        harness.settle();
+        chord(ui, "f", true);
+        assert_eq!(opens.get(), 1);
+
+        ui.set_password_dialog_open(true);
+        harness.settle();
+        chord(ui, "f", true);
+        assert_eq!(opens.get(), 1);
+        ui.set_password_dialog_open(false);
+        let mut settings = AppSettings::default();
+        settings.shortcuts.open_forwarding_manager = if cfg!(target_os = "macos") {
+            "Cmd+Shift+J".into()
+        } else {
+            "Ctrl+Shift+J".into()
+        };
+        apply_settings_to_component(ui, &settings);
+        harness.settle();
+        chord(ui, "f", true);
+        assert_eq!(opens.get(), 1);
+        ui.set_active_tab_kind("empty".into());
+        harness.settle();
+        chord(ui, "j", true);
+        assert_eq!(opens.get(), 2);
+
+        settings.shortcuts.open_forwarding_manager.clear();
+        apply_settings_to_component(ui, &settings);
+        harness.settle();
+        chord(ui, "j", true);
+        assert_eq!(opens.get(), 2);
+        ui.hide().expect("hide shortcut window");
+    })
+    .join()
+    .expect("forwarding manager shortcut routing");
+}
+
+#[test]
 fn detached_menu_shortcuts_stay_with_their_window_and_respect_modal_state() {
     std::thread::spawn(|| {
         let harness = LayoutTestHarness::new();

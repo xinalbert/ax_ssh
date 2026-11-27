@@ -91,6 +91,9 @@ msgstr "允许无 X authority 的本地连接"
 msgid "Allow remote OSC 52 clipboard access"
 msgstr "允许远端 OSC 52 访问剪贴板"
 
+msgid "Allow this server to request signatures from your local SSH agent."
+msgstr "允许此服务器向本地 SSH Agent 请求签名。"
+
 msgid "Allow writes to the default clipboard; ask before remote reads"
 msgstr "允许写入默认剪贴板；远端读取前需要确认"
 
@@ -196,6 +199,9 @@ msgstr "取消"
 msgid "Cancel all"
 msgstr "全部取消"
 
+msgid "Cancel command"
+msgstr "取消命令"
+
 msgid "Cancel selected"
 msgstr "取消所选"
 
@@ -207,6 +213,12 @@ msgstr "Canvas（尚不可用）"
 
 msgid "Changes take effect after restarting AxSSH"
 msgstr "重启 AxSSH 后生效"
+
+msgid "Check forwarding"
+msgstr "检查转发"
+
+msgid "Checking forwarding…"
+msgstr "正在检查转发…"
 
 msgid "Choose Custom to launch this path without a command shell"
 msgstr "选择“自定义”以直接启动此路径，不经过命令 Shell"
@@ -267,6 +279,15 @@ msgstr "配色方案"
 
 msgid "Compact terminal rendering"
 msgstr "紧凑终端渲染"
+
+msgid "Configuration valid. Listener status is unavailable."
+msgstr "配置有效。暂时无法获取监听状态。"
+
+msgid "Configuration valid. SSH server is offline."
+msgstr "配置有效。SSH 服务器离线。"
+
+msgid "Configuration valid. This rule is not listening."
+msgstr "配置有效。这条规则当前未监听。"
 
 msgid "Connect"
 msgstr "连接"
@@ -400,6 +421,9 @@ msgstr "删除组"
 msgid "Delete Server"
 msgstr "删除服务器"
 
+msgid "Delete forwarding"
+msgstr "删除转发"
+
 msgid "Delete group"
 msgstr "删除组"
 
@@ -414,6 +438,12 @@ msgstr "删除 {0}？该组中的服务器将移至“未分组”。"
 
 msgid "Deny"
 msgstr "拒绝"
+
+msgid "Destination"
+msgstr "目标"
+
+msgid "Destination host:port or Unix socket path"
+msgstr "目标主机:端口或 Unix 套接字路径"
 
 msgid "Destination: {0}"
 msgstr "目标：{0}"
@@ -463,6 +493,9 @@ msgstr "创建副本"
 msgid "Duplicate Group"
 msgstr "创建组副本"
 
+msgid "Dynamic SOCKS5 (-D)"
+msgstr "动态 SOCKS5（-D）"
+
 msgid "ETA"
 msgstr "预计剩余"
 
@@ -472,6 +505,9 @@ msgstr "编辑"
 msgid "Edit Server"
 msgstr "编辑服务器"
 
+msgid "Edit forwarding"
+msgstr "编辑转发"
+
 msgid "Edit path"
 msgstr "编辑路径"
 
@@ -480,6 +516,9 @@ msgstr "编辑选中的远端文件"
 
 msgid "Enable semantic highlighting"
 msgstr "启用语义高亮"
+
+msgid "Enabled"
+msgstr "已启用"
 
 msgid "Encrypted application vault"
 msgstr "应用加密保险库"
@@ -579,6 +618,24 @@ msgstr "前景"
 
 msgid "Forward"
 msgstr "前进"
+
+msgid "Forward SSH agent"
+msgstr "转发 SSH Agent"
+
+msgid "Forwarding Manager"
+msgstr "转发管理器"
+
+msgid "Forwarding is listening."
+msgstr "转发正在监听。"
+
+msgid "Forwarding is starting."
+msgstr "转发正在启动。"
+
+msgid "Forwarding mode"
+msgstr "转发模式"
+
+msgid "Forwarding rule actions"
+msgstr "转发规则操作"
 
 msgid "GPU"
 msgstr "GPU"
@@ -685,8 +742,17 @@ msgstr "浅色"
 msgid "Line height"
 msgstr "行高"
 
+msgid "Listen"
+msgstr "监听"
+
+msgid "Listening port or Unix socket path"
+msgstr "监听端口或 Unix 套接字路径"
+
 msgid "Loading..."
 msgstr "正在加载..."
+
+msgid "Local (-L)"
+msgstr "本地（-L）"
 
 msgid "Local SFTP file open snapshot limit in MiB"
 msgstr "SFTP 本地文件打开快照上限（MiB）"
@@ -718,6 +784,9 @@ msgstr "本地文件：{0} - 修改时间：{1}"
 msgid "Local files"
 msgstr "本地文件"
 
+msgid "Local port (0 for automatic)"
+msgstr "本地端口（0 为自动分配）"
+
 msgid "Local selection priority"
 msgstr "本地选区优先"
 
@@ -742,6 +811,9 @@ msgstr "麦克风"
 msgid "MOUSE"
 msgstr "鼠标"
 
+msgid "Manage forwarding rules from all saved SSH servers."
+msgstr "管理所有已保存 SSH 服务器的转发规则。"
+
 msgid "Manual selection takes priority over automatic detection."
 msgstr "手动选择优先于自动识别。"
 
@@ -762,6 +834,9 @@ msgstr "所有 SFTP 标签页共享的同时上传数"
 
 msgid "Minimize Window"
 msgstr "最小化窗口"
+
+msgid "Mode"
+msgstr "模式"
 
 msgid "Modified"
 msgstr "修改时间"
@@ -802,6 +877,9 @@ msgstr "新建服务器"
 msgid "New Server shortcut"
 msgstr "新建服务器快捷键"
 
+msgid "New forwarding"
+msgstr "新建转发"
+
 msgid "New group"
 msgstr "新建组"
 
@@ -816,6 +894,9 @@ msgstr "没有失败的传输"
 
 msgid "No files"
 msgstr "没有文件"
+
+msgid "No forwarding rules"
+msgstr "没有转发规则"
 
 msgid "No known local X server was found"
 msgstr "未找到已知的本地 X server"
@@ -843,6 +924,9 @@ msgstr "没有正在传输的文件"
 
 msgid "Off"
 msgstr "关闭"
+
+msgid "Offline"
+msgstr "离线"
 
 msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
 msgstr "开启：Alt/Option 转发鼠标手势；关闭：标准 xterm，Shift 本地选择"
@@ -970,6 +1054,9 @@ msgstr "平台主目录"
 msgid "Port"
 msgstr "端口"
 
+msgid "Port Forwarding"
+msgstr "端口转发"
+
 msgid "Positive status indicators"
 msgstr "成功状态指示"
 
@@ -1009,6 +1096,9 @@ msgstr "提供程序"
 msgid "RENDERING"
 msgstr "渲染"
 
+msgid "Recent forwarding rules"
+msgstr "最近的转发规则"
+
 msgid "Reduce terminal items and omit default background rectangles"
 msgstr "减少终端绘制项并省略默认背景矩形"
 
@@ -1021,6 +1111,9 @@ msgstr "刷新串口"
 msgid "Remembered password storage"
 msgstr "已记住密码的存储位置"
 
+msgid "Remote (-R)"
+msgstr "远程（-R）"
+
 msgid "Remote and local file pane sizes"
 msgstr "远端和本地文件窗格大小"
 
@@ -1029,6 +1122,9 @@ msgstr "远端声道"
 
 msgid "Remote clipboard request"
 msgstr "远程剪贴板请求"
+
+msgid "Remote command"
+msgstr "远程命令"
 
 msgid "Remote default directory"
 msgstr "远端默认目录"
@@ -1056,6 +1152,9 @@ msgstr "移除"
 
 msgid "Remove revoked record"
 msgstr "移除已撤销记录"
+
+msgid "Remove this saved rule? It will no longer start on reconnect."
+msgstr "删除这条已保存的规则？下次连接时将不再启动。"
 
 msgid "Rename"
 msgstr "重命名"
@@ -1096,6 +1195,9 @@ msgstr "恢复平台默认值"
 msgid "Restore the default filters for this platform"
 msgstr "恢复此平台的默认过滤规则"
 
+msgid "Result"
+msgstr "结果"
+
 msgid "Resume"
 msgstr "继续"
 
@@ -1131,6 +1233,12 @@ msgstr "右键始终粘贴"
 
 msgid "Right-click copy or paste"
 msgstr "右键复制或粘贴"
+
+msgid "Run"
+msgstr "运行"
+
+msgid "Run Remote Command"
+msgstr "运行远程命令"
 
 msgid "Runtime logs"
 msgstr "运行日志"
@@ -1212,6 +1320,9 @@ msgstr "保存 SSH 密码供以后连接使用"
 
 msgid "Save Workspace"
 msgstr "保存工作区"
+
+msgid "Save an SSH server to add forwarding rules."
+msgstr "请先保存一台 SSH 服务器，再添加转发规则。"
 
 msgid "Save audio settings"
 msgstr "保存音频设置"
@@ -1314,6 +1425,9 @@ msgstr "串口停止位"
 
 msgid "Serial transport"
 msgstr "串口传输"
+
+msgid "Server"
+msgstr "服务器"
 
 msgid "Server SFTP bandwidth limit in MiB per second"
 msgstr "服务器 SFTP 带宽上限（MiB/秒）"
@@ -1423,6 +1537,9 @@ msgstr "垂直拆分（Alt+Shift+L）"
 msgid "Start for first X11 application"
 msgstr "首个 X11 应用打开时启动"
 
+msgid "Start forwarding"
+msgstr "开始转发"
+
 msgid "Status"
 msgstr "状态"
 
@@ -1434,6 +1551,9 @@ msgstr "停止位"
 
 msgid "Stop editing"
 msgstr "停止编辑"
+
+msgid "Stop forwarding"
+msgstr "停止转发"
 
 msgid "Success"
 msgstr "成功"
@@ -1904,6 +2024,10 @@ msgstr "字体系列"
 msgctxt "settings-search"
 msgid "Font size"
 msgstr "字体大小"
+
+msgctxt "settings-search"
+msgid "Forwarding Manager"
+msgstr "转发管理器"
 
 msgctxt "settings-search"
 msgid "General"

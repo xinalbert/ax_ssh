@@ -46,8 +46,8 @@ pub(super) use self::sftp::{
     sftp_icon_keys,
 };
 pub(super) use self::sidebar::{
-    connection_option_rows, font_option_rows, group_option_rows, refresh_session_models,
-    session_filter_changed, session_group_rows, shell_option_rows,
+    connection_option_rows, font_option_rows, forwarding_manager_profiles, group_option_rows,
+    refresh_session_models, session_filter_changed, session_group_rows, shell_option_rows,
 };
 pub(super) use self::terminal::{
     apply_active_snapshot, apply_terminal_pane_layout, dispatch_active_snapshot,

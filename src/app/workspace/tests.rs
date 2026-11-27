@@ -1,4 +1,5 @@
 use super::*;
+use ax_ssh::config::{ForwardingPreset, ForwardingPresetMode};
 
 fn isolated_config_path(label: &str) -> PathBuf {
     std::env::temp_dir()
@@ -406,6 +407,10 @@ fn switching_to_private_key_preserves_trust_and_deletes_the_credential() {
     let ssh = existing.ssh_mut().expect("profile should be SSH");
     ssh.credential_storage = Some(CredentialStorage::SystemKeyring);
     ssh.host_key_fingerprint = Some("SHA256:trusted".into());
+    ssh.forwarding_history.push(
+        ForwardingPreset::new(ForwardingPresetMode::Local, "19080", "127.0.0.1:8080")
+            .expect("forwarding preset should be valid"),
+    );
 
     let (profile, change) = profile_from_editor(
         Some(&existing),
@@ -445,6 +450,16 @@ fn switching_to_private_key_preserves_trust_and_deletes_the_credential() {
             .ssh()
             .expect("existing profile should be SSH")
             .host_key_fingerprint
+    );
+    assert_eq!(
+        profile
+            .ssh()
+            .expect("updated profile should be SSH")
+            .forwarding_history,
+        existing
+            .ssh()
+            .expect("existing profile should be SSH")
+            .forwarding_history
     );
     assert!(matches!(
         change,

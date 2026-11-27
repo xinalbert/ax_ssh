@@ -12,6 +12,9 @@ pub(in crate::app) use self::session_editor::{
     ensure_profile_mutation_current, finish_profile_mutation, wire_session_editor,
 };
 pub(super) use self::session_management::wire_session_management;
+pub(in crate::app) use self::session_management::{
+    record_forwarding_preset, save_forwarding_rule, set_forwarding_preset_enabled,
+};
 pub(super) use self::startup::load_startup_workspace;
 pub(super) use self::tabs::{close_terminal_child_pane, close_workspace_tab, wire_workspace_tabs};
 

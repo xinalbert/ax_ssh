@@ -60,6 +60,9 @@ pub(super) fn window_attributes(
 pub(super) enum NativeMenuSection {
     Settings,
     About,
+    RunRemoteCommand,
+    PortForwarding,
+    ForwardingManager,
 }
 
 struct NativeMenuTargetIvars {
@@ -87,6 +90,21 @@ define_class!(
         #[unsafe(method(showAbout:))]
         fn show_about(&self, _sender: Option<&AnyObject>) {
             (self.ivars().activate)(NativeMenuSection::About);
+        }
+
+        #[unsafe(method(runRemoteCommand:))]
+        fn run_remote_command(&self, _sender: Option<&AnyObject>) {
+            (self.ivars().activate)(NativeMenuSection::RunRemoteCommand);
+        }
+
+        #[unsafe(method(portForwarding:))]
+        fn port_forwarding(&self, _sender: Option<&AnyObject>) {
+            (self.ivars().activate)(NativeMenuSection::PortForwarding);
+        }
+
+        #[unsafe(method(forwardingManager:))]
+        fn forwarding_manager(&self, _sender: Option<&AnyObject>) {
+            (self.ivars().activate)(NativeMenuSection::ForwardingManager);
         }
     }
 );
@@ -538,6 +556,9 @@ pub(super) fn current_cursor_position(window: &slint::Window) -> Result<(f32, f3
 
 pub(super) fn configure_application_menu(
     shortcut: &NativeMenuShortcut,
+    forwarding_shortcut: Option<&NativeMenuShortcut>,
+    pane_title: &str,
+    manager_title: &str,
     shortcut_enabled: bool,
     activate: impl Fn(NativeMenuSection) + 'static,
 ) -> Result<()> {
@@ -585,7 +606,76 @@ pub(super) fn configure_application_menu(
     settings_item.setKeyEquivalentModifierMask(native_modifier_mask(shortcut.modifiers));
     settings_item.setEnabled(shortcut_enabled);
     bind_menu_item(&settings_item, &target, sel!(openSettings:));
+
+    let pane_menu = find_menu_by_title(&main_menu, pane_title)
+        .or_else(|| find_menu_by_title(&main_menu, "Pane"))
+        .context("AppKit main menu has no Pane submenu")?;
+    if let Some(legacy_pane_menu) = find_menu_by_title(&main_menu, "Pane") {
+        let command_item = menu_item_or_insert(
+            &legacy_pane_menu,
+            "Run Remote Command",
+            sel!(runRemoteCommand:),
+            mtm,
+        );
+        command_item.setEnabled(shortcut_enabled);
+        bind_menu_item(&command_item, &target, sel!(runRemoteCommand:));
+        let forwarding_item = menu_item_or_insert(
+            &legacy_pane_menu,
+            "Port Forwarding",
+            sel!(portForwarding:),
+            mtm,
+        );
+        forwarding_item.setEnabled(shortcut_enabled);
+        bind_menu_item(&forwarding_item, &target, sel!(portForwarding:));
+    }
+    let manager_item =
+        menu_item_or_insert(&pane_menu, manager_title, sel!(forwardingManager:), mtm);
+    if let Some(shortcut) = forwarding_shortcut {
+        manager_item.setKeyEquivalent(&NSString::from_str(&native_key_equivalent(&shortcut.key)?));
+        manager_item.setKeyEquivalentModifierMask(native_modifier_mask(shortcut.modifiers));
+    } else {
+        manager_item.setKeyEquivalent(&NSString::from_str(""));
+    }
+    manager_item.setEnabled(shortcut_enabled);
+    bind_menu_item(&manager_item, &target, sel!(forwardingManager:));
     Ok(())
+}
+
+fn find_menu_by_title(main_menu: &NSMenu, title: &str) -> Option<Retained<NSMenu>> {
+    let title = NSString::from_str(title);
+    for index in 0..main_menu.numberOfItems().max(0) {
+        if let Some(item) = main_menu.itemAtIndex(index)
+            && let Some(submenu) = item.submenu()
+            && (submenu.title().isEqualToString(&title) || item.title().isEqualToString(&title))
+        {
+            return Some(submenu);
+        }
+    }
+    None
+}
+
+fn menu_item_or_insert(
+    menu: &NSMenu,
+    title: &str,
+    action: Sel,
+    mtm: MainThreadMarker,
+) -> Retained<NSMenuItem> {
+    let title = NSString::from_str(title);
+    if let Some(item) = menu.itemWithTitle(&title) {
+        return item;
+    }
+    // SAFETY: action is implemented by NativeMenuTarget and the item is
+    // retained by the AppKit submenu after insertion.
+    let item = unsafe {
+        NSMenuItem::initWithTitle_action_keyEquivalent(
+            NSMenuItem::alloc(mtm),
+            &title,
+            Some(action),
+            &NSString::from_str(""),
+        )
+    };
+    menu.addItem(&item);
+    item
 }
 
 fn find_application_menu(main_menu: &NSMenu) -> Result<Retained<NSMenu>> {

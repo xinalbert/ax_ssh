@@ -35,6 +35,50 @@ impl Drop for Fixture {
 }
 
 #[tokio::test]
+async fn forwarding_manager_crud_saves_offline_and_rejects_duplicate_or_stale_changes() {
+    let fixture = Fixture::new();
+    let id = fixture.state.lock().unwrap().sessions.sessions[0].id;
+    let save = |original, replacement| {
+        save_forwarding_rule(
+            &fixture.state,
+            &fixture.persistence,
+            id,
+            original,
+            replacement,
+        )
+    };
+    let new_rule =
+        |port, target| ForwardingPreset::new(ForwardingPresetMode::Local, port, target).unwrap();
+    let first = new_rule("19080", "localhost:8080");
+    let second = new_rule("19081", "localhost:8081");
+    save(None, Some(first.clone())).await.unwrap();
+    save(None, Some(second.clone())).await.unwrap();
+    assert!(
+        save(None, Some(new_rule("019080", "localhost:8080")))
+            .await
+            .is_err()
+    );
+    assert!(
+        save(None, Some(new_rule("19082", "localhost:0")))
+            .await
+            .is_err()
+    );
+    let mut edited = new_rule("19082", "[::1]:8082");
+    edited.enabled = false;
+    save(Some(first.clone()), Some(edited.clone()))
+        .await
+        .unwrap();
+    assert!(save(Some(first), None).await.is_err());
+    save(Some(second), None).await.unwrap();
+    let saved = fixture.config.load().unwrap();
+    assert_eq!(
+        saved.sessions[0].ssh().unwrap().forwarding_history,
+        vec![edited]
+    );
+    assert_eq!(saved, fixture.state.lock().unwrap().sessions);
+}
+
+#[tokio::test]
 async fn slow_disk_does_not_lock_state_or_persist_settings_previews() {
     let fixture = Fixture::new();
     let committed = fixture.config.load().unwrap();
@@ -176,6 +220,9 @@ async fn imported_profiles_are_persisted_without_credentials_or_host_trust() {
     let ssh = source.ssh_mut().unwrap();
     ssh.credential_storage = Some(CredentialStorage::SystemKeyring);
     ssh.host_key_fingerprint = Some("SHA256:fixture".into());
+    ssh.forwarding_history.push(
+        ForwardingPreset::new(ForwardingPresetMode::Remote, "19082", "127.0.0.1:18081").unwrap(),
+    );
     let exported = serialize_session_transfer(SessionTransferEnvelope {
         format: SESSION_TRANSFER_FORMAT.into(),
         version: SESSION_TRANSFER_VERSION,
@@ -203,5 +250,6 @@ async fn imported_profiles_are_persisted_without_credentials_or_host_trust() {
     let ssh = imported.ssh().unwrap();
     assert!(ssh.credential_storage.is_none());
     assert!(ssh.host_key_fingerprint.is_none());
+    assert!(ssh.forwarding_history.is_empty());
     assert_eq!(saved, fixture.state.lock().unwrap().sessions);
 }

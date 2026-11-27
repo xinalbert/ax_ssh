@@ -158,7 +158,9 @@ impl AppState {
             }
             match &tab.kind {
                 WorkspaceTabKind::Terminal(terminal) => Some(terminal.as_ref()),
-                WorkspaceTabKind::Settings | WorkspaceTabKind::SessionEditor(_) => None,
+                WorkspaceTabKind::Settings
+                | WorkspaceTabKind::ForwardingManager
+                | WorkspaceTabKind::SessionEditor(_) => None,
             }
         })
     }
@@ -170,7 +172,9 @@ impl AppState {
             }
             match &mut tab.kind {
                 WorkspaceTabKind::Terminal(terminal) => Some(terminal.as_mut()),
-                WorkspaceTabKind::Settings | WorkspaceTabKind::SessionEditor(_) => None,
+                WorkspaceTabKind::Settings
+                | WorkspaceTabKind::ForwardingManager
+                | WorkspaceTabKind::SessionEditor(_) => None,
             }
         })
     }

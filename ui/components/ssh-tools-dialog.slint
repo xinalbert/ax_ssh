@@ -1,0 +1,131 @@
+import { ElidedButton } from "elided-controls.slint";
+import { FlatTextEdit } from "flat-text-edit.slint";
+import { FlatTextInput } from "flat-text-input.slint";
+import { ForwardingFields } from "forwarding-fields.slint";
+import { ThemedComboBox } from "themed-combo-box.slint";
+import { ModalFrame } from "modal-frame.slint";
+import { Theme } from "../theme.slint";
+import { CheckBox } from "std-widgets.slint";
+
+export struct SshForwardingHistoryRow {
+    mode: int,
+    listen: string,
+    target: string,
+    enabled: bool,
+}
+
+export component SshToolsDialog inherits ModalFrame {
+    in property <string> mode;
+    in property <string> result;
+    in property <bool> busy;
+    in property <bool> alternate-available;
+    in property <[string]> history-options;
+    in-out property <bool> history-enabled;
+    callback history-entry(int) -> SshForwardingHistoryRow;
+    callback history-selected(int);
+    callback history-toggle(string, string, string, bool);
+    callback submit(string, string, string);
+    callback alternate();
+    callback close();
+
+    private property <bool> command-mode: root.mode == "exec";
+
+    dialog-width: Theme.host-dialog-width;
+    dialog-height: root.command-mode || root.history-options.length == 0 ? 360px : 430px;
+    dismissed => { root.close(); }
+
+    VerticalLayout {
+        padding: Theme.dialog-padding;
+        spacing: Theme.space-md;
+
+        Text {
+            text: root.command-mode ? @tr("Run Remote Command") : @tr("Port Forwarding");
+            color: Theme.text;
+            font-size: Theme.font-title;
+            font-weight: 700;
+        }
+        if root.command-mode : FlatTextInput {
+            text <=> root.command;
+            placeholder-text: @tr("Remote command");
+            accessible-label: @tr("Remote command");
+            enabled: !root.busy;
+            accepted(value) => { if !root.busy && !value.is-empty { root.submit(value, "", ""); } }
+        }
+        if !root.command-mode : VerticalLayout {
+            spacing: Theme.space-sm;
+            if root.history-options.length > 0 : VerticalLayout {
+                spacing: Theme.space-xs;
+                Text {
+                    text: @tr("Recent forwarding rules");
+                    color: Theme.muted;
+                    font-size: Theme.font-small;
+                }
+                ThemedComboBox {
+                    model: root.history-options;
+                    current-index: -1;
+                    allow-empty-selection: true;
+                    accessible-label: @tr("Recent forwarding rules");
+                    enabled: !root.busy;
+                    selected(_value, index) => {
+                        let preset = root.history-entry(index);
+                        root.history-selected(index);
+                        root.forward-mode = preset.mode;
+                        root.listen = preset.listen;
+                        root.target = preset.target;
+                        root.history-enabled = preset.enabled;
+                    }
+                }
+            }
+            if root.history-options.length > 0 : CheckBox {
+                text: @tr("Enabled");
+                checked <=> root.history-enabled;
+                enabled: !root.busy;
+                toggled => {
+                    root.history-toggle(
+                        root.listen,
+                        root.target,
+                        root.forward-mode == 0 ? "local" : root.forward-mode == 1 ? "remote" : "dynamic",
+                        root.history-enabled,
+                    );
+                }
+            }
+            ForwardingFields {
+                mode <=> root.forward-mode;
+                listen <=> root.listen;
+                target <=> root.target;
+                editable: !root.busy;
+            }
+        }
+        FlatTextEdit {
+            text: root.result;
+            read-only: true;
+            accessible-label: @tr("Result");
+        }
+        HorizontalLayout {
+            alignment: end;
+            spacing: Theme.space-md;
+            ElidedButton { text: @tr("Close"); clicked => { root.close(); } }
+            ElidedButton {
+                text: root.command-mode ? @tr("Cancel command") : @tr("Stop forwarding");
+                enabled: root.alternate-available;
+                clicked => { root.alternate(); }
+            }
+            ElidedButton {
+                text: root.command-mode ? @tr("Run") : @tr("Start forwarding");
+                enabled: !root.busy && (root.command-mode ? !root.command.is-empty
+                    : !root.listen.is-empty
+                        && (root.forward-mode == 2 || !root.target.is-empty));
+                clicked => {
+                    if root.command-mode { root.submit(root.command, "", ""); }
+                    else { root.submit(root.listen, root.target,
+                        root.forward-mode == 0 ? "local" : root.forward-mode == 1 ? "remote" : "dynamic"); }
+                }
+            }
+        }
+    }
+
+    private property <string> command;
+    private property <int> forward-mode: 0;
+    private property <string> listen: "0";
+    private property <string> target;
+}

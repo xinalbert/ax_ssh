@@ -154,6 +154,23 @@ pub(super) fn spawn_session_monitor(
                     ) else {
                         continue;
                     };
+                    if let Ok(app) = state.lock()
+                        && let Some(TerminalWorker::Ssh(worker)) = app
+                            .terminal(tab_id)
+                            .filter(|terminal| terminal.ssh_route() == Some((profile.id, Some(attempt_id))))
+                            .and_then(|terminal| terminal.worker.as_ref())
+                        && let Some(ssh) = app.sessions.sessions.iter()
+                            .find(|saved| saved.id == profile.id)
+                            .and_then(SessionProfile::ssh)
+                    {
+                        for preset in ssh.forwarding_history.iter().filter(|preset| preset.enabled) {
+                            let requested = super::ssh_tools::parse_forwarding_preset(preset)
+                                .and_then(|rule| worker.request_tool(ax_ssh::ssh::SshTool::StartForward(rule)));
+                            if let Err(error) = requested {
+                                warn!(%error, "could not auto-start enabled forwarding rule");
+                            }
+                        }
+                    }
                     if let Ok(mut app) = state.lock() {
                         app.request_system_detection(&profile, tab_id, attempt_id);
                     }
@@ -683,6 +700,25 @@ pub(super) fn spawn_session_monitor(
                         |terminal| {
                             terminal.status = format!(
                                 "Connected to {}; X11 unavailable: {message}",
+                                profile_endpoint(&profile)
+                            );
+                        },
+                    ) {
+                        if active {
+                            dispatch_active_snapshot(&ui, &state);
+                        }
+                        refresh_workspace(&ui, &state);
+                    }
+                }
+                SshSessionEvent::AgentForwardingUnavailable => {
+                    if let Some(active) = mutate_terminal_attempt(
+                        &state,
+                        tab_id,
+                        profile.id,
+                        attempt_id,
+                        |terminal| {
+                            terminal.status = format!(
+                                "Connected to {}. SSH agent forwarding unavailable",
                                 profile_endpoint(&profile)
                             );
                         },

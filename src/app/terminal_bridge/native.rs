@@ -345,6 +345,7 @@ pub(in crate::app) fn install_native_window_input_hook(
                     settings.copy_selection.as_str(),
                     settings.paste.as_str(),
                     settings.open_sftp.as_str(),
+                    settings.open_forwarding_manager.as_str(),
                 ]
                 .into_iter()
                 .any(|shortcut| {

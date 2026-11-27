@@ -78,6 +78,51 @@ export component SidebarPlatformGlyph inherits Rectangle {
     }
 }
 
+export component ServerListItem inherits HorizontalLayout {
+    in property <string> name;
+    in property <string> system-platform;
+    in property <bool> show-icon: true;
+    in property <bool> show-endpoint: false;
+    in property <string> endpoint;
+    in property <color> text-color: Theme.text;
+    in property <int> name-weight: 400;
+    out property <length> text-height: name-label.line-height
+        + (root.show-endpoint ? Theme.titlebar-connection-picker-row-spacing + endpoint-label.line-height : 0px);
+
+    spacing: Theme.space-sm;
+
+    if root.show-icon : Rectangle {
+        width: Theme.sidebar-glyph-size;
+        SidebarPlatformGlyph {
+            y: (parent.height - self.height) / 2;
+            platform: root.system-platform.is-empty ? "server" : root.system-platform;
+            accessible-role: none;
+        }
+    }
+    Rectangle {
+        horizontal-stretch: 1;
+        VerticalLayout {
+            width: parent.width;
+            height: root.show-endpoint ? root.text-height : parent.height;
+            y: (parent.height - self.height) / 2;
+            spacing: root.show-endpoint ? Theme.titlebar-connection-picker-row-spacing : 0px;
+            name-label := ElidedLabel {
+                vertical-stretch: 1;
+                text: root.name;
+                text-color: root.text-color;
+                font-weight: root.name-weight;
+            }
+            endpoint-label := ElidedLabel {
+                visible: root.show-endpoint;
+                height: root.show-endpoint ? self.line-height : 0px;
+                text: root.endpoint;
+                text-color: Theme.muted;
+                font-size: Theme.font-caption;
+            }
+        }
+    }
+}
+
 // Both sidebar modes use the same folder, disclosure glyph, and spacing.
 export component SidebarGroupGlyph inherits Rectangle {
     in property <bool> expanded;

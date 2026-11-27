@@ -110,6 +110,41 @@ fn schedule_pending_ui_refresh(
                 .map(|tab| tab.id.to_string())
                 .unwrap_or_default();
             apply_workspace_tab_rows(&ui, visible_workspace_tab_rows(view.tabs));
+            let forwarding_profile_indices = view
+                .forwarding_profiles
+                .iter()
+                .enumerate()
+                .map(|(index, (id, _, _))| (*id, index as i32))
+                .collect::<std::collections::HashMap<_, _>>();
+            ui.set_forwarding_manager_rows(slint::ModelRc::new(slint::VecModel::from(
+                view.forwarding_rows
+                    .into_iter()
+                    .map(|row| ForwardingManagerRow {
+                        profile_id: row.profile_id.to_string().into(),
+                        profile_name: row.profile_name.into(),
+                        profile_index: forwarding_profile_indices
+                            .get(&row.profile_id)
+                            .copied()
+                            .unwrap_or(-1),
+                        history_index: row.history_index as i32,
+                        mode: row.mode.into(),
+                        listen: row.listen.into(),
+                        target: row.target.into(),
+                        enabled: row.enabled,
+                        connected: row.connected,
+                    })
+                    .collect::<Vec<_>>(),
+            )));
+            ui.set_forwarding_manager_profiles(ModelRc::new(VecModel::from(
+                view.forwarding_profiles
+                    .into_iter()
+                    .map(|(id, name, platform)| ServerOption {
+                        id: id.to_string().into(),
+                        name: name.into(),
+                        system_platform: platform.into(),
+                    })
+                    .collect::<Vec<_>>(),
+            )));
             ui.set_settings_tab_id(settings_tab_id.into());
             apply_active_session_icon(&ui, view.active_session);
             apply_active_snapshot(&ui, view.snapshot, view.active_tab_id);

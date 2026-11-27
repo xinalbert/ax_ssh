@@ -97,10 +97,33 @@ pub(in crate::app) fn connection_option_rows(
         .collect()
 }
 
-fn profile_system_platform<'a>(
-    profile: &'a SessionProfile,
+pub(in crate::app) fn forwarding_manager_profiles(
+    sessions: &SessionStore,
     profile_releases: &HashMap<Uuid, String>,
-) -> &'a str {
+) -> Vec<(Uuid, String, &'static str)> {
+    sessions
+        .sessions
+        .iter()
+        .filter(|profile| profile.ssh().is_some())
+        .map(|profile| {
+            let label = if profile.group_name.is_empty() {
+                profile.name.clone()
+            } else {
+                format!("{} / {}", profile.group_name, profile.name)
+            };
+            (
+                profile.id,
+                label,
+                profile_system_platform(profile, profile_releases),
+            )
+        })
+        .collect()
+}
+
+fn profile_system_platform(
+    profile: &SessionProfile,
+    profile_releases: &HashMap<Uuid, String>,
+) -> &'static str {
     profile
         .system_icon_override
         .as_deref()

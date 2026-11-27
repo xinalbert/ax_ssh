@@ -87,9 +87,22 @@ pub(super) struct WorkspaceTransfer {
     pub(super) active_tab_id: Option<Uuid>,
 }
 
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub(super) struct ForwardingManagerRowSnapshot {
+    pub(super) profile_id: Uuid,
+    pub(super) profile_name: String,
+    pub(super) history_index: usize,
+    pub(super) mode: String,
+    pub(super) listen: String,
+    pub(super) target: String,
+    pub(super) enabled: bool,
+    pub(super) connected: bool,
+}
+
 enum WorkspaceTabKind {
     Terminal(Box<TerminalTabState>),
     Settings,
+    ForwardingManager,
     SessionEditor(SessionEditorState),
 }
 
@@ -97,7 +110,9 @@ impl WorkspaceTabKind {
     fn same_page(&self, other: &Self) -> bool {
         matches!(
             (self, other),
-            (Self::Settings, Self::Settings) | (Self::SessionEditor(_), Self::SessionEditor(_))
+            (Self::Settings, Self::Settings)
+                | (Self::ForwardingManager, Self::ForwardingManager)
+                | (Self::SessionEditor(_), Self::SessionEditor(_))
         )
     }
 
@@ -105,6 +120,7 @@ impl WorkspaceTabKind {
         match self {
             Self::Terminal(terminal) => terminal.backend.kind(),
             Self::Settings => "settings",
+            Self::ForwardingManager => "forwarding-manager",
             Self::SessionEditor(_) => "session-editor",
         }
     }
@@ -679,6 +695,7 @@ pub(super) struct SessionEditorSnapshot {
     pub(super) credential_storage: String,
     pub(super) default_credential_storage: String,
     pub(super) x11_forwarding_mode: String,
+    pub(super) forward_agent: bool,
     pub(super) serial_port: String,
     pub(super) serial_baud_rate: String,
     pub(super) serial_data_bits: &'static str,
@@ -711,6 +728,7 @@ impl Default for SessionEditorSnapshot {
             credential_storage: String::new(),
             default_credential_storage: "encrypted-vault".to_owned(),
             x11_forwarding_mode: X11ForwardingMode::default().as_setting().to_owned(),
+            forward_agent: false,
             serial_port: String::new(),
             serial_baud_rate: "115200".to_owned(),
             serial_data_bits: "8",
@@ -730,6 +748,7 @@ pub(super) struct ClosedTab {
 pub(super) enum ClosedTabKind {
     Terminal { release_file_icon_cache: bool },
     Settings,
+    ForwardingManager,
     SessionEditor,
 }
 

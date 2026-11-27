@@ -11,6 +11,9 @@ import { ConnectableSessionRow, WorkspaceTabRow } from "components/workspace-tit
 import { DesktopMenuTitlebar } from "components/desktop-menu-titlebar.slint";
 import { TerminalTargetHighlight } from "components/terminal-grid.slint";
 import { OverlayHost, SecurityOverlayViewState } from "components/overlay-host.slint";
+import { SshForwardingHistoryRow } from "components/ssh-tools-dialog.slint";
+import { ForwardingManagerRow, ForwardingManagerRequest } from "components/forwarding-manager-page.slint";
+import { ServerOption } from "components/themed-combo-box.slint";
 import {
     SftpEntryRow,
     SftpNativeDropRegion,
@@ -77,6 +80,7 @@ export component AppWindow inherits Window {
     in property <int> editor-sftp-rate-limit-mib-per-second: 0;
     in property <string> editor-credential-storage;
     in property <string> editor-default-credential-storage: "encrypted-vault";
+    in property <bool> editor-forward-agent;
     in property <string> editor-x11-forwarding-mode: "trusted";
     in property <string> editor-serial-port;
     in property <string> editor-serial-baud-rate: "115200";
@@ -97,6 +101,9 @@ export component AppWindow inherits Window {
     in property <string> active-profile-id: "";
     in property <string> settings-tab-id: "";
     in property <string> active-tab-kind: "empty";
+    in property <[ForwardingManagerRow]> forwarding-manager-rows;
+    in property <[ServerOption]> forwarding-manager-profiles;
+    in-out property <string> forwarding-manager-error;
     in property <string> active-tab-title: "Workspace";
     in property <string> active-tab-system-platform;
     in property <string> active-tab-system-release;
@@ -293,6 +300,7 @@ export component AppWindow inherits Window {
     in property <string> paste-shortcut;
     in property <string> select-all-shortcut;
     in property <string> open-sftp-shortcut;
+    in property <string> open-forwarding-manager-shortcut;
     in property <keys> open-settings-menu-shortcut;
     in property <keys> new-session-menu-shortcut;
     in property <keys> import-sessions-menu-shortcut;
@@ -302,6 +310,9 @@ export component AppWindow inherits Window {
     in property <keys> paste-menu-shortcut;
     in property <keys> select-all-menu-shortcut;
     in property <keys> open-sftp-menu-shortcut;
+    in property <keys> forwarding-manager-menu-shortcut;
+    out property <string> pane-menu-title: @tr("Pane");
+    out property <string> forwarding-manager-menu-title: @tr("Forwarding Manager");
     in property <keys> previous-tab-menu-shortcut;
     in property <keys> next-tab-menu-shortcut;
     in property <string> default-open-settings-shortcut;
@@ -312,6 +323,7 @@ export component AppWindow inherits Window {
     in property <string> default-copy-selection-shortcut;
     in property <string> default-paste-shortcut;
     in property <string> default-open-sftp-shortcut;
+    in property <string> default-open-forwarding-manager-shortcut;
     in property <bool> apple-platform: false;
     in property <bool> detached-window: false;
     private property <length> desktop-header-height:
@@ -343,6 +355,7 @@ export component AppWindow inherits Window {
         active_profile_id: root.active-profile-id,
         settings_tab_id: root.settings-tab-id,
         active_tab_kind: root.active-tab-kind,
+        forwarding_rows: root.forwarding-manager-rows,
         status: root.status,
         sidebar_width: root.sidebar-width,
         tab_width: root.tab-width,
@@ -471,6 +484,7 @@ export component AppWindow inherits Window {
             toggle_sidebar_shortcut: root.toggle-sidebar-shortcut,
             copy_selection_shortcut: root.copy-selection-shortcut, paste_shortcut: root.paste-shortcut,
             open_sftp_shortcut: root.open-sftp-shortcut,
+            open_forwarding_manager_shortcut: root.open-forwarding-manager-shortcut,
             default_open_settings_shortcut: root.default-open-settings-shortcut,
             default_new_session_shortcut: root.default-new-session-shortcut,
             default_import_sessions_shortcut: root.default-import-sessions-shortcut,
@@ -479,6 +493,7 @@ export component AppWindow inherits Window {
             default_copy_selection_shortcut: root.default-copy-selection-shortcut,
             default_paste_shortcut: root.default-paste-shortcut,
             default_open_sftp_shortcut: root.default-open-sftp-shortcut,
+            default_open_forwarding_manager_shortcut: root.default-open-forwarding-manager-shortcut,
             app_version: root.app-version, status: root.status,
         },
         session_editor: {
@@ -496,6 +511,7 @@ export component AppWindow inherits Window {
             sftp_per_tab_transfers: root.editor-sftp-per-tab-transfers,
             sftp_rate_limit_mib_per_second: root.editor-sftp-rate-limit-mib-per-second,
             x11_forwarding_mode: root.editor-x11-forwarding-mode,
+            forward_agent: root.editor-forward-agent,
             credential_storage: root.editor-credential-storage,
             default_credential_storage: root.editor-default-credential-storage,
             serial_port: root.editor-serial-port,
@@ -536,6 +552,9 @@ export component AppWindow inherits Window {
     callback manage-session-action(string, string, string);
     callback open-local-shell();
     callback open-settings();
+    callback open-forwarding-manager();
+    callback forwarding-manager-toggle(ForwardingManagerRow, bool);
+    callback forwarding-manager-submit(ForwardingManagerRequest, int);
     callback activate-tab(string);
     callback cycle-tab(bool);
     callback close-tab(string);
@@ -545,7 +564,7 @@ export component AppWindow inherits Window {
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, bool, bool, string, string, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
-        string, bool, bool, string, int, int, int, int, int, string, bool,
+        string, string, bool, bool, string, int, int, int, int, int, string, bool,
     );
     callback save-audio-settings(int, int, string, string);
     callback save-ui-language(int);
@@ -555,8 +574,18 @@ export component AppWindow inherits Window {
     callback open-sftp-session(string);
     callback save-session(
         string, string, string, string, string, string, string, string,
-        string, string, bool, int, int, string, bool, string, string, string, string, string, string, string, string, string, string, bool, bool,
+        string, string, bool, int, int, string, bool, string, string, string, string, string, string, string, string, string, string, bool, bool, bool,
     );
+    callback ssh-tool-target(string) -> string;
+    pure callback ssh-tool-history(string) -> [string];
+    pure callback ssh-tool-history-entry(string, int) -> SshForwardingHistoryRow;
+    callback ssh-tool-action(string, string, string, string, string, int);
+    public function finish-ssh-tool(revision: int, message: string, alternate: bool) {
+        overlay-host.finish-ssh-tool(revision, message, alternate);
+    }
+    public function finish-forwarding-manager(revision: int, result: string, details: string) {
+        overlay-host.finish-forwarding-manager(revision, result, details);
+    }
     callback refresh-serial-ports();
     callback serial-mode-changed(bool);
     callback private-key-mode-changed(bool);
@@ -675,7 +704,7 @@ export component AppWindow inherits Window {
         root.terminal-appearance-refresh-pending = true;
     }
 
-    function execute-menu-command(action: string, path: string) {
+    public function execute-menu-command(action: string, path: string) {
         root.menu-action(action);
         if action == "new-session" {
             root.new-session();
@@ -689,6 +718,10 @@ export component AppWindow inherits Window {
             overlay-host.show-workspace-file-dialog("save", root.workspace-default-path);
         } else if action == "import-sessions" {
             workspace-shell.import-session-config();
+        } else if action == "ssh-exec" || action == "ssh-forward" {
+            overlay-host.show-ssh-tool(action == "ssh-exec" ? "exec" : "forward", root.ssh-tool-target(root.active-pane-id));
+        } else if action == "forwarding-manager" {
+            root.open-forwarding-manager();
         } else if action == "export-selected" {
             workspace-shell.export-selected-session-config();
         } else if action == "copy-terminal" {
@@ -848,7 +881,7 @@ export component AppWindow inherits Window {
             }
         }
         Menu {
-            title: @tr("Pane");
+            title: root.pane-menu-title;
             MenuItem {
                 title: @tr("New Local Shell");
                 enabled: root.main-window-menu-enabled;
@@ -859,6 +892,22 @@ export component AppWindow inherits Window {
                 enabled: root.menu-shortcuts-enabled;
                 shortcut: root.open-sftp-menu-shortcut;
                 activated => { root.execute-menu-command("switch-ssh-sftp", ""); }
+            }
+            MenuItem {
+                title: @tr("Run Remote Command");
+                enabled: root.menu-shortcuts-enabled && root.menu-terminal-active;
+                activated => { root.execute-menu-command("ssh-exec", ""); }
+            }
+            MenuItem {
+                title: @tr("Port Forwarding");
+                enabled: root.menu-shortcuts-enabled && root.menu-terminal-active;
+                activated => { root.execute-menu-command("ssh-forward", ""); }
+            }
+            MenuItem {
+                title: root.forwarding-manager-menu-title;
+                enabled: root.main-window-menu-enabled;
+                shortcut: root.forwarding-manager-menu-shortcut;
+                activated => { root.execute-menu-command("forwarding-manager", ""); }
             }
         }
         Menu {
@@ -930,6 +979,7 @@ export component AppWindow inherits Window {
         system-platform: root.active-tab-system-platform;
         system-release: root.active-tab-system-release;
         actions-enabled: root.menu-shortcuts-enabled;
+        forwarding-manager-shortcut: root.open-forwarding-manager-shortcut;
         terminal-active: root.menu-terminal-active;
         multiple-tabs: root.menu-has-multiple-tabs;
         has-active-tab: root.menu-has-active-tab;
@@ -988,6 +1038,9 @@ export component AppWindow inherits Window {
             terminal-focus-request-revision: root.terminal-focus-request-revision;
             terminal-cursor-blink: root.terminal-cursor-blink;
             software-presentation-enabled: root.software-presentation-enabled;
+            forwarding-rows: root.forwarding-manager-rows;
+            forwarding-can-create: root.forwarding-manager-profiles.length > 0;
+            forwarding-error: root.forwarding-manager-error;
             requested-settings-section: root.settings-section;
             settings-section-request-revision: root.settings-section-request-revision;
             new-session => { root.new-session(); }
@@ -1003,6 +1056,13 @@ export component AppWindow inherits Window {
                 overlay-host.show-session-management(action, target, subject);
             }
             open-local-shell => { root.open-local-shell(); }
+            forwarding-manager-toggle(row, enabled) => {
+                root.forwarding-manager-toggle(row, enabled);
+            }
+            forwarding-manager-action(action, row) => {
+                root.forwarding-manager-error = "";
+                overlay-host.show-forwarding-manager(action, row, root.forwarding-manager-profiles);
+            }
             activate-tab(id) => { root.activate-tab(id); }
             close-tab(id) => { root.close-tab(id); }
             move-tab(id, target-index) => { root.move-tab(id, target-index); }
@@ -1026,7 +1086,7 @@ export component AppWindow inherits Window {
                           theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, terminal-mouse-local-selection-priority, option-as-meta, alternate-scroll-to-home, osc52-clipboard,
                           x11-provider, x11-app-path, x11-windows-app-path, x11-config-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows,
                           sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key,
-                          import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
+                          import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, forwarding-manager-key, credential-storage,
                           sftp-filter-enabled, sftp-filter-use-platform-defaults, sftp-filter-custom-patterns,
                           sftp-per-tab-transfers, sftp-global-uploads, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib, sftp-remote-edit-max-file-mib,
                           settings-tab-id, close-after-save) => {
@@ -1043,7 +1103,7 @@ export component AppWindow inherits Window {
                     theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, terminal-mouse-local-selection-priority, option-as-meta, alternate-scroll-to-home, osc52-clipboard,
                     x11-provider, x11-app-path, x11-windows-app-path, x11-config-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows, sidebar,
                     tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key, import-key, export-key,
-                    toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage, sftp-filter-enabled,
+                    toggle-sidebar-key, copy-key, paste-key, open-sftp-key, forwarding-manager-key, credential-storage, sftp-filter-enabled,
                     sftp-filter-use-platform-defaults, sftp-filter-custom-patterns, sftp-per-tab-transfers,
                     sftp-global-uploads, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib, sftp-remote-edit-max-file-mib, settings-tab-id, close-after-save);
             }
@@ -1057,11 +1117,11 @@ export component AppWindow inherits Window {
             open-sftp-session(id) => { root.open-sftp-session(id); }
             save-session(name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, sftp-override-limits, sftp-per-tab-transfers, sftp-rate-limit-mib-per-second, password, remember-password, credential-storage, vault-password, x11-forwarding,
                          serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
-                         icon-id, reset-system, connect-after-save) => {
+                         icon-id, reset-system, connect-after-save, forward-agent) => {
                 root.save-session(
                     name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, sftp-override-limits, sftp-per-tab-transfers, sftp-rate-limit-mib-per-second, password, remember-password, credential-storage, vault-password, x11-forwarding,
                     serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
-                    icon-id, reset-system, connect-after-save,
+                    icon-id, reset-system, connect-after-save, forward-agent,
                 );
             }
             refresh-serial-ports => { root.refresh-serial-ports(); }
@@ -1230,6 +1290,16 @@ export component AppWindow inherits Window {
         cancel-password-dialog => { root.cancel-password-dialog(); }
         resolve-credential-access(retry) => { root.resolve-credential-access(retry); }
         workspace-file-action(mode, path) => { root.workspace-file-action(mode, path); }
+        ssh-tool-history(target) => { return root.ssh-tool-history(target); }
+        ssh-tool-history-entry(target, index) => {
+            return root.ssh-tool-history-entry(target, index);
+        }
+        ssh-tool-action(target, action, first, second, third, revision) => {
+            root.ssh-tool-action(target, action, first, second, third, revision);
+        }
+        forwarding-manager-submit(request, revision) => {
+            root.forwarding-manager-submit(request, revision);
+        }
         rename-remote-sftp(tab-id, path, name) => { root.rename-remote-sftp(tab-id, path, name); }
     }
 

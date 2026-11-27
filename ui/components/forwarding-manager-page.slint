@@ -1,0 +1,224 @@
+import { CheckBox, ListView } from "std-widgets.slint";
+import { ElidedButton, ElidedLabel } from "elided-controls.slint";
+import { FlatActionMenu, MenuActions } from "flat-action-menu.slint";
+import { Theme } from "../theme.slint";
+
+export struct ForwardingManagerRow {
+    profile_id: string,
+    profile_name: string,
+    profile_index: int,
+    history_index: int,
+    mode: string,
+    listen: string,
+    target: string,
+    enabled: bool,
+    connected: bool,
+}
+
+export struct ForwardingManagerRequest {
+    action: string,
+    original: ForwardingManagerRow,
+    profile_id: string,
+    mode: string,
+    listen: string,
+    target: string,
+    enabled: bool,
+}
+
+component ForwardingTableRow inherits Rectangle {
+    in property <ForwardingManagerRow> rule;
+    in property <bool> header: false;
+    in property <bool> can-create;
+    callback toggle-enabled(bool);
+    callback action(string);
+
+    private property <length> actions-width: 40px;
+    private property <length> mode-width: min(64px, root.width * 0.14);
+    private property <length> status-width: min(108px, root.width * 0.18);
+    private property <length> enabled-width: min(112px, root.width * 0.19);
+    private property <length> endpoint-width:
+        root.width - root.mode-width - root.status-width - root.enabled-width - root.actions-width;
+    private property <[length]> column-edges: [
+        0px,
+        root.endpoint-width * 0.30,
+        root.endpoint-width * 0.30 + root.mode-width,
+        root.endpoint-width * 0.62 + root.mode-width,
+        root.width - root.actions-width - root.enabled-width - root.status-width,
+        root.width - root.actions-width - root.enabled-width,
+        root.width - root.actions-width,
+        root.width,
+    ];
+    private property <[string]> labels: root.header
+        ? [@tr("Server"), @tr("Mode"), @tr("Listen"), @tr("Destination"), @tr("Status"), @tr("Enabled")]
+        : [
+            root.rule.profile_name,
+            root.rule.mode == "local" ? "-L" : root.rule.mode == "remote" ? "-R" : "-D",
+            root.rule.listen,
+            root.rule.target.is-empty ? "—" : root.rule.target,
+            root.rule.connected ? @tr("Connected") : @tr("Offline"),
+        ];
+
+    clip: true;
+
+    if !root.header : TouchArea {
+        pointer-event(event) => {
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                rule-menu.show-at({ x: self.mouse-x, y: self.mouse-y });
+            }
+        }
+    }
+
+    for label[index] in root.labels : ElidedLabel {
+        x: root.column-edges[index];
+        width: root.column-edges[index + 1] - self.x;
+        height: parent.height;
+        content-padding-left: Theme.sftp-column-padding;
+        content-padding-right: Theme.sftp-column-padding;
+        text: label;
+        text-color: root.header ? Theme.muted
+            : index == 1 ? Theme.accent
+            : index == 4 ? (root.rule.connected ? Theme.success : Theme.muted)
+            : Theme.text;
+        font-size: root.header ? Theme.font-caption : Theme.font-body;
+        font-weight: root.header ? 700 : 400;
+    }
+
+    if !root.header : CheckBox {
+        x: root.column-edges[5] + Theme.sftp-column-padding;
+        width: max(0px, root.column-edges[6] - self.x - Theme.sftp-column-padding);
+        height: parent.height;
+        checked: root.rule.enabled;
+        accessible-label: @tr("Enabled");
+        toggled => { root.toggle-enabled(self.checked); }
+    }
+
+    if !root.header : ElidedButton {
+        x: root.column-edges[6] + Theme.space-xs;
+        y: Theme.hairline;
+        width: root.actions-width - 2 * Theme.space-xs;
+        min-width: 0px;
+        height: parent.height - 2 * Theme.hairline;
+        text: "…";
+        content-padding-x: 0px;
+        accessible-name: @tr("Forwarding rule actions");
+        clicked => { rule-menu.show-at({ x: self.x + self.width - Theme.menu-min-width, y: root.height }); }
+    }
+    rule-menu := FlatActionMenu {
+        actions: [
+            MenuActions.item("check", @tr("Check forwarding"), true),
+            MenuActions.item("edit", @tr("Edit forwarding"), true),
+            MenuActions.item("delete", @tr("Delete forwarding"), true),
+            MenuActions.separator(),
+            MenuActions.item("new", @tr("New forwarding"), root.can-create),
+        ];
+        triggered(action) => { root.action(action); }
+    }
+
+    for edge[index] in root.column-edges : Rectangle {
+        visible: index > 0 && index < 7;
+        x: edge;
+        y: 0px;
+        width: Theme.hairline;
+        height: parent.height;
+        background: Theme.sftp-row-divider;
+    }
+    Rectangle {
+        y: parent.height - Theme.hairline;
+        width: parent.width;
+        height: Theme.hairline;
+        background: root.header ? Theme.divider : Theme.sftp-row-divider;
+    }
+}
+
+export component ForwardingManagerPage inherits FocusScope {
+    in property <[ForwardingManagerRow]> rows;
+    in property <bool> can-create;
+    in property <string> error;
+    callback action(string, ForwardingManagerRow);
+    callback toggle-enabled(ForwardingManagerRow, bool);
+
+    focus-on-tab-navigation: true;
+    key-pressed(event) => {
+        if event.text == Key.Menu || (event.text == Key.F10 && event.modifiers.shift) {
+            page-menu.show-at({ x: Theme.sftp-column-padding, y: Theme.sftp-header-height });
+            return EventResult.accept;
+        }
+        return EventResult.reject;
+    }
+
+    Rectangle { background: Theme.background; }
+
+    TouchArea {
+        clicked => { root.focus(); }
+        pointer-event(event) => {
+            if event.button == PointerEventButton.right && event.kind == PointerEventKind.down {
+                page-menu.show-at({ x: self.mouse-x, y: self.mouse-y });
+            }
+        }
+    }
+    page-menu := FlatActionMenu {
+        actions: [MenuActions.item("new", @tr("New forwarding"), root.can-create)];
+        triggered(action) => { root.action(action, {}); }
+    }
+
+    if !root.error.is-empty : ElidedLabel {
+        x: Theme.sftp-column-padding;
+        y: parent.height - self.height;
+        width: parent.width - 2 * self.x;
+        height: Theme.sftp-row-height;
+        text: root.error;
+        text-color: Theme.danger;
+    }
+
+    if root.rows.length == 0 : Text {
+        width: parent.width;
+        height: parent.height;
+        text: root.can-create ? @tr("No forwarding rules") : @tr("Save an SSH server to add forwarding rules.");
+        color: Theme.muted;
+        horizontal-alignment: center;
+        vertical-alignment: center;
+    }
+
+    if root.rows.length > 0 : Rectangle {
+        width: parent.width;
+        y: 0px;
+        height: max(0px, parent.height - (root.error.is-empty ? 0px : Theme.sftp-row-height));
+
+        ForwardingTableRow {
+            x: 0px;
+            y: 0px;
+            width: rows-list.visible-width;
+            height: Theme.sftp-header-height;
+            header: true;
+            background: Theme.sftp-header-surface;
+        }
+
+        rows-list := ListView {
+            x: 0px;
+            y: Theme.sftp-header-height;
+            width: parent.width;
+            height: max(0px, min(parent.height - self.y,
+                root.rows.length * Theme.sftp-row-height + Theme.space-xs));
+            horizontal-scrollbar-policy: ScrollBarPolicy.always-off;
+            vertical-scrollbar-policy: ScrollBarPolicy.as-needed;
+
+            for row[index] in root.rows : Rectangle {
+                width: rows-list.visible-width;
+                height: Theme.sftp-row-height;
+                background: Math.mod(index, 2) == 0 ? Theme.panel : Theme.panel-alt;
+                ForwardingTableRow {
+                    // Keep columns aligned with the header when the widget style insets the viewport.
+                    x: root.absolute-position.x - parent.absolute-position.x;
+                    width: parent.width;
+                    height: parent.height;
+                    rule: row;
+                    can-create: root.can-create;
+                    toggle-enabled(enabled) => {
+                        root.toggle-enabled(row, enabled);
+                    }
+                    action(action) => { root.action(action, row); }
+                }
+            }
+        }
+    }
+}

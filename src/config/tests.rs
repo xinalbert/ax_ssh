@@ -64,6 +64,97 @@ fn profile_validation_enforces_shared_text_limits() {
 }
 
 #[test]
+fn forwarding_history_is_bounded_deduplicated_and_persisted() {
+    let mut profile = SessionProfile::new("demo", "host.example", "alice");
+    {
+        let config = ssh_mut(&mut profile);
+        for index in 0..MAX_FORWARDING_HISTORY {
+            config
+                .record_forwarding_preset(
+                    ForwardingPreset::new(
+                        ForwardingPresetMode::Local,
+                        format!("{index}"),
+                        "127.0.0.1:8080",
+                    )
+                    .expect("forwarding preset should be valid"),
+                )
+                .expect("history should be recorded");
+        }
+        assert_eq!(config.forwarding_history.len(), MAX_FORWARDING_HISTORY);
+        assert_eq!(
+            config.forwarding_history[0].listen,
+            (MAX_FORWARDING_HISTORY - 1).to_string()
+        );
+        assert!(
+            config
+                .record_forwarding_preset(
+                    ForwardingPreset::new(ForwardingPresetMode::Local, "19080", "127.0.0.1:8080")
+                        .unwrap(),
+                )
+                .is_err()
+        );
+
+        config
+            .record_forwarding_preset(
+                ForwardingPreset::new(ForwardingPresetMode::Local, "4", "127.0.0.1:8080")
+                    .expect("duplicate preset should be valid"),
+            )
+            .expect("duplicate history should be recorded");
+        assert_eq!(config.forwarding_history[0].listen, "4");
+        assert_eq!(config.forwarding_history.len(), MAX_FORWARDING_HISTORY);
+        config
+            .set_forwarding_preset_enabled(0, false)
+            .expect("history entry should be editable");
+        config
+            .record_forwarding_preset(
+                ForwardingPreset::new(ForwardingPresetMode::Local, "4", "127.0.0.1:8080").unwrap(),
+            )
+            .expect("starting a saved rule preserves its automatic start preference");
+        assert!(!config.forwarding_history[0].enabled);
+    }
+
+    profile
+        .validate()
+        .expect("forwarding history should validate");
+    let encoded = serde_json::to_string(&profile).expect("profile should serialize");
+    let restored: SessionProfile =
+        serde_json::from_str(&encoded).expect("profile should deserialize");
+    assert_eq!(restored, profile);
+    assert!(
+        !restored
+            .ssh()
+            .expect("restored SSH profile")
+            .forwarding_history[0]
+            .enabled
+    );
+}
+
+#[test]
+fn forwarding_history_rejects_unbounded_or_invalid_entries() {
+    let mut profile = SessionProfile::new("demo", "host.example", "alice");
+    {
+        let config = ssh_mut(&mut profile);
+        config.forwarding_history = (0..=MAX_FORWARDING_HISTORY)
+            .map(|index| ForwardingPreset {
+                mode: ForwardingPresetMode::Dynamic,
+                listen: index.to_string(),
+                target: String::new(),
+                enabled: true,
+            })
+            .collect();
+    }
+    assert!(profile.validate().is_err());
+
+    ssh_mut(&mut profile).forwarding_history = vec![ForwardingPreset {
+        mode: ForwardingPresetMode::Dynamic,
+        listen: "19080".into(),
+        target: "unexpected".into(),
+        enabled: true,
+    }];
+    assert!(profile.validate().is_err());
+}
+
+#[test]
 fn profile_deserialization_rejects_invalid_normal_fields() {
     let profile = SessionProfile::new("bad\nname", "host.example", "alice");
     let json = serde_json::to_string(&profile).expect("invalid fixture should still serialize");
@@ -1064,6 +1155,7 @@ fn app_settings_clamp_all_persisted_dimensions() {
             copy_selection: "Ctrl+Shift+C".into(),
             paste: "Ctrl+Shift+V".into(),
             open_sftp: "Ctrl+Shift+F".into(),
+            open_forwarding_manager: "Alt+Shift+F".into(),
         },
         credential_storage: "encrypted-vault",
         ui_language: "simplified-chinese",
@@ -1661,6 +1753,7 @@ fn shortcut_settings_validate_modifiers_and_conflicts() {
         copy_selection: "Ctrl+Shift+C".into(),
         paste: "Ctrl+Shift+V".into(),
         open_sftp: "Ctrl+Shift+F".into(),
+        open_forwarding_manager: "Alt+Shift+F".into(),
     };
     assert!(conflicting.validate().is_err());
 
@@ -1674,9 +1767,43 @@ fn shortcut_settings_validate_modifiers_and_conflicts() {
             copy_selection: "Ctrl+Shift+C".into(),
             paste: "Ctrl+Shift+V".into(),
             open_sftp: "Ctrl+Shift+F".into(),
+            open_forwarding_manager: "Alt+Shift+F".into(),
         }),
         ShortcutSettings::default()
     );
+}
+
+#[test]
+fn forwarding_manager_shortcut_migrates_without_overwriting_existing_bindings() {
+    let default = if cfg!(target_os = "macos") {
+        "Cmd+Shift+F"
+    } else {
+        "Ctrl+Shift+F"
+    };
+    let mut legacy = serde_json::json!({ "settings": { "shortcuts": { "new_session": "Alt+N" } } });
+    let migrated: SessionStore = serde_json::from_value(legacy.clone()).expect("legacy settings");
+    assert_eq!(migrated.settings.shortcuts.open_forwarding_manager, default);
+    let equivalent = if cfg!(target_os = "macos") {
+        "Shift+Meta+f"
+    } else {
+        "Shift+Ctrl+f"
+    };
+    legacy["settings"]["shortcuts"]["open_sftp"] = equivalent.into();
+    let migrated: SessionStore =
+        serde_json::from_value(legacy).expect("legacy settings using the default chord");
+    let mut shortcuts = migrated.settings.shortcuts;
+    assert_eq!(shortcuts.new_session, "Alt+N");
+    assert_eq!(shortcuts.open_sftp, equivalent);
+    assert!(shortcuts.open_forwarding_manager.is_empty());
+    shortcuts.open_forwarding_manager = default.into();
+    assert!(shortcuts.validate().is_err());
+    shortcuts.open_forwarding_manager = "Alt+Shift+F".into();
+    assert!(shortcuts.validate().is_ok());
+    let reloaded: ShortcutSettings = serde_json::from_value(
+        serde_json::to_value(&shortcuts).expect("serialize customized shortcut"),
+    )
+    .expect("load customized shortcut");
+    assert_eq!(reloaded, shortcuts);
 }
 
 #[test]

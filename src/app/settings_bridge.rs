@@ -247,6 +247,7 @@ pub(super) fn wire_settings(
               copy_selection_shortcut,
               paste_shortcut,
               open_sftp_shortcut,
+              open_forwarding_manager_shortcut,
               credential_storage,
               sftp_filter_enabled,
               sftp_filter_use_platform_defaults,
@@ -286,8 +287,16 @@ pub(super) fn wire_settings(
                 copy_selection: copy_selection_shortcut.as_str().to_owned(),
                 paste: paste_shortcut.as_str().to_owned(),
                 open_sftp: open_sftp_shortcut.as_str().to_owned(),
+                open_forwarding_manager: open_forwarding_manager_shortcut.as_str().to_owned(),
             };
-            if let Err(error) = shortcuts.validate() {
+            let validated = shortcuts.validate().and_then(|()| {
+                let forwarding = shortcuts.open_forwarding_manager.trim();
+                if !forwarding.is_empty() {
+                    super::input::menu_shortcut_from_setting(forwarding)?;
+                }
+                Ok(())
+            });
+            if let Err(error) = validated {
                 if !is_preview {
                     set_status(&ui_for_save, &format!("Cannot save shortcuts: {error}"));
                 }

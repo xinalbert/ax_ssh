@@ -137,6 +137,7 @@ export component DesktopMenuTitlebar inherits Rectangle {
     in property <string> system-platform;
     in property <string> system-release;
     in property <bool> actions-enabled;
+    in property <string> forwarding-manager-shortcut;
     in property <bool> terminal-active;
     in property <bool> multiple-tabs;
     in property <bool> has-active-tab;
@@ -241,6 +242,11 @@ export component DesktopMenuTitlebar inherits Rectangle {
                 actions: [
                     MenuActions.item("new-local-shell", @tr("New Local Shell"), root.actions-enabled),
                     MenuActions.item("switch-ssh-sftp", @tr("Switch SSH/SFTP Tab"), root.actions-enabled),
+                    MenuActions.item("ssh-exec", @tr("Run Remote Command"), root.actions-enabled && root.terminal-active),
+                    MenuActions.item("ssh-forward", @tr("Port Forwarding"), root.actions-enabled && root.terminal-active),
+                    MenuActions.item("forwarding-manager", @tr("Forwarding Manager")
+                        + (root.forwarding-manager-shortcut.is-empty
+                            ? "" : "  " + root.forwarding-manager-shortcut), root.actions-enabled),
                 ];
                 triggered(action) => { root.command(action, ""); }
             }

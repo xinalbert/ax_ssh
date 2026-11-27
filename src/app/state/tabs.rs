@@ -57,6 +57,10 @@ impl AppState {
         self.open_singleton_tab(WorkspaceTabKind::Settings, "Settings")
     }
 
+    pub(in crate::app) fn open_forwarding_manager_tab(&mut self) -> Uuid {
+        self.open_singleton_tab(WorkspaceTabKind::ForwardingManager, "Forwarding Manager")
+    }
+
     pub(in crate::app) fn open_session_editor_tab(&mut self) -> Uuid {
         self.open_session_editor(SessionEditorState::default())
     }
@@ -470,6 +474,7 @@ impl AppState {
                 terminal.worker.take(),
             ),
             WorkspaceTabKind::Settings => (ClosedTabKind::Settings, None),
+            WorkspaceTabKind::ForwardingManager => (ClosedTabKind::ForwardingManager, None),
             WorkspaceTabKind::SessionEditor(_) => {
                 self.serial_ports.clear();
                 (ClosedTabKind::SessionEditor, None)
@@ -635,6 +640,58 @@ impl AppState {
         self.tabs
             .iter()
             .any(|tab| matches!(tab.kind, WorkspaceTabKind::Settings))
+    }
+
+    pub(in crate::app) fn forwarding_manager_rows(&self) -> Vec<ForwardingManagerRowSnapshot> {
+        self.sessions
+            .sessions
+            .iter()
+            .filter_map(|profile| {
+                let ssh = profile.ssh()?;
+                let connected = self.tabs.iter().any(|tab| {
+                    matches!(
+                        &tab.kind,
+                        WorkspaceTabKind::Terminal(terminal)
+                            if terminal.connected && terminal.profile_id() == Some(profile.id)
+                    )
+                });
+                Some(
+                    ssh.forwarding_history
+                        .iter()
+                        .enumerate()
+                        .map(|(history_index, preset)| ForwardingManagerRowSnapshot {
+                            profile_id: profile.id,
+                            profile_name: profile.name.clone(),
+                            history_index,
+                            mode: preset.mode.as_setting().to_owned(),
+                            listen: preset.listen.clone(),
+                            target: preset.target.clone(),
+                            enabled: preset.enabled,
+                            connected,
+                        })
+                        .collect::<Vec<_>>(),
+                )
+            })
+            .flatten()
+            .collect()
+    }
+
+    pub(in crate::app) fn connected_forwarding_workers(
+        &self,
+        profile_id: Uuid,
+    ) -> impl Iterator<Item = &ax_ssh::ssh::SshSessionHandle> {
+        self.tabs.iter().filter_map(move |tab| {
+            let WorkspaceTabKind::Terminal(terminal) = &tab.kind else {
+                return None;
+            };
+            if terminal.connected
+                && terminal.profile_id() == Some(profile_id)
+                && let Some(TerminalWorker::Ssh(worker)) = terminal.worker.as_ref()
+            {
+                return Some(worker);
+            }
+            None
+        })
     }
 
     pub(in crate::app) fn has_session_editor_tab(&self) -> bool {

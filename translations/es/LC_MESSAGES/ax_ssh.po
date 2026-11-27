@@ -91,6 +91,9 @@ msgstr "Permitir conexiones locales sin autorización X"
 msgid "Allow remote OSC 52 clipboard access"
 msgstr "Permitir acceso remoto al portapapeles mediante OSC 52"
 
+msgid "Allow this server to request signatures from your local SSH agent."
+msgstr "Permite a este servidor solicitar firmas a tu agente SSH local."
+
 msgid "Allow writes to the default clipboard; ask before remote reads"
 msgstr "Permitir escribir en el portapapeles predeterminado; preguntar antes de lecturas remotas"
 
@@ -196,6 +199,9 @@ msgstr "Cancelar"
 msgid "Cancel all"
 msgstr "Cancelar todo"
 
+msgid "Cancel command"
+msgstr "Cancelar comando"
+
 msgid "Cancel selected"
 msgstr "Cancelar seleccionadas"
 
@@ -207,6 +213,12 @@ msgstr "Canvas (aún no disponible)"
 
 msgid "Changes take effect after restarting AxSSH"
 msgstr "Los cambios surten efecto al reiniciar AxSSH"
+
+msgid "Check forwarding"
+msgstr "Comprobar reenvío"
+
+msgid "Checking forwarding…"
+msgstr "Comprobando el reenvío…"
 
 msgid "Choose Custom to launch this path without a command shell"
 msgstr "Elija Personalizado para ejecutar esta ruta sin un shell de comandos"
@@ -267,6 +279,15 @@ msgstr "Paleta de colores"
 
 msgid "Compact terminal rendering"
 msgstr "Renderizado compacto del terminal"
+
+msgid "Configuration valid. Listener status is unavailable."
+msgstr "Configuración válida. El estado de escucha no está disponible."
+
+msgid "Configuration valid. SSH server is offline."
+msgstr "Configuración válida. El servidor SSH está desconectado."
+
+msgid "Configuration valid. This rule is not listening."
+msgstr "Configuración válida. Esta regla no está a la escucha."
 
 msgid "Connect"
 msgstr "Conectar"
@@ -400,6 +421,9 @@ msgstr "Eliminar grupo"
 msgid "Delete Server"
 msgstr "Eliminar servidor"
 
+msgid "Delete forwarding"
+msgstr "Eliminar reenvío"
+
 msgid "Delete group"
 msgstr "Eliminar grupo"
 
@@ -414,6 +438,12 @@ msgstr "¿Eliminar {0}? Los servidores de este grupo pasarán a Sin grupo."
 
 msgid "Deny"
 msgstr "Denegar"
+
+msgid "Destination"
+msgstr "Destino"
+
+msgid "Destination host:port or Unix socket path"
+msgstr "Destino host:puerto o ruta del socket Unix"
 
 msgid "Destination: {0}"
 msgstr "Destino: {0}"
@@ -463,6 +493,9 @@ msgstr "Duplicar"
 msgid "Duplicate Group"
 msgstr "Duplicar grupo"
 
+msgid "Dynamic SOCKS5 (-D)"
+msgstr "SOCKS5 dinámico (-D)"
+
 msgid "ETA"
 msgstr "Tiempo restante"
 
@@ -472,6 +505,9 @@ msgstr "Editar"
 msgid "Edit Server"
 msgstr "Editar servidor"
 
+msgid "Edit forwarding"
+msgstr "Editar reenvío"
+
 msgid "Edit path"
 msgstr "Editar ruta"
 
@@ -480,6 +516,9 @@ msgstr "Editar archivo remoto seleccionado"
 
 msgid "Enable semantic highlighting"
 msgstr "Activar resaltado semántico"
+
+msgid "Enabled"
+msgstr "Habilitado"
 
 msgid "Encrypted application vault"
 msgstr "Bóveda cifrada de la aplicación"
@@ -579,6 +618,24 @@ msgstr "Primer plano"
 
 msgid "Forward"
 msgstr "Adelante"
+
+msgid "Forward SSH agent"
+msgstr "Reenviar agente SSH"
+
+msgid "Forwarding Manager"
+msgstr "Gestor de reenvíos"
+
+msgid "Forwarding is listening."
+msgstr "El reenvío está a la escucha."
+
+msgid "Forwarding is starting."
+msgstr "Iniciando el reenvío."
+
+msgid "Forwarding mode"
+msgstr "Modo de reenvío"
+
+msgid "Forwarding rule actions"
+msgstr "Acciones de la regla de reenvío"
 
 msgid "GPU"
 msgstr "GPU"
@@ -685,8 +742,17 @@ msgstr "Claro"
 msgid "Line height"
 msgstr "Altura de línea"
 
+msgid "Listen"
+msgstr "Escucha"
+
+msgid "Listening port or Unix socket path"
+msgstr "Puerto de escucha o ruta del socket Unix"
+
 msgid "Loading..."
 msgstr "Cargando…"
+
+msgid "Local (-L)"
+msgstr "Local (-L)"
 
 msgid "Local SFTP file open snapshot limit in MiB"
 msgstr "Límite de copia local antes de abrir archivos SFTP en MiB"
@@ -718,6 +784,9 @@ msgstr "Archivo local: {0} - Modificado: {1}"
 msgid "Local files"
 msgstr "Archivos locales"
 
+msgid "Local port (0 for automatic)"
+msgstr "Puerto local (0 para automático)"
+
 msgid "Local selection priority"
 msgstr "Prioridad de selección local"
 
@@ -742,6 +811,9 @@ msgstr "MICRÓFONO"
 msgid "MOUSE"
 msgstr "RATÓN"
 
+msgid "Manage forwarding rules from all saved SSH servers."
+msgstr "Gestiona las reglas de reenvío de todos los servidores SSH guardados."
+
 msgid "Manual selection takes priority over automatic detection."
 msgstr "La selección manual tiene prioridad sobre la detección automática."
 
@@ -762,6 +834,9 @@ msgstr "Máximo de subidas compartidas por todas las pestañas SFTP"
 
 msgid "Minimize Window"
 msgstr "Minimizar ventana"
+
+msgid "Mode"
+msgstr "Modo"
 
 msgid "Modified"
 msgstr "Modificado"
@@ -802,6 +877,9 @@ msgstr "Nuevo servidor"
 msgid "New Server shortcut"
 msgstr "Atajo Nuevo servidor"
 
+msgid "New forwarding"
+msgstr "Nuevo reenvío"
+
 msgid "New group"
 msgstr "Nuevo grupo"
 
@@ -816,6 +894,9 @@ msgstr "No hay transferencias fallidas"
 
 msgid "No files"
 msgstr "No hay archivos"
+
+msgid "No forwarding rules"
+msgstr "No hay reglas de reenvío"
 
 msgid "No known local X server was found"
 msgstr "No se encontró ningún servidor X local conocido"
@@ -843,6 +924,9 @@ msgstr "No hay transferencias en curso"
 
 msgid "Off"
 msgstr "Desactivado"
+
+msgid "Offline"
+msgstr "Desconectado"
 
 msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
 msgstr "Activado: Alt/Option envía gestos del ratón; desactivado: xterm estándar con selección mediante Mayús"
@@ -970,6 +1054,9 @@ msgstr "Directorio personal de la plataforma"
 msgid "Port"
 msgstr "Puerto"
 
+msgid "Port Forwarding"
+msgstr "Reenvío de puertos"
+
 msgid "Positive status indicators"
 msgstr "Indicadores de estado positivo"
 
@@ -1009,6 +1096,9 @@ msgstr "Proveedor"
 msgid "RENDERING"
 msgstr "RENDERIZADO"
 
+msgid "Recent forwarding rules"
+msgstr "Reglas de reenvío recientes"
+
 msgid "Reduce terminal items and omit default background rectangles"
 msgstr "Reducir elementos del terminal y omitir rectángulos del fondo predeterminado"
 
@@ -1021,6 +1111,9 @@ msgstr "Actualizar puertos serie"
 msgid "Remembered password storage"
 msgstr "Almacenamiento de contraseñas guardadas"
 
+msgid "Remote (-R)"
+msgstr "Remoto (-R)"
+
 msgid "Remote and local file pane sizes"
 msgstr "Tamaños de paneles de archivos remotos y locales"
 
@@ -1029,6 +1122,9 @@ msgstr "Canales remotos"
 
 msgid "Remote clipboard request"
 msgstr "Solicitud remota del portapapeles"
+
+msgid "Remote command"
+msgstr "Comando remoto"
 
 msgid "Remote default directory"
 msgstr "Directorio remoto predeterminado"
@@ -1056,6 +1152,9 @@ msgstr "Quitar"
 
 msgid "Remove revoked record"
 msgstr "Quitar registro revocado"
+
+msgid "Remove this saved rule? It will no longer start on reconnect."
+msgstr "¿Eliminar esta regla guardada? Ya no se iniciará al volver a conectar."
 
 msgid "Rename"
 msgstr "Renombrar"
@@ -1096,6 +1195,9 @@ msgstr "Restaurar valores predeterminados de la plataforma"
 msgid "Restore the default filters for this platform"
 msgstr "Restaurar los filtros predeterminados de esta plataforma"
 
+msgid "Result"
+msgstr "Resultado"
+
 msgid "Resume"
 msgstr "Reanudar"
 
@@ -1131,6 +1233,12 @@ msgstr "El clic derecho siempre pega"
 
 msgid "Right-click copy or paste"
 msgstr "Copiar o pegar con clic derecho"
+
+msgid "Run"
+msgstr "Ejecutar"
+
+msgid "Run Remote Command"
+msgstr "Ejecutar comando remoto"
 
 msgid "Runtime logs"
 msgstr "Registros de ejecución"
@@ -1212,6 +1320,9 @@ msgstr "Guardar contraseña SSH para futuras conexiones"
 
 msgid "Save Workspace"
 msgstr "Guardar espacio de trabajo"
+
+msgid "Save an SSH server to add forwarding rules."
+msgstr "Guarda un servidor SSH para añadir reglas de reenvío."
 
 msgid "Save audio settings"
 msgstr "Guardar ajustes de audio"
@@ -1314,6 +1425,9 @@ msgstr "Bits de parada del puerto serie"
 
 msgid "Serial transport"
 msgstr "Transporte serie"
+
+msgid "Server"
+msgstr "Servidor"
 
 msgid "Server SFTP bandwidth limit in MiB per second"
 msgstr "Límite de ancho de banda SFTP del servidor en MiB por segundo"
@@ -1423,6 +1537,9 @@ msgstr "Dividir verticalmente (Alt+Mayús+L)"
 msgid "Start for first X11 application"
 msgstr "Iniciar para la primera aplicación X11"
 
+msgid "Start forwarding"
+msgstr "Iniciar reenvío"
+
 msgid "Status"
 msgstr "Estado"
 
@@ -1434,6 +1551,9 @@ msgstr "Bits de parada"
 
 msgid "Stop editing"
 msgstr "Dejar de editar"
+
+msgid "Stop forwarding"
+msgstr "Detener reenvío"
 
 msgid "Success"
 msgstr "Éxito"
@@ -1904,6 +2024,10 @@ msgstr "Familia de fuentes"
 msgctxt "settings-search"
 msgid "Font size"
 msgstr "Tamaño de fuente"
+
+msgctxt "settings-search"
+msgid "Forwarding Manager"
+msgstr "Gestor de reenvíos"
 
 msgctxt "settings-search"
 msgid "General"

@@ -23,11 +23,11 @@ pub use self::language::UiLanguage;
 pub use self::persistence::ConfigStore;
 pub(crate) use self::persistence::write_private_file_atomically;
 pub use self::session::{
-    AuthMethod, ConnectionProfile, CredentialStorage, MAX_HOST_CHARS, MAX_PRIVATE_KEY_PATH_CHARS,
-    MAX_RECENT_WORKSPACES, MAX_SESSION_NAME_CHARS, MAX_USERNAME_CHARS, SerialConfig,
-    SerialDataBits, SerialFlowControl, SerialParity, SerialStopBits, SessionProfile,
-    SessionProtocol, SessionStore, SshConfig, TelnetConfig, X11ForwardingMode,
-    normalize_group_name,
+    AuthMethod, ConnectionProfile, CredentialStorage, ForwardingPreset, ForwardingPresetMode,
+    MAX_FORWARDING_HISTORY, MAX_HOST_CHARS, MAX_PRIVATE_KEY_PATH_CHARS, MAX_RECENT_WORKSPACES,
+    MAX_SESSION_NAME_CHARS, MAX_USERNAME_CHARS, SerialConfig, SerialDataBits, SerialFlowControl,
+    SerialParity, SerialStopBits, SessionProfile, SessionProtocol, SessionStore, SshConfig,
+    TelnetConfig, X11ForwardingMode, normalize_group_name,
 };
 #[cfg(test)]
 use self::session::{MAX_GROUPS, MAX_SESSION_PROFILES};

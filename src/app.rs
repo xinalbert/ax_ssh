@@ -99,6 +99,7 @@ mod sftp_bridge;
 mod sftp_paths;
 #[cfg(target_os = "macos")]
 mod software_presentation;
+mod ssh_tools;
 mod state;
 mod system_icons;
 mod terminal_bridge;
@@ -306,6 +307,9 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
     apply_terminal_presentation_policy(&window_router, &settings);
     apply_active_snapshot(&ui, ActiveTabSnapshot::default(), None);
     ui.set_workspace_tabs(ModelRc::new(VecModel::from(Vec::<WorkspaceTabRow>::new())));
+    ui.set_forwarding_manager_rows(ModelRc::new(VecModel::from(
+        Vec::<ForwardingManagerRow>::new(),
+    )));
     ui.set_status("".into());
     wire_callbacks(
         &ui,
@@ -679,6 +683,14 @@ fn wire_callbacks(ui: &AppWindow, context: WindowCallbackContext) {
             window_router.clone(),
             window_id,
         ),
+    );
+    ssh_tools::wire(
+        ui,
+        state.clone(),
+        runtime.clone(),
+        window_router.clone(),
+        window_id,
+        persistence.clone(),
     );
     wire_serial_port_discovery(ui, state.clone(), runtime.clone());
     wire_session_management(ui, state.clone(), runtime.clone(), persistence.clone());

@@ -156,6 +156,7 @@ impl SessionEditorState {
             credential_storage,
             default_credential_storage,
             x11_forwarding_mode,
+            forward_agent: profile.ssh().is_some_and(|ssh| ssh.forward_agent),
             serial_port,
             serial_baud_rate,
             serial_data_bits,

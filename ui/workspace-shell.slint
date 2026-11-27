@@ -1,4 +1,5 @@
 import { SystemIconChoiceRow } from "components/system-icon-picker.slint";
+import { ForwardingManagerPage, ForwardingManagerRow } from "components/forwarding-manager-page.slint";
 import { Theme } from "theme.slint";
 import { SessionEditorPane, SessionEditorViewState } from "session-editor.slint";
 import { SettingsPane, SettingsSearchEntry, SettingsViewState } from "settings.slint";
@@ -64,6 +65,7 @@ export struct WorkspaceViewState {
     sftp: SftpViewState,
     settings: SettingsViewState,
     session_editor: SessionEditorViewState,
+    forwarding_rows: [ForwardingManagerRow],
 }
 
 component TerminalPaneDivider inherits FocusScope {
@@ -632,6 +634,7 @@ export component WorkspaceShell inherits Rectangle {
     in property <int> terminal-focus-request-revision: 0;
     in property <bool> terminal-cursor-blink: true;
     in property <bool> software-presentation-enabled: false;
+    in property <[ForwardingManagerRow]> forwarding-rows: root.view.forwarding_rows;
 
     out property <bool> shortcut-recording: false;
     private property <bool> sidebar-collapsed: false;
@@ -655,6 +658,10 @@ export component WorkspaceShell inherits Rectangle {
     callback duplicate-session(string);
     callback session-transfer-action(string, string);
     callback request-session-management(string, string, string);
+    in property <bool> forwarding-can-create;
+    in property <string> forwarding-error;
+    callback forwarding-manager-toggle(ForwardingManagerRow, bool);
+    callback forwarding-manager-action(string, ForwardingManagerRow);
     callback open-local-shell();
     callback activate-tab(string);
     callback close-tab(string);
@@ -667,7 +674,7 @@ export component WorkspaceShell inherits Rectangle {
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         string, string, string, string, string, string, string, string, string, string, string, string, string,
         bool, bool, bool, bool, bool, bool, string, string, string, string, bool, bool, string, int, int, int, int, int, string, int, string, string, string, string, string, string, string, string,
-        string, bool, bool, string, int, int, int, int, int, string, bool,
+        string, string, bool, bool, string, int, int, int, int, int, string, bool,
     );
     callback save-audio-settings(int, int, string, string);
     callback save-ui-language(int);
@@ -677,7 +684,7 @@ export component WorkspaceShell inherits Rectangle {
     callback open-sftp-session(string);
     callback save-session(
         string, string, string, string, string, string, string, string,
-        string, string, bool, int, int, string, bool, string, string, string, string, string, string, string, string, string, string, bool, bool,
+        string, string, bool, int, int, string, bool, string, string, string, string, string, string, string, string, string, string, bool, bool, bool,
     );
     callback refresh-serial-ports();
     callback serial-mode-changed(bool);
@@ -1248,7 +1255,7 @@ export component WorkspaceShell inherits Rectangle {
                              theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, terminal-mouse-local-selection-priority, option-as-meta, alternate-scroll-to-home, osc52-clipboard,
                              x11-provider, x11-app-path, x11-windows-app-path, x11-config-path, x11-launch, x11-no-auth, shell,
                              scrollback, columns, rows, sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key,
-                             new-session-key, import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage,
+                             new-session-key, import-key, export-key, toggle-sidebar-key, copy-key, paste-key, open-sftp-key, forwarding-manager-key, credential-storage,
                              sftp-filter-enabled, sftp-filter-use-platform-defaults, sftp-filter-custom-patterns,
                              sftp-per-tab-transfers, sftp-global-uploads, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib, sftp-remote-edit-max-file-mib,
                              settings-tab-id, close-after-save) => {
@@ -1265,7 +1272,7 @@ export component WorkspaceShell inherits Rectangle {
                                 theme-dark-terminal-selection, right-click-copy, copy-selection-on-select, terminal-mouse-local-selection-priority, option-as-meta, alternate-scroll-to-home, osc52-clipboard,
                                 x11-provider, x11-app-path, x11-windows-app-path, x11-config-path, x11-launch, x11-no-auth, shell, scrollback, columns, rows,
                                 sidebar, tab-size, mask-character, collapsed-label-chars, open-settings-key, new-session-key, import-key, export-key,
-                                toggle-sidebar-key, copy-key, paste-key, open-sftp-key, credential-storage, sftp-filter-enabled,
+                                toggle-sidebar-key, copy-key, paste-key, open-sftp-key, forwarding-manager-key, credential-storage, sftp-filter-enabled,
                                 sftp-filter-use-platform-defaults, sftp-filter-custom-patterns, sftp-per-tab-transfers,
                                 sftp-global-uploads, sftp-rate-limit-mib-per-second, sftp-local-open-max-file-mib, sftp-remote-edit-max-file-mib, settings-tab-id, close-after-save);
                         }
@@ -1296,11 +1303,11 @@ export component WorkspaceShell inherits Rectangle {
                         system-icon-choice(id) => { return root.system-icon-choice(id); }
                         save(name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, sftp-override-limits, sftp-per-tab-transfers, sftp-rate-limit-mib-per-second, password, remember-password, credential-storage, vault-password, x11-forwarding,
                              serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
-                             icon-id, reset-system, connect-after-save) => {
+                             icon-id, reset-system, connect-after-save, forward-agent) => {
                             root.save-session(
                                 name, group, protocol, host, port, username, auth, key-path, sftp-remote-path, sftp-local-path, sftp-override-limits, sftp-per-tab-transfers, sftp-rate-limit-mib-per-second, password, remember-password, credential-storage, vault-password, x11-forwarding,
                                 serial-port, baud-rate, data-bits, stop-bits, parity, flow-control,
-                                icon-id, reset-system, connect-after-save,
+                                icon-id, reset-system, connect-after-save, forward-agent,
                             );
                         }
                         refresh-serial-ports => { root.refresh-serial-ports(); }
@@ -1314,6 +1321,18 @@ export component WorkspaceShell inherits Rectangle {
                             );
                         }
                         cancel => { root.cancel-session-dialog(); }
+                    }
+
+                    if root.view.active_tab_kind == "forwarding-manager" : ForwardingManagerPage {
+                        width: parent.width;
+                        height: parent.height;
+                        rows: root.forwarding-rows;
+                        can-create: root.forwarding-can-create;
+                        error: root.forwarding-error;
+                        toggle-enabled(row, enabled) => {
+                            root.forwarding-manager-toggle(row, enabled);
+                        }
+                        action(action, row) => { root.forwarding-manager-action(action, row); }
                     }
 
                     if root.view.active_tab_kind == "empty" : VerticalLayout {

@@ -352,9 +352,14 @@ async fn external_agent_signer_authenticates_against_a_trusted_server() {
         ssh.host_key_fingerprint = Some(expected_fingerprint.clone());
     }
     let observation = FingerprintObservation::default();
-    let mut handle = connect_transport(&profile, Some(expected_fingerprint), observation, None)
-        .await
-        .expect("trusted test transport should connect");
+    let mut handle = connect_transport(
+        &profile,
+        Some(expected_fingerprint),
+        observation,
+        Default::default(),
+    )
+    .await
+    .expect("trusted test transport should connect");
     let (agent_client_stream, mut agent_server_stream) = tokio::io::duplex(16 * 1024);
     let public_key_blob = user_public_key
         .to_bytes()
@@ -483,14 +488,104 @@ impl server::Handler for TestServer {
     async fn exec_request(
         &mut self,
         channel: russh::ChannelId,
-        _data: &[u8],
+        data: &[u8],
         session: &mut server::Session,
     ) -> Result<(), Self::Error> {
+        if data == b"fixture-command" {
+            session.channel_success(channel)?;
+            session.data(channel, b"standard output".to_vec())?;
+            session.extended_data(channel, 1, b"standard error".to_vec())?;
+            session.exit_status_request(channel, 7)?;
+            session.eof(channel)?;
+            session.close(channel)?;
+            return Ok(());
+        }
         // This fixture has no system audio/exec service. Reject it explicitly,
         // as an SSH server does, while keeping the interactive shell usable.
         session.channel_failure(channel)?;
         session.close(channel)?;
         Ok(())
+    }
+
+    async fn channel_open_direct_tcpip(
+        &mut self,
+        channel: Channel<server::Msg>,
+        host: &str,
+        port: u32,
+        _: &str,
+        _: u32,
+        reply: server::ChannelOpenHandle,
+        _: &mut server::Session,
+    ) -> Result<(), Self::Error> {
+        if host != "fixture.invalid" || port != 8080 {
+            reply
+                .reject(ChannelOpenFailure::AdministrativelyProhibited)
+                .await;
+            return Ok(());
+        }
+        reply.accept().await;
+        channel.data(&b"forwarded bytes"[..]).await?;
+        channel.eof().await?;
+        channel.close().await?;
+        Ok(())
+    }
+
+    async fn channel_open_direct_streamlocal(
+        &mut self,
+        channel: Channel<server::Msg>,
+        path: &str,
+        reply: server::ChannelOpenHandle,
+        _: &mut server::Session,
+    ) -> Result<(), Self::Error> {
+        if path != FORWARD_FIXTURE_SOCKET {
+            reply
+                .reject(ChannelOpenFailure::AdministrativelyProhibited)
+                .await;
+            return Ok(());
+        }
+        reply.accept().await;
+        channel.data(&b"socket bytes"[..]).await?;
+        channel.eof().await?;
+        channel.close().await?;
+        Ok(())
+    }
+
+    async fn tcpip_forward(
+        &mut self,
+        address: &str,
+        port: &mut u32,
+        _: &mut server::Session,
+    ) -> Result<bool, Self::Error> {
+        if address != "127.0.0.1" || *port != 0 {
+            return Ok(false);
+        }
+        *port = u32::from(FORWARD_FIXTURE_PORT);
+        Ok(true)
+    }
+
+    async fn cancel_tcpip_forward(
+        &mut self,
+        address: &str,
+        port: u32,
+        _: &mut server::Session,
+    ) -> Result<bool, Self::Error> {
+        Ok(address == "127.0.0.1" && port == u32::from(FORWARD_FIXTURE_PORT))
+    }
+
+    async fn streamlocal_forward(
+        &mut self,
+        path: &str,
+        _: &mut server::Session,
+    ) -> Result<bool, Self::Error> {
+        Ok(path == FORWARD_FIXTURE_SOCKET)
+    }
+
+    async fn cancel_streamlocal_forward(
+        &mut self,
+        path: &str,
+        _: &mut server::Session,
+    ) -> Result<bool, Self::Error> {
+        Ok(path == FORWARD_FIXTURE_SOCKET)
     }
 
     async fn pty_request(
@@ -1377,4 +1472,462 @@ async fn private_key_login_opens_interactive_shell() {
         let _ = session.await;
     }
     std::fs::remove_file(key_path).expect("test private key should be removed");
+}
+
+const FORWARD_FIXTURE_PORT: u16 = 45138;
+const FORWARD_FIXTURE_SOCKET: &str = "/tmp/axssh-fixture.sock";
+
+async fn forward_tool(worker: &SshSessionHandle, tool: SshTool) -> SshToolResult {
+    worker.request_tool(tool).unwrap().await.unwrap().unwrap()
+}
+
+#[tokio::test]
+async fn ssh_tools_execute_and_forward_on_the_trusted_terminal_worker() {
+    use tokio::io::AsyncReadExt;
+
+    timeout(Duration::from_secs(15), async {
+        let mut rng = StdRng::seed_from_u64(305);
+        let key =
+            russh::keys::PrivateKey::random(&mut rng, russh::keys::Algorithm::Ed25519).unwrap();
+        let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let mut profile = test_profile("SSH tools fixture", address.ip().to_string());
+        let ssh = profile.ssh_mut().unwrap();
+        ssh.port = address.port();
+        ssh.host_key_fingerprint = Some(key.public_key().fingerprint(HashAlg::Sha256).to_string());
+        ssh.x11_forwarding = crate::config::X11ForwardingMode::Off;
+        let (send_peer, receive_peer) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let config = Arc::new(server::Config {
+                keys: vec![key],
+                ..Default::default()
+            });
+            let session = server::run_stream(config, stream, TestServer::password_only())
+                .await
+                .unwrap();
+            assert!(send_peer.send(session.handle()).is_ok());
+            session.await
+        });
+        let (worker, mut events) = SshSessionHandle::spawn(
+            &Handle::current(),
+            Uuid::new_v4(),
+            profile,
+            Zeroizing::new(TEST_PASSWORD.to_owned()),
+            80,
+            24,
+        );
+        loop {
+            match events.recv().await {
+                Some(SshSessionEvent::Connected) => break,
+                Some(SshSessionEvent::Failed(error)) => panic!("test connection failed: {error}"),
+                None => panic!("worker closed before connecting"),
+                _ => {}
+            }
+        }
+        let peer = receive_peer.await.unwrap();
+        assert!(matches!(
+            peer.channel_open_agent().await,
+            Err(russh::Error::ChannelOpenFailure(
+                ChannelOpenFailure::AdministrativelyProhibited
+            ))
+        ));
+        let command = worker
+            .request_tool(SshTool::Execute {
+                command: "fixture-command".to_owned(),
+            })
+            .unwrap()
+            .await
+            .unwrap()
+            .unwrap();
+        match command {
+            SshToolResult::Command {
+                stdout,
+                stderr,
+                exit_status,
+                exit_signal,
+                truncated,
+            } => {
+                assert_eq!(stdout, b"standard output");
+                assert_eq!(stderr, b"standard error");
+                assert_eq!(exit_status, Some(7));
+                assert!(!exit_signal);
+                assert!(!truncated);
+            }
+            _ => panic!("expected a command result"),
+        }
+        let forward = worker
+            .request_tool(SshTool::StartForward(ForwardRule::Local {
+                listen: ForwardListener::Tcp(0),
+                target: ForwardTarget::Tcp {
+                    host: "fixture.invalid".to_owned(),
+                    port: 8080,
+                },
+            }))
+            .unwrap()
+            .await
+            .unwrap()
+            .unwrap();
+        let SshToolResult::Forward(ForwardRule::Local {
+            listen: ForwardListener::Tcp(port),
+            ..
+        }) = forward
+        else {
+            panic!("expected a bound listener");
+        };
+        let mut client = TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port))
+            .await
+            .unwrap();
+        let mut output = Vec::new();
+        client.read_to_end(&mut output).await.unwrap();
+        assert_eq!(output, b"forwarded bytes");
+        let requested = ForwardRule::Local {
+            listen: ForwardListener::Tcp(0),
+            target: ForwardTarget::Tcp {
+                host: "fixture.invalid".to_owned(),
+                port: 8080,
+            },
+        };
+        assert!(matches!(
+            forward_tool(&worker, SshTool::ForwardRuleStatus(requested)).await,
+            SshToolResult::Forward(ForwardRule::Local { listen: ForwardListener::Tcp(actual), .. })
+                if actual == port
+        ));
+        assert!(matches!(
+            forward_tool(
+                &worker,
+                SshTool::ForwardRuleStatus(ForwardRule::Dynamic { port: 0 })
+            )
+            .await,
+            SshToolResult::ForwardStopped
+        ));
+        let second_forward = forward_tool(
+            &worker,
+            SshTool::StartForward(ForwardRule::Local {
+                listen: ForwardListener::Tcp(0),
+                target: ForwardTarget::Tcp {
+                    host: "fixture.invalid".to_owned(),
+                    port: 8080,
+                },
+            }),
+        )
+        .await;
+        let SshToolResult::Forward(ForwardRule::Local {
+            listen: ForwardListener::Tcp(second_port),
+            ..
+        }) = second_forward
+        else {
+            panic!("expected a second bound listener");
+        };
+        let mut second_client = TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, second_port))
+            .await
+            .unwrap();
+        let mut second_output = Vec::new();
+        second_client.read_to_end(&mut second_output).await.unwrap();
+        assert_eq!(second_output, b"forwarded bytes");
+        assert!(matches!(
+            forward_tool(
+                &worker,
+                SshTool::StopForwardRule(ForwardRule::Local {
+                    listen: ForwardListener::Tcp(port),
+                    target: ForwardTarget::Tcp {
+                        host: "fixture.invalid".to_owned(),
+                        port: 8080,
+                    },
+                })
+            )
+            .await,
+            SshToolResult::Forward(_) | SshToolResult::Forwarding(_)
+        ));
+        assert!(
+            TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port))
+                .await
+                .is_err()
+        );
+        let mut remaining_client = TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, second_port))
+            .await
+            .unwrap();
+        let mut remaining_output = Vec::new();
+        remaining_client
+            .read_to_end(&mut remaining_output)
+            .await
+            .unwrap();
+        assert_eq!(remaining_output, b"forwarded bytes");
+        assert!(matches!(
+            forward_tool(&worker, SshTool::StopForward).await,
+            SshToolResult::ForwardStopped
+        ));
+        assert!(
+            TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port))
+                .await
+                .is_err()
+        );
+        exercise_dynamic_forward(&worker).await;
+        exercise_remote_forward(&worker, &peer).await;
+        #[cfg(unix)]
+        exercise_unix_forward(&worker, &peer).await;
+        let final_forward = forward_tool(
+            &worker,
+            SshTool::StartForward(ForwardRule::Dynamic { port: 0 }),
+        )
+        .await;
+        let SshToolResult::Forward(ForwardRule::Dynamic { port }) = final_forward else {
+            panic!("expected an allocated dynamic port");
+        };
+        worker.shutdown().await.unwrap();
+        assert!(
+            TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port))
+                .await
+                .is_err()
+        );
+        match server.await.unwrap() {
+            Ok(()) => {}
+            Err(russh::Error::IO(error))
+                if error.kind() == std::io::ErrorKind::ConnectionReset
+                    || (cfg!(windows) && error.kind() == std::io::ErrorKind::ConnectionAborted) => {
+            }
+            Err(error) => panic!("unexpected peer shutdown error: {error}"),
+        }
+    })
+    .await
+    .expect("SSH tools fixture must complete");
+}
+
+async fn exercise_dynamic_forward(worker: &SshSessionHandle) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let result = forward_tool(
+        worker,
+        SshTool::StartForward(ForwardRule::Dynamic { port: 0 }),
+    )
+    .await;
+    let SshToolResult::Forward(ForwardRule::Dynamic { port }) = result else {
+        panic!("expected a dynamic listener");
+    };
+    let mut socket = TcpStream::connect((std::net::Ipv4Addr::LOCALHOST, port))
+        .await
+        .unwrap();
+    socket.write_all(&[5, 1, 0]).await.unwrap();
+    let mut methods = [0u8; 2];
+    socket.read_exact(&mut methods).await.unwrap();
+    assert_eq!(methods, [5, 0]);
+    let host = b"fixture.invalid";
+    let mut connect = vec![5, 1, 0, 3, host.len() as u8];
+    connect.extend_from_slice(host);
+    connect.extend_from_slice(&8080u16.to_be_bytes());
+    socket.write_all(&connect).await.unwrap();
+    let mut response = [0u8; 10];
+    socket.read_exact(&mut response).await.unwrap();
+    assert_eq!(response[0..4], [5, 0, 0, 1]);
+    let mut body = Vec::new();
+    socket.read_to_end(&mut body).await.unwrap();
+    assert_eq!(body, b"forwarded bytes");
+    assert!(matches!(
+        forward_tool(worker, SshTool::StopForward).await,
+        SshToolResult::ForwardStopped
+    ));
+}
+
+async fn exercise_remote_forward(worker: &SshSessionHandle, peer: &server::Handle) {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let port = u32::from(FORWARD_FIXTURE_PORT);
+    assert!(matches!(
+        peer.channel_open_forwarded_tcpip("127.0.0.1", port, "127.0.0.1", 0)
+            .await,
+        Err(russh::Error::ChannelOpenFailure(
+            ChannelOpenFailure::AdministrativelyProhibited
+        ))
+    ));
+    assert!(matches!(
+        peer.channel_open_forwarded_streamlocal(FORWARD_FIXTURE_SOCKET)
+            .await,
+        Err(russh::Error::ChannelOpenFailure(
+            ChannelOpenFailure::AdministrativelyProhibited
+        ))
+    ));
+
+    let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let local_port = listener.local_addr().unwrap().port();
+    let target = ForwardTarget::Tcp {
+        host: "127.0.0.1".to_owned(),
+        port: local_port,
+    };
+    let result = forward_tool(
+        worker,
+        SshTool::StartForward(ForwardRule::Remote {
+            listen: ForwardListener::Tcp(0),
+            target: target.clone(),
+        }),
+    )
+    .await;
+    assert!(matches!(
+        result,
+        SshToolResult::Forward(ForwardRule::Remote {
+            listen: ForwardListener::Tcp(FORWARD_FIXTURE_PORT),
+            ..
+        })
+    ));
+    assert!(matches!(
+        peer.channel_open_forwarded_tcpip("0.0.0.0", port, "127.0.0.1", 12345)
+            .await,
+        Err(russh::Error::ChannelOpenFailure(
+            ChannelOpenFailure::AdministrativelyProhibited
+        ))
+    ));
+    assert!(matches!(
+        peer.channel_open_forwarded_tcpip("127.0.0.1", port + 1, "127.0.0.1", 12345)
+            .await,
+        Err(russh::Error::ChannelOpenFailure(
+            ChannelOpenFailure::AdministrativelyProhibited
+        ))
+    ));
+
+    assert!(matches!(
+        peer.channel_open_forwarded_tcpip("127.0.0.1", port, "192.0.2.10", 12345)
+            .await,
+        Err(russh::Error::ChannelOpenFailure(
+            ChannelOpenFailure::AdministrativelyProhibited
+        ))
+    ));
+    let forwarded = peer
+        .channel_open_forwarded_tcpip("127.0.0.1", port, "127.0.0.1", 12345)
+        .await
+        .unwrap();
+    let mut stream = forwarded.into_stream();
+    let (mut local, _) = listener.accept().await.unwrap();
+    stream.write_all(b"hello").await.unwrap();
+    let mut bytes = [0; 5];
+    local.read_exact(&mut bytes).await.unwrap();
+    assert_eq!(&bytes, b"hello");
+    local.write_all(b"world").await.unwrap();
+    stream.read_exact(&mut bytes).await.unwrap();
+    assert_eq!(&bytes, b"world");
+    assert!(matches!(
+        forward_tool(worker, SshTool::StopForward).await,
+        SshToolResult::ForwardStopped
+    ));
+    assert!(matches!(
+        peer.channel_open_forwarded_tcpip("127.0.0.1", port, "127.0.0.1", 12345)
+            .await,
+        Err(russh::Error::ChannelOpenFailure(
+            ChannelOpenFailure::AdministrativelyProhibited
+        ))
+    ));
+
+    assert!(matches!(
+        forward_tool(
+            worker,
+            SshTool::StartForward(ForwardRule::Remote {
+                listen: ForwardListener::UnixSocket(FORWARD_FIXTURE_SOCKET.to_owned()),
+                target,
+            })
+        )
+        .await,
+        SshToolResult::Forward(ForwardRule::Remote { .. })
+    ));
+    let forwarded = peer
+        .channel_open_forwarded_streamlocal(FORWARD_FIXTURE_SOCKET)
+        .await
+        .unwrap();
+    let (mut local, _) = listener.accept().await.unwrap();
+    local.write_all(b"socket-to-tcp").await.unwrap();
+    let mut stream = forwarded.into_stream();
+    let mut bytes = [0; 13];
+    stream.read_exact(&mut bytes).await.unwrap();
+    assert_eq!(&bytes, b"socket-to-tcp");
+    assert!(matches!(
+        forward_tool(worker, SshTool::StopForward).await,
+        SshToolResult::ForwardStopped
+    ));
+    assert!(matches!(
+        peer.channel_open_forwarded_streamlocal(FORWARD_FIXTURE_SOCKET)
+            .await,
+        Err(russh::Error::ChannelOpenFailure(
+            ChannelOpenFailure::AdministrativelyProhibited
+        ))
+    ));
+}
+
+#[cfg(unix)]
+async fn exercise_unix_forward(worker: &SshSessionHandle, peer: &server::Handle) {
+    use std::os::unix::fs::DirBuilderExt;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let id = Uuid::new_v4().simple().to_string();
+    let directory = std::path::Path::new("/tmp").join(format!("axssh-{}", &id[..12]));
+    std::fs::DirBuilder::new()
+        .mode(0o700)
+        .create(&directory)
+        .unwrap();
+    let path = directory.join("local.sock");
+    let local_path = path.to_str().unwrap().to_owned();
+    std::fs::write(&path, b"existing file").unwrap();
+    let conflict = worker
+        .request_tool(SshTool::StartForward(ForwardRule::Local {
+            listen: ForwardListener::UnixSocket(local_path.clone()),
+            target: ForwardTarget::UnixSocket(FORWARD_FIXTURE_SOCKET.to_owned()),
+        }))
+        .unwrap()
+        .await
+        .unwrap();
+    assert!(conflict.is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), b"existing file");
+    std::fs::remove_file(&path).unwrap();
+    let remote_path = FORWARD_FIXTURE_SOCKET.to_owned();
+    let result = forward_tool(
+        worker,
+        SshTool::StartForward(ForwardRule::Local {
+            listen: ForwardListener::UnixSocket(local_path.clone()),
+            target: ForwardTarget::UnixSocket(remote_path.clone()),
+        }),
+    )
+    .await;
+    assert!(matches!(
+        result,
+        SshToolResult::Forward(ForwardRule::Local { .. })
+    ));
+    let mut client = tokio::net::UnixStream::connect(&path).await.unwrap();
+    let mut output = Vec::new();
+    client.read_to_end(&mut output).await.unwrap();
+    assert_eq!(output, b"socket bytes");
+    assert!(matches!(
+        forward_tool(worker, SshTool::StopForward).await,
+        SshToolResult::ForwardStopped
+    ));
+    assert!(!path.exists());
+
+    let listener = tokio::net::UnixListener::bind(&path).unwrap();
+    let result = forward_tool(
+        worker,
+        SshTool::StartForward(ForwardRule::Remote {
+            listen: ForwardListener::UnixSocket(remote_path.clone()),
+            target: ForwardTarget::UnixSocket(local_path),
+        }),
+    )
+    .await;
+    assert!(matches!(
+        result,
+        SshToolResult::Forward(ForwardRule::Remote { .. })
+    ));
+    let forwarded = peer
+        .channel_open_forwarded_streamlocal(remote_path)
+        .await
+        .unwrap();
+    let (mut local, _) = listener.accept().await.unwrap();
+    local.write_all(b"socket-to-socket").await.unwrap();
+    let mut bytes = [0; 16];
+    forwarded
+        .into_stream()
+        .read_exact(&mut bytes)
+        .await
+        .unwrap();
+    assert_eq!(&bytes, b"socket-to-socket");
+    assert!(matches!(
+        forward_tool(worker, SshTool::StopForward).await,
+        SshToolResult::ForwardStopped
+    ));
+    drop(listener);
+    std::fs::remove_file(path).unwrap();
+    std::fs::remove_dir(directory).unwrap();
 }

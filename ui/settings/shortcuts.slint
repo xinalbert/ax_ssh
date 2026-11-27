@@ -12,6 +12,7 @@ export component ShortcutsSettingsPage inherits SettingsPage {
     in-out property <string> draft-copy-selection-shortcut;
     in-out property <string> draft-paste-shortcut;
     in-out property <string> draft-open-sftp-shortcut;
+    in-out property <string> draft-open-forwarding-manager-shortcut;
     in property <string> default-open-settings-shortcut;
     in property <string> default-new-session-shortcut;
     in property <string> default-import-sessions-shortcut;
@@ -20,6 +21,7 @@ export component ShortcutsSettingsPage inherits SettingsPage {
     in property <string> default-copy-selection-shortcut;
     in property <string> default-paste-shortcut;
     in property <string> default-open-sftp-shortcut;
+    in property <string> default-open-forwarding-manager-shortcut;
     in property <bool> apple-platform: false;
 
     private property <string> select-all-shortcut: root.apple-platform ? "Cmd+A" : "Ctrl+Shift+A";
@@ -49,6 +51,7 @@ export component ShortcutsSettingsPage inherits SettingsPage {
                 root.draft-copy-selection-shortcut = root.default-copy-selection-shortcut;
                 root.draft-paste-shortcut = root.default-paste-shortcut;
                 root.draft-open-sftp-shortcut = root.default-open-sftp-shortcut;
+                root.draft-open-forwarding-manager-shortcut = root.default-open-forwarding-manager-shortcut;
             }
         }
     }
@@ -141,7 +144,6 @@ export component ShortcutsSettingsPage inherits SettingsPage {
     SettingsRow {
         label: @tr("Switch SSH/SFTP Tab");
         description: @tr("Workspace command");
-        show-divider: false;
         SettingsField {
             ShortcutRecorder {
                 width: Theme.settings-field-width;
@@ -153,6 +155,20 @@ export component ShortcutsSettingsPage inherits SettingsPage {
                 recording-changed(recording) => {
                     root.shortcut-recording-changed(recording);
                 }
+            }
+        }
+    }
+    SettingsRow {
+        label: @tr("Forwarding Manager");
+        description: @tr("Workspace command");
+        show-divider: false;
+        SettingsField {
+            ShortcutRecorder {
+                width: Theme.settings-field-width;
+                shortcut <=> root.draft-open-forwarding-manager-shortcut;
+                accessible-name: @tr("Forwarding Manager");
+                format-shortcut(event) => { return root.format-shortcut(event); }
+                recording-changed(recording) => { root.shortcut-recording-changed(recording); }
             }
         }
     }

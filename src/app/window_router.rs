@@ -1,6 +1,7 @@
 use std::collections::{HashMap, HashSet};
 use std::sync::OnceLock;
 
+use super::state::ForwardingManagerRowSnapshot;
 use super::terminal_presentation::TerminalPresentationPolicy;
 use super::*;
 use ax_ssh::config::{PaneNodeSnapshot, WorkspaceSnapshot, WorkspaceWindowSnapshot};
@@ -40,6 +41,8 @@ pub(super) struct WindowView {
     pub(super) snapshot: ActiveTabSnapshot,
     pub(super) terminal_panes: Vec<WindowTerminalPane>,
     pub(super) terminal_dividers: Vec<PaneDividerPlacement>,
+    pub(super) forwarding_rows: Vec<ForwardingManagerRowSnapshot>,
+    pub(super) forwarding_profiles: Vec<(Uuid, String, &'static str)>,
 }
 
 pub(super) struct WindowTerminalPane {
@@ -1025,6 +1028,16 @@ impl WindowRouter {
                 let active_session =
                     active_session_id.and_then(|id| app.tab_summaries_for(&[id]).pop());
                 let snapshot = app.snapshot_without_terminal_for(active_session_id);
+                let (forwarding_rows, forwarding_profiles) = if snapshot.kind
+                    == "forwarding-manager"
+                {
+                    (
+                        app.forwarding_manager_rows(),
+                        forwarding_manager_profiles(&app.sessions, &app.profile_system_releases()),
+                    )
+                } else {
+                    Default::default()
+                };
                 route.active_tab_id = active_tab_id;
                 let (terminal_panes, terminal_dividers) = active_tab_id
                     .and_then(|tab_id| route.pane_trees.get(&tab_id))
@@ -1055,6 +1068,8 @@ impl WindowRouter {
                     snapshot,
                     terminal_panes,
                     terminal_dividers,
+                    forwarding_rows,
+                    forwarding_profiles,
                 }
             })
             .collect()

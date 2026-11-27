@@ -1,0 +1,37 @@
+import { FlatTextInput } from "flat-text-input.slint";
+import { ThemedComboBox } from "themed-combo-box.slint";
+import { Theme } from "../theme.slint";
+
+export component ForwardingFields inherits VerticalLayout {
+    in property <bool> editable: true;
+    in-out property <int> mode;
+    in-out property <string> listen;
+    in-out property <string> target;
+    out property <string> mode-key: root.mode == 0 ? "local" : root.mode == 1 ? "remote" : "dynamic";
+
+    spacing: Theme.space-sm;
+
+    ThemedComboBox {
+        model: [@tr("Local (-L)"), @tr("Remote (-R)"), @tr("Dynamic SOCKS5 (-D)")];
+        current-index: root.mode;
+        accessible-label: @tr("Forwarding mode");
+        enabled: root.editable;
+        selected(_value, index) => {
+            root.mode = index;
+            if index == 2 { root.target = ""; }
+        }
+    }
+    FlatTextInput {
+        text <=> root.listen;
+        placeholder-text: root.mode == 2
+            ? @tr("Local port (0 for automatic)") : @tr("Listening port or Unix socket path");
+        accessible-label: self.placeholder-text;
+        enabled: root.editable;
+    }
+    if root.mode != 2 : FlatTextInput {
+        text <=> root.target;
+        placeholder-text: @tr("Destination host:port or Unix socket path");
+        accessible-label: self.placeholder-text;
+        enabled: root.editable;
+    }
+}

@@ -5,6 +5,7 @@ use tokio::time::{Instant as TokioInstant, sleep, timeout};
 
 use crate::sftp::SftpTransferEvent;
 
+use super::super::agent_forwarding::{AgentForwarding, Incoming, MAX_RELAYS};
 use super::super::x11::{X11ChannelRequest, X11Dispatcher, X11Forwarding, X11PreparationError};
 use super::super::{SshEvent, SshShell, X11RequestStatus};
 use super::sftp::send_sftp_transfer_event;
@@ -18,6 +19,9 @@ pub(super) struct TerminalSessionTask {
     pub(super) audio_format: crate::audio::AudioFormat,
     pub(super) x11_dispatcher: Option<X11Dispatcher>,
     pub(super) x11_requests: Option<mpsc::Receiver<X11ChannelRequest>>,
+    pub(super) agent_forwarding: Option<AgentForwarding>,
+    pub(super) agent_requests: Option<mpsc::Receiver<Incoming>>,
+    pub(super) remote_forwarding: crate::ssh::forwarding::RemoteDispatcher,
     pub(super) command_rx: mpsc::Receiver<SshCommand>,
     pub(super) latency_foreground_rx: watch::Receiver<bool>,
     pub(super) resize_rx: watch::Receiver<TerminalSize>,
@@ -33,6 +37,9 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
         audio_format,
         x11_dispatcher,
         mut x11_requests,
+        agent_forwarding,
+        mut agent_requests,
+        remote_forwarding,
         mut command_rx,
         mut resize_rx,
         latency_foreground_rx,
@@ -108,6 +115,7 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
             initial_size,
             x11_forwarding.as_ref(),
             audio_source.as_deref(),
+            agent_forwarding.as_ref(),
         )
         .await
     {
@@ -179,6 +187,22 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
         }
     }
 
+    if agent_requests.is_some()
+        && !agent_forwarding
+            .as_ref()
+            .is_some_and(AgentForwarding::is_enabled)
+        && !send_event(
+            &event_tx,
+            SshSessionEvent::AgentForwardingUnavailable,
+            session_id,
+        )
+        .await
+    {
+        shutdown_media_tasks(&media_stop, &mut media_tasks).await;
+        close_shell(&shell, session_id).await;
+        return;
+    }
+
     let mut latency = LatencyMonitor::new(connection.clone(), latency_foreground_rx);
     let output_flush = sleep(OUTPUT_FLUSH_INTERVAL);
     tokio::pin!(output_flush);
@@ -186,6 +210,15 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
     let mut output_received_at = None;
     let mut awaiting_output_after_input = None;
     let mut x11_relays = JoinSet::new();
+    let mut agent_relays = JoinSet::new();
+    let mut agent_error_reported = false;
+    let mut tools = super::tools::ToolTasks::new(remote_forwarding);
+    if !agent_forwarding
+        .as_ref()
+        .is_some_and(AgentForwarding::is_enabled)
+    {
+        agent_requests = None;
+    }
     let mut release_probes = JoinSet::new();
     let attachment_directories = std::sync::Arc::new(tokio::sync::Mutex::new(Vec::new()));
     let mut microphone_task = None;
@@ -200,6 +233,10 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
             }
             command = command_rx.recv() => {
                 match command {
+                    Some(SshCommand::Tool { tool, reply }) => {
+                        tools.submit(&connection, tool, reply).await;
+                        continue;
+                    }
                     Some(SshCommand::Send {
                         input_sequence,
                         queued_at,
@@ -459,6 +496,33 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
                     }
                 }
             }
+            request = async {
+                match &mut agent_requests {
+                    Some(requests) => requests.recv().await,
+                    None => std::future::pending().await,
+                }
+            }, if agent_requests.is_some() => {
+                match request {
+                    Some((channel, reply)) if agent_relays.len() < MAX_RELAYS => {
+                        if let Some(forwarding) = &agent_forwarding {
+                            agent_relays.spawn(AgentForwarding::relay(forwarding.binding(), (channel, reply)));
+                        }
+                    }
+                    Some((_, reply)) => reply.reject(russh::ChannelOpenFailure::ResourceShortage).await,
+                    None => agent_requests = None,
+                }
+            }
+            result = agent_relays.join_next(), if !agent_relays.is_empty() => {
+                if matches!(result, Some(Ok(Err(_)) | Err(_))) {
+                    debug!(session_id = %session_id, "SSH agent relay ended with an error");
+                    if !agent_error_reported {
+                        agent_error_reported = true;
+                        if !send_event(&event_tx, SshSessionEvent::AgentForwardingUnavailable, session_id).await {
+                            break;
+                        }
+                    }
+                }
+            }
             request = receive_x11_request(&mut x11_requests), if x11_requests.is_some() => {
                 match request {
                     Some(request) if x11_relays.len() >= MAX_X11_RELAYS => {
@@ -526,6 +590,10 @@ pub(super) async fn run_terminal_session(task: TerminalSessionTask) {
             }
         }
     }
+    drop(agent_forwarding);
+    drop(agent_requests);
+    agent_relays.shutdown().await;
+    tools.shutdown().await;
 
     flush_output(&event_tx, &mut output, &mut output_received_at, session_id).await;
     if let Some(dispatcher) = &x11_dispatcher {

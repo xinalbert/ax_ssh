@@ -40,6 +40,27 @@ pub(in crate::app) fn wire_workspace_tabs(
         }
     });
 
+    let ui_for_forwarding = ui.as_weak();
+    let state_for_forwarding = state.clone();
+    let router_for_forwarding = window_router.clone();
+    ui.on_open_forwarding_manager(move || {
+        log_ui_action("workspace.open-forwarding-manager");
+        match state_for_forwarding.lock() {
+            Ok(mut app) => {
+                if router_for_forwarding.workspace_actions_locked(window_id, &app) {
+                    return;
+                }
+                let tab_id = app.open_forwarding_manager_tab();
+                let _ = router_for_forwarding.activate_tab(window_id, tab_id, &mut app);
+            }
+            Err(_) => {
+                set_status(&ui_for_forwarding, "Cannot update workspace tabs");
+                return;
+            }
+        }
+        refresh_workspace(&ui_for_forwarding, &state_for_forwarding);
+    });
+
     let ui_for_new = ui.as_weak();
     let state_for_new = state.clone();
     let router_for_new = window_router.clone();
@@ -326,6 +347,7 @@ fn release_closed_tabs(
     for (_, closed) in closed_tabs {
         match closed.kind {
             ClosedTabKind::Settings => clear_settings_option_models(ui, state),
+            ClosedTabKind::ForwardingManager => {}
             ClosedTabKind::SessionEditor => clear_session_editor_resources(ui),
             ClosedTabKind::Terminal {
                 release_file_icon_cache: true,

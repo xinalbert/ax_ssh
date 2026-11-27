@@ -1,0 +1,126 @@
+import { CheckBox } from "std-widgets.slint";
+import { ElidedButton, ElidedLabel } from "elided-controls.slint";
+import { FlatTextEdit } from "flat-text-edit.slint";
+import { ForwardingFields } from "forwarding-fields.slint";
+import { ForwardingManagerRow, ForwardingManagerRequest } from "forwarding-manager-page.slint";
+import { ModalFrame } from "modal-frame.slint";
+import { ServerComboBox, ServerOption } from "themed-combo-box.slint";
+import { Theme } from "../theme.slint";
+
+export component ForwardingRuleDialog inherits ModalFrame {
+    in property <string> action;
+    in property <ForwardingManagerRow> original;
+    in property <[ServerOption]> profiles;
+    in property <bool> busy;
+    in property <string> result;
+    in property <string> details;
+    callback submit(ForwardingManagerRequest);
+    callback close();
+
+    private property <bool> editing: root.action == "new" || root.action == "edit";
+    private property <bool> checking: root.action == "check";
+    private property <int> server-index: root.profiles.length == 1 ? 0
+        : root.original.profile_id.is-empty || root.original.profile_index < 0
+            || root.original.profile_index >= root.profiles.length ? -1
+        : root.profiles[root.original.profile_index].id == root.original.profile_id
+            ? root.original.profile_index : -1;
+    private property <string> selected-server-id: root.server-index >= 0 && root.server-index < root.profiles.length
+        ? root.profiles[root.server-index].id : "";
+    private property <int> mode: root.action == "new" ? 0
+        : root.original.mode == "remote" ? 1 : root.original.mode == "dynamic" ? 2 : 0;
+    private property <string> listen: root.action == "new" ? "" : root.original.listen;
+    private property <string> target: root.action == "new" ? "" : root.original.target;
+    private property <bool> enabled-rule: root.action == "new" || root.original.enabled;
+    private property <string> status: root.busy && root.checking ? @tr("Checking forwarding…")
+        : root.result == "offline" ? @tr("Configuration valid. SSH server is offline.")
+        : root.result == "inactive" ? @tr("Configuration valid. This rule is not listening.")
+        : root.result == "starting" ? @tr("Forwarding is starting.")
+        : root.result == "listening" ? @tr("Forwarding is listening.")
+        : root.result == "unavailable" ? @tr("Configuration valid. Listener status is unavailable.")
+        : root.result == "error" ? root.details : "";
+
+    dialog-width: Theme.host-dialog-width;
+    dialog-height: root.editing ? 306px : root.checking ? 254px : 210px;
+    dismissed => { if !root.busy || root.checking { root.close(); } }
+
+    VerticalLayout {
+        padding: Theme.space-xl;
+        spacing: Theme.space-sm;
+        Text {
+            text: root.action == "new" ? @tr("New forwarding")
+                : root.action == "edit" ? @tr("Edit forwarding")
+                : root.checking ? @tr("Check forwarding") : @tr("Delete forwarding");
+            color: Theme.text;
+            font-size: Theme.font-title;
+            font-weight: 700;
+        }
+        if root.action == "new" : ServerComboBox {
+            servers: root.profiles;
+            current-index <=> root.server-index;
+            allow-empty-selection: true;
+            placeholder: @tr("Server");
+            accessible-label: @tr("Server");
+            enabled: !root.busy;
+        }
+        if root.action != "new" : ElidedLabel {
+            text: root.original.profile_name;
+            text-color: Theme.muted;
+        }
+        if root.editing : ForwardingFields {
+            mode <=> root.mode;
+            listen <=> root.listen;
+            target <=> root.target;
+            editable: !root.busy;
+        }
+        if root.editing : CheckBox {
+            text: @tr("Enabled");
+            checked <=> root.enabled-rule;
+            enabled: !root.busy;
+        }
+        if !root.editing : ElidedLabel {
+            text: (root.mode == 0 ? "-L" : root.mode == 1 ? "-R" : "-D")
+                + " · " + root.listen + (root.target.is-empty ? "" : " → " + root.target);
+        }
+        if root.action == "delete" : Text {
+            text: @tr("Remove this saved rule? It will no longer start on reconnect.");
+            color: Theme.muted;
+            wrap: word-wrap;
+        }
+        if !root.status.is-empty : ElidedLabel {
+            text: root.status;
+            text-color: root.result == "error" ? Theme.danger : Theme.text;
+        }
+        if root.result == "listening" : FlatTextEdit {
+            text: root.details;
+            read-only: true;
+            accessible-label: @tr("Result");
+        }
+        Rectangle { vertical-stretch: 1; }
+        HorizontalLayout {
+            alignment: end;
+            spacing: Theme.space-sm;
+            ElidedButton {
+                text: root.checking ? @tr("Close") : @tr("Cancel");
+                enabled: !root.busy || root.checking;
+                clicked => { root.close(); }
+            }
+            ElidedButton {
+                text: root.editing ? @tr("Save") : root.checking ? @tr("Check forwarding") : @tr("Delete");
+                enabled: !root.busy && (!root.editing || (!root.listen.is-empty
+                    && (root.mode == 2 || !root.target.is-empty)
+                    && (root.action != "new" || !root.selected-server-id.is-empty)));
+                clicked => {
+                    root.submit({
+                        action: root.action,
+                        original: root.original,
+                        profile_id: root.action == "new" ? root.selected-server-id : root.original.profile_id,
+                        mode: root.mode == 0 ? "local" : root.mode == 1 ? "remote" : "dynamic",
+                        listen: root.listen,
+                        target: root.target,
+                        enabled: root.enabled-rule,
+                    });
+                }
+            }
+        }
+    }
+}

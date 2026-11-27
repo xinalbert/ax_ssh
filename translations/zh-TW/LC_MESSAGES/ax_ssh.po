@@ -91,6 +91,9 @@ msgstr "允許無 X authority 的本地連線"
 msgid "Allow remote OSC 52 clipboard access"
 msgstr "允許遠端 OSC 52 訪問剪貼簿"
 
+msgid "Allow this server to request signatures from your local SSH agent."
+msgstr "允許此伺服器向本機 SSH Agent 要求簽章。"
+
 msgid "Allow writes to the default clipboard; ask before remote reads"
 msgstr "允許寫入預設剪貼簿；遠端讀取前需要確認"
 
@@ -196,6 +199,9 @@ msgstr "取消"
 msgid "Cancel all"
 msgstr "全部取消"
 
+msgid "Cancel command"
+msgstr "取消命令"
+
 msgid "Cancel selected"
 msgstr "取消所選"
 
@@ -207,6 +213,12 @@ msgstr "Canvas（尚不可用）"
 
 msgid "Changes take effect after restarting AxSSH"
 msgstr "重啟 AxSSH 後生效"
+
+msgid "Check forwarding"
+msgstr "檢查轉送"
+
+msgid "Checking forwarding…"
+msgstr "正在檢查轉送…"
 
 msgid "Choose Custom to launch this path without a command shell"
 msgstr "選擇“自定義”以直接啟動此路徑，不經過命令 Shell"
@@ -267,6 +279,15 @@ msgstr "配色方案"
 
 msgid "Compact terminal rendering"
 msgstr "緊湊終端機渲染"
+
+msgid "Configuration valid. Listener status is unavailable."
+msgstr "設定有效。暫時無法取得監聽狀態。"
+
+msgid "Configuration valid. SSH server is offline."
+msgstr "設定有效。SSH 伺服器離線。"
+
+msgid "Configuration valid. This rule is not listening."
+msgstr "設定有效。這條規則目前未監聽。"
 
 msgid "Connect"
 msgstr "連線"
@@ -400,6 +421,9 @@ msgstr "刪除組"
 msgid "Delete Server"
 msgstr "刪除伺服器"
 
+msgid "Delete forwarding"
+msgstr "刪除轉送"
+
 msgid "Delete group"
 msgstr "刪除組"
 
@@ -414,6 +438,12 @@ msgstr "刪除 {0}？該組中的伺服器將移至“未分組”。"
 
 msgid "Deny"
 msgstr "拒絕"
+
+msgid "Destination"
+msgstr "目的地"
+
+msgid "Destination host:port or Unix socket path"
+msgstr "目的地主機:連接埠或 Unix 通訊端路徑"
 
 msgid "Destination: {0}"
 msgstr "目的地：{0}"
@@ -463,6 +493,9 @@ msgstr "建立副本"
 msgid "Duplicate Group"
 msgstr "建立組副本"
 
+msgid "Dynamic SOCKS5 (-D)"
+msgstr "動態 SOCKS5（-D）"
+
 msgid "ETA"
 msgstr "預計剩餘"
 
@@ -472,6 +505,9 @@ msgstr "編輯"
 msgid "Edit Server"
 msgstr "編輯伺服器"
 
+msgid "Edit forwarding"
+msgstr "編輯轉送"
+
 msgid "Edit path"
 msgstr "編輯路徑"
 
@@ -480,6 +516,9 @@ msgstr "編輯選中的遠端檔案"
 
 msgid "Enable semantic highlighting"
 msgstr "啟用語義高亮"
+
+msgid "Enabled"
+msgstr "已啟用"
 
 msgid "Encrypted application vault"
 msgstr "應用加密保險庫"
@@ -579,6 +618,24 @@ msgstr "前景"
 
 msgid "Forward"
 msgstr "前進"
+
+msgid "Forward SSH agent"
+msgstr "轉送 SSH Agent"
+
+msgid "Forwarding Manager"
+msgstr "轉送管理員"
+
+msgid "Forwarding is listening."
+msgstr "轉送正在監聽。"
+
+msgid "Forwarding is starting."
+msgstr "轉送正在啟動。"
+
+msgid "Forwarding mode"
+msgstr "轉送模式"
+
+msgid "Forwarding rule actions"
+msgstr "轉送規則操作"
 
 msgid "GPU"
 msgstr "GPU"
@@ -685,8 +742,17 @@ msgstr "淺色"
 msgid "Line height"
 msgstr "行高"
 
+msgid "Listen"
+msgstr "監聽"
+
+msgid "Listening port or Unix socket path"
+msgstr "監聽連接埠或 Unix 通訊端路徑"
+
 msgid "Loading..."
 msgstr "正在載入..."
+
+msgid "Local (-L)"
+msgstr "本機（-L）"
 
 msgid "Local SFTP file open snapshot limit in MiB"
 msgstr "SFTP 本地檔案開啟快照上限（MiB）"
@@ -718,6 +784,9 @@ msgstr "本機檔案：{0} - 修改時間：{1}"
 msgid "Local files"
 msgstr "本地檔案"
 
+msgid "Local port (0 for automatic)"
+msgstr "本機連接埠（0 為自動分配）"
+
 msgid "Local selection priority"
 msgstr "本地選區優先"
 
@@ -742,6 +811,9 @@ msgstr "麥克風"
 msgid "MOUSE"
 msgstr "滑鼠"
 
+msgid "Manage forwarding rules from all saved SSH servers."
+msgstr "管理所有已儲存 SSH 伺服器的轉送規則。"
+
 msgid "Manual selection takes priority over automatic detection."
 msgstr "手動選擇優先於自動識別。"
 
@@ -762,6 +834,9 @@ msgstr "所有 SFTP 分頁共享的同時上傳數"
 
 msgid "Minimize Window"
 msgstr "最小化視窗"
+
+msgid "Mode"
+msgstr "模式"
 
 msgid "Modified"
 msgstr "修改時間"
@@ -802,6 +877,9 @@ msgstr "新建伺服器"
 msgid "New Server shortcut"
 msgstr "新建伺服器快捷鍵"
 
+msgid "New forwarding"
+msgstr "新增轉送"
+
 msgid "New group"
 msgstr "新建組"
 
@@ -816,6 +894,9 @@ msgstr "沒有失敗的傳輸"
 
 msgid "No files"
 msgstr "沒有檔案"
+
+msgid "No forwarding rules"
+msgstr "沒有轉送規則"
 
 msgid "No known local X server was found"
 msgstr "未找到已知的本地 X server"
@@ -843,6 +924,9 @@ msgstr "沒有正在傳輸的檔案"
 
 msgid "Off"
 msgstr "關閉"
+
+msgid "Offline"
+msgstr "離線"
 
 msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
 msgstr "開啟：Alt/Option 轉發滑鼠手勢；關閉：標準 xterm，Shift 本地選擇"
@@ -970,6 +1054,9 @@ msgstr "平臺主目錄"
 msgid "Port"
 msgstr "埠"
 
+msgid "Port Forwarding"
+msgstr "連接埠轉送"
+
 msgid "Positive status indicators"
 msgstr "成功狀態指示"
 
@@ -1009,6 +1096,9 @@ msgstr "提供程式"
 msgid "RENDERING"
 msgstr "渲染"
 
+msgid "Recent forwarding rules"
+msgstr "最近的轉送規則"
+
 msgid "Reduce terminal items and omit default background rectangles"
 msgstr "減少終端機繪製項並省略預設背景矩形"
 
@@ -1021,6 +1111,9 @@ msgstr "重新整理串列埠"
 msgid "Remembered password storage"
 msgstr "已記住密碼的儲存位置"
 
+msgid "Remote (-R)"
+msgstr "遠端（-R）"
+
 msgid "Remote and local file pane sizes"
 msgstr "遠端和本地檔案窗格大小"
 
@@ -1029,6 +1122,9 @@ msgstr "遠端聲道"
 
 msgid "Remote clipboard request"
 msgstr "遠端剪貼簿要求"
+
+msgid "Remote command"
+msgstr "遠端命令"
 
 msgid "Remote default directory"
 msgstr "遠端預設目錄"
@@ -1056,6 +1152,9 @@ msgstr "移除"
 
 msgid "Remove revoked record"
 msgstr "移除已撤銷記錄"
+
+msgid "Remove this saved rule? It will no longer start on reconnect."
+msgstr "刪除這條已儲存的規則？下次連線時將不再啟動。"
 
 msgid "Rename"
 msgstr "重新命名"
@@ -1096,6 +1195,9 @@ msgstr "恢復平臺預設值"
 msgid "Restore the default filters for this platform"
 msgstr "恢復此平臺的預設過濾規則"
 
+msgid "Result"
+msgstr "結果"
+
 msgid "Resume"
 msgstr "繼續"
 
@@ -1131,6 +1233,12 @@ msgstr "右鍵始終貼上"
 
 msgid "Right-click copy or paste"
 msgstr "右鍵複製或貼上"
+
+msgid "Run"
+msgstr "執行"
+
+msgid "Run Remote Command"
+msgstr "執行遠端命令"
 
 msgid "Runtime logs"
 msgstr "執行日誌"
@@ -1212,6 +1320,9 @@ msgstr "儲存 SSH 密碼供以後連線使用"
 
 msgid "Save Workspace"
 msgstr "儲存工作區"
+
+msgid "Save an SSH server to add forwarding rules."
+msgstr "請先儲存一部 SSH 伺服器，再新增轉送規則。"
 
 msgid "Save audio settings"
 msgstr "儲存音訊設定"
@@ -1314,6 +1425,9 @@ msgstr "串列埠停止位元"
 
 msgid "Serial transport"
 msgstr "串列埠傳輸"
+
+msgid "Server"
+msgstr "伺服器"
 
 msgid "Server SFTP bandwidth limit in MiB per second"
 msgstr "伺服器 SFTP 頻寬上限（MiB/秒）"
@@ -1423,6 +1537,9 @@ msgstr "垂直拆分（Alt+Shift+L）"
 msgid "Start for first X11 application"
 msgstr "首個 X11 應用開啟時啟動"
 
+msgid "Start forwarding"
+msgstr "開始轉送"
+
 msgid "Status"
 msgstr "狀態"
 
@@ -1434,6 +1551,9 @@ msgstr "停止位元"
 
 msgid "Stop editing"
 msgstr "停止編輯"
+
+msgid "Stop forwarding"
+msgstr "停止轉送"
 
 msgid "Success"
 msgstr "成功"
@@ -1904,6 +2024,10 @@ msgstr "字型系列"
 msgctxt "settings-search"
 msgid "Font size"
 msgstr "字型大小"
+
+msgctxt "settings-search"
+msgid "Forwarding Manager"
+msgstr "轉送管理員"
 
 msgctxt "settings-search"
 msgid "General"

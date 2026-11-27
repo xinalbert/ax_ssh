@@ -91,6 +91,9 @@ msgstr "Allow local connections without X authority"
 msgid "Allow remote OSC 52 clipboard access"
 msgstr "Allow remote OSC 52 clipboard access"
 
+msgid "Allow this server to request signatures from your local SSH agent."
+msgstr "Allow this server to request signatures from your local SSH agent."
+
 msgid "Allow writes to the default clipboard; ask before remote reads"
 msgstr "Allow writes to the default clipboard; ask before remote reads"
 
@@ -196,6 +199,9 @@ msgstr "Cancel"
 msgid "Cancel all"
 msgstr "Cancel all"
 
+msgid "Cancel command"
+msgstr "Cancel command"
+
 msgid "Cancel selected"
 msgstr "Cancel selected"
 
@@ -207,6 +213,12 @@ msgstr "Canvas (not available yet)"
 
 msgid "Changes take effect after restarting AxSSH"
 msgstr "Changes take effect after restarting AxSSH"
+
+msgid "Check forwarding"
+msgstr "Check forwarding"
+
+msgid "Checking forwarding…"
+msgstr "Checking forwarding…"
 
 msgid "Choose Custom to launch this path without a command shell"
 msgstr "Choose Custom to launch this path without a command shell"
@@ -267,6 +279,15 @@ msgstr "Colour palette"
 
 msgid "Compact terminal rendering"
 msgstr "Compact terminal rendering"
+
+msgid "Configuration valid. Listener status is unavailable."
+msgstr "Configuration valid. Listener status is unavailable."
+
+msgid "Configuration valid. SSH server is offline."
+msgstr "Configuration valid. SSH server is offline."
+
+msgid "Configuration valid. This rule is not listening."
+msgstr "Configuration valid. This rule is not listening."
 
 msgid "Connect"
 msgstr "Connect"
@@ -400,6 +421,9 @@ msgstr "Delete Group"
 msgid "Delete Server"
 msgstr "Delete Server"
 
+msgid "Delete forwarding"
+msgstr "Delete forwarding"
+
 msgid "Delete group"
 msgstr "Delete group"
 
@@ -414,6 +438,12 @@ msgstr "Delete {0}? Servers in this group will move to Ungrouped."
 
 msgid "Deny"
 msgstr "Deny"
+
+msgid "Destination"
+msgstr "Destination"
+
+msgid "Destination host:port or Unix socket path"
+msgstr "Destination host:port or Unix socket path"
 
 msgid "Destination: {0}"
 msgstr "Destination: {0}"
@@ -463,6 +493,9 @@ msgstr "Duplicate"
 msgid "Duplicate Group"
 msgstr "Duplicate Group"
 
+msgid "Dynamic SOCKS5 (-D)"
+msgstr "Dynamic SOCKS5 (-D)"
+
 msgid "ETA"
 msgstr "ETA"
 
@@ -472,6 +505,9 @@ msgstr "Edit"
 msgid "Edit Server"
 msgstr "Edit Server"
 
+msgid "Edit forwarding"
+msgstr "Edit forwarding"
+
 msgid "Edit path"
 msgstr "Edit path"
 
@@ -480,6 +516,9 @@ msgstr "Edit selected remote file"
 
 msgid "Enable semantic highlighting"
 msgstr "Enable semantic highlighting"
+
+msgid "Enabled"
+msgstr "Enabled"
 
 msgid "Encrypted application vault"
 msgstr "Encrypted application vault"
@@ -579,6 +618,24 @@ msgstr "Foreground"
 
 msgid "Forward"
 msgstr "Forward"
+
+msgid "Forward SSH agent"
+msgstr "Forward SSH agent"
+
+msgid "Forwarding Manager"
+msgstr "Forwarding Manager"
+
+msgid "Forwarding is listening."
+msgstr "Forwarding is listening."
+
+msgid "Forwarding is starting."
+msgstr "Forwarding is starting."
+
+msgid "Forwarding mode"
+msgstr "Forwarding mode"
+
+msgid "Forwarding rule actions"
+msgstr "Forwarding rule actions"
 
 msgid "GPU"
 msgstr "GPU"
@@ -685,8 +742,17 @@ msgstr "Light"
 msgid "Line height"
 msgstr "Line height"
 
+msgid "Listen"
+msgstr "Listen"
+
+msgid "Listening port or Unix socket path"
+msgstr "Listening port or Unix socket path"
+
 msgid "Loading..."
 msgstr "Loading..."
+
+msgid "Local (-L)"
+msgstr "Local (-L)"
 
 msgid "Local SFTP file open snapshot limit in MiB"
 msgstr "Local SFTP file open snapshot limit in MiB"
@@ -718,6 +784,9 @@ msgstr "Local file: {0} - Modified: {1}"
 msgid "Local files"
 msgstr "Local files"
 
+msgid "Local port (0 for automatic)"
+msgstr "Local port (0 for automatic)"
+
 msgid "Local selection priority"
 msgstr "Local selection priority"
 
@@ -742,6 +811,9 @@ msgstr "MICROPHONE"
 msgid "MOUSE"
 msgstr "MOUSE"
 
+msgid "Manage forwarding rules from all saved SSH servers."
+msgstr "Manage forwarding rules from all saved SSH servers."
+
 msgid "Manual selection takes priority over automatic detection."
 msgstr "Manual selection takes priority over automatic detection."
 
@@ -762,6 +834,9 @@ msgstr "Maximum uploads shared by all SFTP tabs"
 
 msgid "Minimize Window"
 msgstr "Minimise Window"
+
+msgid "Mode"
+msgstr "Mode"
 
 msgid "Modified"
 msgstr "Modified"
@@ -802,6 +877,9 @@ msgstr "New Server"
 msgid "New Server shortcut"
 msgstr "New Server shortcut"
 
+msgid "New forwarding"
+msgstr "New forwarding"
+
 msgid "New group"
 msgstr "New group"
 
@@ -816,6 +894,9 @@ msgstr "No failed transfers"
 
 msgid "No files"
 msgstr "No files"
+
+msgid "No forwarding rules"
+msgstr "No forwarding rules"
 
 msgid "No known local X server was found"
 msgstr "No known local X server was found"
@@ -843,6 +924,9 @@ msgstr "No transfers in progress"
 
 msgid "Off"
 msgstr "Off"
+
+msgid "Offline"
+msgstr "Offline"
 
 msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
 msgstr "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
@@ -970,6 +1054,9 @@ msgstr "Platform home directory"
 msgid "Port"
 msgstr "Port"
 
+msgid "Port Forwarding"
+msgstr "Port Forwarding"
+
 msgid "Positive status indicators"
 msgstr "Positive status indicators"
 
@@ -1009,6 +1096,9 @@ msgstr "Provider"
 msgid "RENDERING"
 msgstr "RENDERING"
 
+msgid "Recent forwarding rules"
+msgstr "Recent forwarding rules"
+
 msgid "Reduce terminal items and omit default background rectangles"
 msgstr "Reduce terminal items and omit default background rectangles"
 
@@ -1021,6 +1111,9 @@ msgstr "Refresh serial ports"
 msgid "Remembered password storage"
 msgstr "Remembered password storage"
 
+msgid "Remote (-R)"
+msgstr "Remote (-R)"
+
 msgid "Remote and local file pane sizes"
 msgstr "Remote and local file pane sizes"
 
@@ -1029,6 +1122,9 @@ msgstr "Remote channels"
 
 msgid "Remote clipboard request"
 msgstr "Remote clipboard request"
+
+msgid "Remote command"
+msgstr "Remote command"
 
 msgid "Remote default directory"
 msgstr "Remote default directory"
@@ -1056,6 +1152,9 @@ msgstr "Remove"
 
 msgid "Remove revoked record"
 msgstr "Remove revoked record"
+
+msgid "Remove this saved rule? It will no longer start on reconnect."
+msgstr "Remove this saved rule? It will no longer start on reconnect."
 
 msgid "Rename"
 msgstr "Rename"
@@ -1096,6 +1195,9 @@ msgstr "Restore platform defaults"
 msgid "Restore the default filters for this platform"
 msgstr "Restore the default filters for this platform"
 
+msgid "Result"
+msgstr "Result"
+
 msgid "Resume"
 msgstr "Resume"
 
@@ -1131,6 +1233,12 @@ msgstr "Right-click always pastes"
 
 msgid "Right-click copy or paste"
 msgstr "Right-click copy or paste"
+
+msgid "Run"
+msgstr "Run"
+
+msgid "Run Remote Command"
+msgstr "Run Remote Command"
 
 msgid "Runtime logs"
 msgstr "Runtime logs"
@@ -1212,6 +1320,9 @@ msgstr "Save SSH password for future connections"
 
 msgid "Save Workspace"
 msgstr "Save Workspace"
+
+msgid "Save an SSH server to add forwarding rules."
+msgstr "Save an SSH server to add forwarding rules."
 
 msgid "Save audio settings"
 msgstr "Save audio settings"
@@ -1314,6 +1425,9 @@ msgstr "Serial stop bits"
 
 msgid "Serial transport"
 msgstr "Serial transport"
+
+msgid "Server"
+msgstr "Server"
 
 msgid "Server SFTP bandwidth limit in MiB per second"
 msgstr "Server SFTP bandwidth limit in MiB per second"
@@ -1423,6 +1537,9 @@ msgstr "Split vertically (Alt+Shift+L)"
 msgid "Start for first X11 application"
 msgstr "Start for first X11 application"
 
+msgid "Start forwarding"
+msgstr "Start forwarding"
+
 msgid "Status"
 msgstr "Status"
 
@@ -1434,6 +1551,9 @@ msgstr "Stop bits"
 
 msgid "Stop editing"
 msgstr "Stop editing"
+
+msgid "Stop forwarding"
+msgstr "Stop forwarding"
 
 msgid "Success"
 msgstr "Success"
@@ -1904,6 +2024,10 @@ msgstr "Font family"
 msgctxt "settings-search"
 msgid "Font size"
 msgstr "Font size"
+
+msgctxt "settings-search"
+msgid "Forwarding Manager"
+msgstr "Forwarding Manager"
 
 msgctxt "settings-search"
 msgid "General"

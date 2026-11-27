@@ -116,9 +116,16 @@ pub(super) fn configure_macos_application_menu(ui: &AppWindow) -> Result<()> {
     }
     let shortcut = menu_shortcut_from_setting(ui.get_open_settings_shortcut().as_str())
         .context("cannot configure the macOS Settings shortcut")?;
+    let forwarding_shortcut =
+        menu_shortcut_from_setting(ui.get_open_forwarding_manager_shortcut().as_str()).ok();
     let ui_for_menu = ui.as_weak();
     macos_window::configure_application_menu(
         &shortcut.native,
+        forwarding_shortcut
+            .as_ref()
+            .map(|shortcut| &shortcut.native),
+        ui.get_pane_menu_title().as_str(),
+        ui.get_forwarding_manager_menu_title().as_str(),
         ui.get_menu_shortcuts_enabled(),
         move |section| {
             let Some(ui) = ui_for_menu.upgrade() else {
@@ -169,6 +176,20 @@ fn activate_application_menu_section(
         macos_window::NativeMenuSection::About => {
             log_menu_action("open-about");
             "About"
+        }
+        macos_window::NativeMenuSection::RunRemoteCommand => {
+            log_menu_action("ssh-exec");
+            target.invoke_execute_menu_command("ssh-exec".into(), "".into());
+            return Some(target);
+        }
+        macos_window::NativeMenuSection::PortForwarding => {
+            log_menu_action("ssh-forward");
+            target.invoke_execute_menu_command("ssh-forward".into(), "".into());
+            return Some(target);
+        }
+        macos_window::NativeMenuSection::ForwardingManager => {
+            target.invoke_execute_menu_command("forwarding-manager".into(), "".into());
+            return Some(target);
         }
     };
     target.invoke_request_settings_section(section.into());
@@ -243,6 +264,18 @@ mod tests {
             let child_actions = Rc::new(Cell::new(0));
             let received = child_actions.clone();
             child.on_open_settings(move || received.set(received.get() + 1));
+            let forwarding_opens = Rc::new(Cell::new(0));
+            let received = forwarding_opens.clone();
+            main.on_open_forwarding_manager(move || received.set(received.get() + 1));
+            let open_forwarding = || {
+                activate_application_menu_section(
+                    &child,
+                    Some(main.clone_strong()),
+                    macos_window::NativeMenuSection::ForwardingManager,
+                )
+            };
+            assert!(open_forwarding().is_some());
+            assert_eq!(forwarding_opens.get(), 1);
             for section in [
                 macos_window::NativeMenuSection::Settings,
                 macos_window::NativeMenuSection::About,
@@ -255,6 +288,7 @@ mod tests {
             assert_eq!(main_actions.get(), 2);
             assert_eq!(child_actions.get(), 0);
             main.set_password_dialog_open(true);
+            assert!(open_forwarding().is_none());
             assert!(
                 activate_application_menu_section(
                     &child,
@@ -265,6 +299,8 @@ mod tests {
             );
             main.set_password_dialog_open(false);
             child.set_password_dialog_open(true);
+            assert!(open_forwarding().is_none());
+            assert_eq!(forwarding_opens.get(), 1);
             assert!(
                 activate_application_menu_section(
                     &child,

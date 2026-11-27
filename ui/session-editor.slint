@@ -32,6 +32,7 @@ export struct SessionEditorViewState {
     credential_storage: string,
     default_credential_storage: string,
     x11_forwarding_mode: string,
+    forward_agent: bool,
     serial_port: string,
     serial_baud_rate: string,
     serial_data_bits: string,
@@ -51,7 +52,7 @@ export component SessionEditorPane inherits Rectangle {
     in property <bool> apple-platform;
     callback save(
         string, string, string, string, string, string, string, string,
-        string, string, bool, int, int, string, bool, string, string, string, string, string, string, string, string, string, string, bool, bool,
+        string, string, bool, int, int, string, bool, string, string, string, string, string, string, string, string, string, string, bool, bool, bool,
     );
     callback refresh-serial-ports();
     callback serial-mode-changed(bool);
@@ -87,6 +88,7 @@ export component SessionEditorPane inherits Rectangle {
         @tr("System credential store"),
         @tr("Encrypted application vault"),
     ];
+    private property <bool> forward-agent-draft;
     private property <string> x11-forwarding-mode-draft: "trusted";
     private property <[string]> x11-forwarding-mode-options: [
         @tr("Off"),
@@ -130,6 +132,7 @@ export component SessionEditorPane inherits Rectangle {
             root.icon-draft,
             root.reset-system-draft,
             connect-after-save,
+            root.forward-agent-draft,
         );
         root.password-draft = "";
         root.vault-password-draft = "";
@@ -165,6 +168,7 @@ export component SessionEditorPane inherits Rectangle {
         root.serial-stop-bits = root.source.serial_stop_bits;
         root.serial-parity = root.source.serial_parity;
         root.serial-flow-control = root.source.serial_flow_control;
+        root.forward-agent-draft = root.source.forward_agent;
     }
 
     init => {
@@ -351,6 +355,7 @@ export component SessionEditorPane inherits Rectangle {
                                 placeholder-text: @tr("server.example.com");
                                 text <=> root.host-draft;
                                 accessible-label: root.protocol + " host";
+                                edited(_value) => { root.forward-agent-draft = false; }
                             }
                         }
                         SessionEditorField {
@@ -363,6 +368,7 @@ export component SessionEditorPane inherits Rectangle {
                                 text <=> root.port-draft;
                                 placeholder-text: @tr("22");
                                 accessible-label: root.protocol + " port";
+                                edited(_value) => { root.forward-agent-draft = false; }
                             }
                         }
                     }
@@ -374,6 +380,7 @@ export component SessionEditorPane inherits Rectangle {
                             placeholder-text: @tr("root");
                             text <=> root.username-draft;
                             accessible-label: @tr("SSH username");
+                            edited(_value) => { root.forward-agent-draft = false; }
                         }
                     }
                 }
@@ -744,6 +751,20 @@ export component SessionEditorPane inherits Rectangle {
                                     : index == 1 ? "untrusted" : "trusted";
                             }
                         }
+                    }
+                }
+
+                if root.protocol == "SSH" : VerticalLayout {
+                    spacing: Theme.space-md;
+                    CheckBox {
+                        text: @tr("Forward SSH agent");
+                        checked <=> root.forward-agent-draft;
+                    }
+                    if root.forward-agent-draft : Text {
+                        text: @tr("Allow this server to request signatures from your local SSH agent.");
+                        color: Theme.muted;
+                        font-size: Theme.font-small;
+                        wrap: word-wrap;
                     }
                 }
 

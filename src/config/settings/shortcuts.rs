@@ -20,11 +20,13 @@ pub struct ShortcutSettings {
     pub paste: String,
     #[serde(default = "default_open_sftp_shortcut")]
     pub open_sftp: String,
+    #[serde(default = "default_open_forwarding_manager_shortcut")]
+    pub open_forwarding_manager: String,
 }
 
 impl ShortcutSettings {
     pub fn normalized(input: Self) -> Self {
-        let candidate = Self {
+        let mut candidate = Self {
             open_settings: input.open_settings.trim().to_owned(),
             new_session: input.new_session.trim().to_owned(),
             import_sessions: input.import_sessions.trim().to_owned(),
@@ -33,7 +35,13 @@ impl ShortcutSettings {
             copy_selection: input.copy_selection.trim().to_owned(),
             paste: input.paste.trim().to_owned(),
             open_sftp: input.open_sftp.trim().to_owned(),
+            open_forwarding_manager: input.open_forwarding_manager.trim().to_owned(),
         };
+        if candidate.validate().is_ok() {
+            return candidate;
+        }
+        // Older settings can already assign the new default to another action.
+        candidate.open_forwarding_manager.clear();
         if candidate.validate().is_ok() {
             candidate
         } else {
@@ -63,6 +71,17 @@ impl ShortcutSettings {
                 anyhow::bail!("{label} and {other_label} cannot use the same shortcut");
             }
         }
+        let forwarding = self.open_forwarding_manager.trim();
+        if !forwarding.is_empty() {
+            validate_shortcut("Forwarding Manager", forwarding)?;
+            let (modifiers, key) = shortcut_identity(forwarding);
+            if let Some((label, _)) = shortcuts.iter().find(|(_, shortcut)| {
+                let (other_modifiers, other_key) = shortcut_identity(shortcut);
+                other_modifiers == modifiers && other_key.eq_ignore_ascii_case(key)
+            }) {
+                anyhow::bail!("Forwarding Manager and {label} cannot use the same shortcut");
+            }
+        }
         Ok(())
     }
 }
@@ -78,8 +97,25 @@ impl Default for ShortcutSettings {
             copy_selection: default_copy_selection_shortcut(),
             paste: default_paste_shortcut(),
             open_sftp: default_open_sftp_shortcut(),
+            open_forwarding_manager: default_open_forwarding_manager_shortcut(),
         }
     }
+}
+
+// Both menu adapters treat Cmd and Meta as the same modifier, independently of order.
+fn shortcut_identity(shortcut: &str) -> (u8, &str) {
+    let (modifiers, key) = shortcut.trim().rsplit_once('+').unwrap_or_default();
+    let flags = modifiers.split('+').fold(0, |flags, modifier| {
+        flags
+            | match modifier {
+                "Cmd" | "Meta" => 1,
+                "Ctrl" => 2,
+                "Alt" => 4,
+                "Shift" => 8,
+                _ => 0,
+            }
+    });
+    (flags, key)
 }
 
 fn validate_shortcut(label: &str, shortcut: &str) -> Result<()> {
@@ -175,4 +211,12 @@ pub(in crate::config) fn default_paste_shortcut() -> String {
 
 fn default_open_sftp_shortcut() -> String {
     "Ctrl+M".to_owned()
+}
+
+fn default_open_forwarding_manager_shortcut() -> String {
+    if cfg!(target_os = "macos") {
+        "Cmd+Shift+F".to_owned()
+    } else {
+        "Ctrl+Shift+F".to_owned()
+    }
 }

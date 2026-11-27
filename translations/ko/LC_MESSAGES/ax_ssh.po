@@ -91,6 +91,9 @@ msgstr "X 인증 없이 로컬 연결 허용"
 msgid "Allow remote OSC 52 clipboard access"
 msgstr "원격 OSC 52 클립보드 접근 허용"
 
+msgid "Allow this server to request signatures from your local SSH agent."
+msgstr "이 서버가 로컬 SSH 에이전트에 서명을 요청하도록 허용합니다."
+
 msgid "Allow writes to the default clipboard; ask before remote reads"
 msgstr "기본 클립보드 쓰기 허용, 원격 읽기 전에 확인"
 
@@ -196,6 +199,9 @@ msgstr "취소"
 msgid "Cancel all"
 msgstr "모두 취소"
 
+msgid "Cancel command"
+msgstr "명령 취소"
+
 msgid "Cancel selected"
 msgstr "선택 항목 취소"
 
@@ -207,6 +213,12 @@ msgstr "Canvas (아직 지원되지 않음)"
 
 msgid "Changes take effect after restarting AxSSH"
 msgstr "변경 사항은 AxSSH를 다시 시작한 후 적용됩니다"
+
+msgid "Check forwarding"
+msgstr "포워딩 확인"
+
+msgid "Checking forwarding…"
+msgstr "포워딩 확인 중…"
 
 msgid "Choose Custom to launch this path without a command shell"
 msgstr "명령 셸 없이 이 경로를 실행하려면 사용자 지정을 선택하세요"
@@ -267,6 +279,15 @@ msgstr "색상표"
 
 msgid "Compact terminal rendering"
 msgstr "터미널 압축 렌더링"
+
+msgid "Configuration valid. Listener status is unavailable."
+msgstr "구성이 유효합니다. 수신 대기 상태를 확인할 수 없습니다."
+
+msgid "Configuration valid. SSH server is offline."
+msgstr "구성이 유효합니다. SSH 서버가 오프라인입니다."
+
+msgid "Configuration valid. This rule is not listening."
+msgstr "구성이 유효합니다. 이 규칙은 수신 대기 중이 아닙니다."
 
 msgid "Connect"
 msgstr "연결"
@@ -400,6 +421,9 @@ msgstr "그룹 삭제"
 msgid "Delete Server"
 msgstr "서버 삭제"
 
+msgid "Delete forwarding"
+msgstr "포워딩 삭제"
+
 msgid "Delete group"
 msgstr "그룹 삭제"
 
@@ -414,6 +438,12 @@ msgstr "{0}을(를) 삭제하시겠습니까? 이 그룹의 서버는 그룹 없
 
 msgid "Deny"
 msgstr "거부"
+
+msgid "Destination"
+msgstr "대상"
+
+msgid "Destination host:port or Unix socket path"
+msgstr "대상 호스트:포트 또는 Unix 소켓 경로"
 
 msgid "Destination: {0}"
 msgstr "대상: {0}"
@@ -463,6 +493,9 @@ msgstr "복제"
 msgid "Duplicate Group"
 msgstr "그룹 복제"
 
+msgid "Dynamic SOCKS5 (-D)"
+msgstr "동적 SOCKS5 (-D)"
+
 msgid "ETA"
 msgstr "남은 시간"
 
@@ -472,6 +505,9 @@ msgstr "편집"
 msgid "Edit Server"
 msgstr "서버 편집"
 
+msgid "Edit forwarding"
+msgstr "포워딩 편집"
+
 msgid "Edit path"
 msgstr "경로 편집"
 
@@ -480,6 +516,9 @@ msgstr "선택한 원격 파일 편집"
 
 msgid "Enable semantic highlighting"
 msgstr "의미 기반 강조 사용"
+
+msgid "Enabled"
+msgstr "활성화됨"
 
 msgid "Encrypted application vault"
 msgstr "애플리케이션 암호화 저장소"
@@ -579,6 +618,24 @@ msgstr "전경"
 
 msgid "Forward"
 msgstr "앞으로"
+
+msgid "Forward SSH agent"
+msgstr "SSH 에이전트 전달"
+
+msgid "Forwarding Manager"
+msgstr "포워딩 관리자"
+
+msgid "Forwarding is listening."
+msgstr "포워딩이 수신 대기 중입니다."
+
+msgid "Forwarding is starting."
+msgstr "포워딩을 시작하는 중입니다."
+
+msgid "Forwarding mode"
+msgstr "포워딩 모드"
+
+msgid "Forwarding rule actions"
+msgstr "포워딩 규칙 작업"
 
 msgid "GPU"
 msgstr "GPU"
@@ -685,8 +742,17 @@ msgstr "밝은 모드"
 msgid "Line height"
 msgstr "줄 높이"
 
+msgid "Listen"
+msgstr "수신"
+
+msgid "Listening port or Unix socket path"
+msgstr "수신 포트 또는 Unix 소켓 경로"
+
 msgid "Loading..."
 msgstr "불러오는 중..."
+
+msgid "Local (-L)"
+msgstr "로컬 (-L)"
 
 msgid "Local SFTP file open snapshot limit in MiB"
 msgstr "SFTP 로컬 파일 열기 사본 제한 (MiB)"
@@ -718,6 +784,9 @@ msgstr "로컬 파일: {0} - 수정: {1}"
 msgid "Local files"
 msgstr "로컬 파일"
 
+msgid "Local port (0 for automatic)"
+msgstr "로컬 포트 (0은 자동 할당)"
+
 msgid "Local selection priority"
 msgstr "로컬 선택 우선"
 
@@ -742,6 +811,9 @@ msgstr "마이크"
 msgid "MOUSE"
 msgstr "마우스"
 
+msgid "Manage forwarding rules from all saved SSH servers."
+msgstr "저장된 모든 SSH 서버의 포워딩 규칙을 관리합니다."
+
 msgid "Manual selection takes priority over automatic detection."
 msgstr "수동 선택이 자동 감지보다 우선합니다."
 
@@ -762,6 +834,9 @@ msgstr "모든 SFTP 탭이 공유하는 최대 업로드 수"
 
 msgid "Minimize Window"
 msgstr "창 최소화"
+
+msgid "Mode"
+msgstr "모드"
 
 msgid "Modified"
 msgstr "수정됨"
@@ -802,6 +877,9 @@ msgstr "새 서버"
 msgid "New Server shortcut"
 msgstr "새 서버 단축키"
 
+msgid "New forwarding"
+msgstr "새 포워딩"
+
 msgid "New group"
 msgstr "새 그룹"
 
@@ -816,6 +894,9 @@ msgstr "실패한 전송 없음"
 
 msgid "No files"
 msgstr "파일 없음"
+
+msgid "No forwarding rules"
+msgstr "포워딩 규칙 없음"
 
 msgid "No known local X server was found"
 msgstr "알려진 로컬 X 서버를 찾지 못했습니다"
@@ -843,6 +924,9 @@ msgstr "진행 중인 전송 없음"
 
 msgid "Off"
 msgstr "꺼짐"
+
+msgid "Offline"
+msgstr "오프라인"
 
 msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
 msgstr "켜짐: Alt/Option으로 마우스 동작 전송, 꺼짐: 표준 xterm 및 Shift 선택"
@@ -970,6 +1054,9 @@ msgstr "플랫폼 홈 디렉터리"
 msgid "Port"
 msgstr "포트"
 
+msgid "Port Forwarding"
+msgstr "포트 포워딩"
+
 msgid "Positive status indicators"
 msgstr "성공 상태 표시"
 
@@ -1009,6 +1096,9 @@ msgstr "공급자"
 msgid "RENDERING"
 msgstr "렌더링"
 
+msgid "Recent forwarding rules"
+msgstr "최근 포워딩 규칙"
+
 msgid "Reduce terminal items and omit default background rectangles"
 msgstr "터미널 항목 수를 줄이고 기본 배경 사각형 생략"
 
@@ -1021,6 +1111,9 @@ msgstr "직렬 포트 새로 고침"
 msgid "Remembered password storage"
 msgstr "저장된 비밀번호 보관 위치"
 
+msgid "Remote (-R)"
+msgstr "원격 (-R)"
+
 msgid "Remote and local file pane sizes"
 msgstr "원격 및 로컬 파일 영역 크기"
 
@@ -1029,6 +1122,9 @@ msgstr "원격 채널 수"
 
 msgid "Remote clipboard request"
 msgstr "원격 클립보드 요청"
+
+msgid "Remote command"
+msgstr "원격 명령"
 
 msgid "Remote default directory"
 msgstr "기본 원격 디렉터리"
@@ -1056,6 +1152,9 @@ msgstr "제거"
 
 msgid "Remove revoked record"
 msgstr "폐기된 키 기록 제거"
+
+msgid "Remove this saved rule? It will no longer start on reconnect."
+msgstr "저장된 규칙을 삭제할까요? 다시 연결할 때 더 이상 시작되지 않습니다."
 
 msgid "Rename"
 msgstr "이름 바꾸기"
@@ -1096,6 +1195,9 @@ msgstr "플랫폼 기본값 복원"
 msgid "Restore the default filters for this platform"
 msgstr "이 플랫폼의 기본 필터 복원"
 
+msgid "Result"
+msgstr "결과"
+
 msgid "Resume"
 msgstr "재개"
 
@@ -1131,6 +1233,12 @@ msgstr "오른쪽 클릭 시 항상 붙여넣기"
 
 msgid "Right-click copy or paste"
 msgstr "오른쪽 클릭으로 복사 또는 붙여넣기"
+
+msgid "Run"
+msgstr "실행"
+
+msgid "Run Remote Command"
+msgstr "원격 명령 실행"
 
 msgid "Runtime logs"
 msgstr "실행 로그"
@@ -1212,6 +1320,9 @@ msgstr "다음 연결을 위해 SSH 비밀번호 저장"
 
 msgid "Save Workspace"
 msgstr "작업 공간 저장"
+
+msgid "Save an SSH server to add forwarding rules."
+msgstr "포워딩 규칙을 추가하려면 SSH 서버를 저장하세요."
 
 msgid "Save audio settings"
 msgstr "오디오 설정 저장"
@@ -1314,6 +1425,9 @@ msgstr "직렬 정지 비트"
 
 msgid "Serial transport"
 msgstr "직렬 전송"
+
+msgid "Server"
+msgstr "서버"
 
 msgid "Server SFTP bandwidth limit in MiB per second"
 msgstr "서버 SFTP 대역폭 제한 (초당 MiB)"
@@ -1423,6 +1537,9 @@ msgstr "세로 분할 (Alt+Shift+L)"
 msgid "Start for first X11 application"
 msgstr "첫 X11 앱에서 실행"
 
+msgid "Start forwarding"
+msgstr "포워딩 시작"
+
 msgid "Status"
 msgstr "상태"
 
@@ -1434,6 +1551,9 @@ msgstr "정지 비트"
 
 msgid "Stop editing"
 msgstr "편집 중지"
+
+msgid "Stop forwarding"
+msgstr "포워딩 중지"
 
 msgid "Success"
 msgstr "성공"
@@ -1904,6 +2024,10 @@ msgstr "글꼴 모음"
 msgctxt "settings-search"
 msgid "Font size"
 msgstr "글꼴 크기"
+
+msgctxt "settings-search"
+msgid "Forwarding Manager"
+msgstr "포워딩 관리자"
 
 msgctxt "settings-search"
 msgid "General"

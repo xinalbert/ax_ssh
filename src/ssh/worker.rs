@@ -6,6 +6,9 @@ mod latency;
 mod media;
 mod sftp;
 mod shell;
+mod tools;
+
+pub use self::tools::{SshTool, SshToolResult};
 
 use self::latency::LatencyMonitor;
 use self::sftp::run_sftp_session;
@@ -81,6 +84,7 @@ pub enum SshSessionEvent {
     SftpWrite(SftpWriteEvent),
     X11ForwardingEnabled,
     X11ForwardingUnavailable(String),
+    AgentForwardingUnavailable,
     MicrophoneUnavailable(String),
     ShellExited,
     Disconnected,
@@ -118,6 +122,10 @@ impl Default for SshTerminalSettings {
 }
 
 pub(crate) enum SshCommand {
+    Tool {
+        tool: SshTool,
+        reply: oneshot::Sender<Result<SshToolResult>>,
+    },
     ClipboardImage {
         png: Vec<u8>,
         reply: oneshot::Sender<Result<String>>,
@@ -350,6 +358,14 @@ impl SftpUploadSubmitter {
 }
 
 impl SshSessionHandle {
+    pub fn request_tool(&self, tool: SshTool) -> Result<oneshot::Receiver<Result<SshToolResult>>> {
+        let (reply, receiver) = oneshot::channel();
+        self.command_tx
+            .try_send(SshCommand::Tool { tool, reply })
+            .map_err(|_| anyhow::anyhow!("SSH session is busy or disconnected"))?;
+        Ok(receiver)
+    }
+
     pub fn sftp_download_submitter(&self) -> SftpDownloadSubmitter {
         SftpDownloadSubmitter {
             command_tx: self.command_tx.clone(),
@@ -914,10 +930,22 @@ async fn run_session(task: SshSessionTask) {
     } else {
         (None, None)
     };
-    let x11_dispatcher_for_connect = x11_dispatcher.clone();
+    let (agent_dispatcher, agent_requests) =
+        if mode == SshSessionMode::Terminal && profile.ssh().is_some_and(|ssh| ssh.forward_agent) {
+            let (dispatcher, receiver) = super::agent_forwarding::Dispatcher::channel();
+            (dispatcher, Some(receiver))
+        } else {
+            (Default::default(), None)
+        };
+    let remote_forwarding = super::forwarding::RemoteDispatcher::default();
+    let dispatchers = super::ForwardingDispatchers {
+        x11: x11_dispatcher.clone(),
+        agent: agent_dispatcher.clone(),
+        remote: remote_forwarding.clone(),
+    };
     let connect = async move {
         let connection =
-            SshConnection::connect_with_x11(&profile, secret, x11_dispatcher_for_connect).await?;
+            SshConnection::connect_with_dispatchers(&profile, secret, dispatchers).await?;
         Ok::<_, anyhow::Error>(connection)
     };
     tokio::pin!(connect);
@@ -930,7 +958,8 @@ async fn run_session(task: SshSessionTask) {
                         info!(session_id = %session_id, "SSH connection attempt cancelled");
                         break None;
                     }
-                    Some(SshCommand::ClipboardImage { .. })
+                    Some(SshCommand::Tool { .. })
+                    | Some(SshCommand::ClipboardImage { .. })
                     | Some(SshCommand::Microphone { .. })
                     | Some(SshCommand::Send { .. })
                     | Some(SshCommand::ReadSystemRelease)
@@ -1032,6 +1061,7 @@ async fn run_session(task: SshSessionTask) {
         return;
     }
 
+    let agent_forwarding = agent_dispatcher.prepare(&connection);
     run_terminal_session(TerminalSessionTask {
         connection,
         session_id,
@@ -1040,6 +1070,9 @@ async fn run_session(task: SshSessionTask) {
         audio_format,
         x11_dispatcher,
         x11_requests,
+        agent_forwarding,
+        agent_requests,
+        remote_forwarding,
         command_rx,
         resize_rx,
         latency_foreground_rx,

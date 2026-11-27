@@ -10,6 +10,10 @@ use std::ops::ControlFlow;
 use std::time::Duration;
 
 fn displayed_text(harness: &LayoutTestHarness, value: &str) -> ItemRc {
+    find_displayed_text(harness, value).unwrap_or_else(|| panic!("missing visible text: {value}"))
+}
+
+fn find_displayed_text(harness: &LayoutTestHarness, value: &str) -> Option<ItemRc> {
     let root = ItemRc::new_root(WindowInner::from_pub(harness.ui.window()).component());
     root.visit_descendants(|item| {
         if item.is_visible()
@@ -25,7 +29,6 @@ fn displayed_text(harness: &LayoutTestHarness, value: &str) -> ItemRc {
         }
         ControlFlow::Continue(())
     })
-    .expect("visible display text")
 }
 
 fn natural_width(harness: &LayoutTestHarness, item: &ItemRc) -> f32 {
@@ -326,6 +329,295 @@ fn shared_text_buttons_fit_session_actions_across_languages_and_fonts() {
 }
 
 #[test]
+fn forwarding_manager_keeps_table_compact_and_description_on_tab_hover() {
+    use i_slint_core::item_tree::ParentItemTraversalMode;
+    use i_slint_core::items::{ClippedImage, Flickable, ImageItem};
+
+    std::thread::spawn(|| {
+        let harness = LayoutTestHarness::new();
+        let ui = &harness.ui;
+        let kind = "forwarding-manager";
+        let title = "Forwarding Manager";
+        let description = "Manage forwarding rules from all saved SSH servers.";
+        ui.set_active_tab_kind(kind.into());
+        ui.set_active_tab_id(kind.into());
+        ui.set_workspace_tabs(ModelRc::new(VecModel::from(vec![WorkspaceTabRow {
+            id: kind.into(),
+            title: title.into(),
+            kind: kind.into(),
+            ..Default::default()
+        }])));
+        ui.set_forwarding_manager_rows(ModelRc::new(VecModel::from(vec![
+            ForwardingManagerRow {
+                profile_id: "first".into(),
+                profile_name: "First SSH host".into(),
+                mode: "local".into(),
+                listen: "127.0.0.1:18081".into(),
+                target: "localhost:81".into(),
+                enabled: true,
+                ..Default::default()
+            },
+            ForwardingManagerRow {
+                profile_id: "second".into(),
+                profile_name: "Second SSH host".into(),
+                profile_index: 1,
+                history_index: 2,
+                mode: "remote".into(),
+                listen: "127.0.0.1:19082".into(),
+                target: "localhost:82".into(),
+                ..Default::default()
+            },
+        ])));
+        let changes = std::rc::Rc::new(std::cell::RefCell::new(Vec::new()));
+        let received = changes.clone();
+        ui.on_forwarding_manager_toggle(move |row, enabled| {
+            received
+                .borrow_mut()
+                .push((row.profile_id, row.history_index, enabled));
+        });
+        ui.show().expect("forwarding manager layout window");
+        let row_height = ui.global::<Theme>().get_sftp_row_height();
+        for width in [1180, 520] {
+            harness
+                .window
+                .set_size(slint::PhysicalSize::new(width, 740));
+            harness.settle();
+            for (column, cell) in [
+                ("Server", "First SSH host"),
+                ("Listen", "127.0.0.1:19082"),
+                ("Destination", "localhost:82"),
+            ] {
+                let header = displayed_text(&harness, column);
+                let row = displayed_text(&harness, cell);
+                let left = |item: &ItemRc| item.map_to_window(LogicalPoint::default()).x;
+                assert!(
+                    (left(&header) - left(&row)).abs() < 0.5,
+                    "{column} at {width}px"
+                );
+            }
+            let mut ancestor = Some(displayed_text(&harness, "Second SSH host"));
+            let viewport = loop {
+                let item = ancestor.expect("forwarding ListView viewport");
+                if item.downcast::<Flickable>().is_some() {
+                    break item;
+                }
+                ancestor = item.parent_item(ParentItemTraversalMode::StopAtPopups);
+            };
+            assert!((viewport.geometry().size.height - 2.0 * row_height).abs() <= 4.0);
+        }
+        for name in ["First SSH host", "Second SSH host"] {
+            let row = displayed_text(&harness, name);
+            let enabled = displayed_text(&harness, "Enabled");
+            let x = enabled.map_to_window(LogicalPoint::new(8.0, 0.0)).x;
+            let y = row
+                .map_to_window(LogicalPoint::new(0.0, row_height / 2.0))
+                .y;
+            harness.click(slint::LogicalPosition::new(x, y));
+        }
+        assert_eq!(
+            changes.borrow().as_slice(),
+            &[("first".into(), 0, false), ("second".into(), 2, true)]
+        );
+        assert!(find_displayed_text(&harness, description).is_none());
+        hover(&harness, &displayed_text(&harness, title));
+        assert_eq!(
+            tooltip_text(&harness).as_deref(),
+            Some(format!("{title}\n{description}").as_str())
+        );
+
+        ui.set_forwarding_manager_profiles(ModelRc::new(VecModel::from(vec![
+            ServerOption {
+                id: "first".into(),
+                name: "Group / First SSH host".into(),
+                system_platform: "ubuntu".into(),
+            },
+            ServerOption {
+                id: "second".into(),
+                name: "Group / Second SSH host".into(),
+                system_platform: "debian".into(),
+            },
+        ])));
+        harness.settle();
+        assert!(find_displayed_text(&harness, "New forwarding").is_none());
+        let click = |label| {
+            let item = displayed_text(&harness, label);
+            let size = item.geometry().size;
+            let point = item.map_to_window(LogicalPoint::new(size.width / 2.0, size.height / 2.0));
+            harness.click(slint::LogicalPosition::new(point.x, point.y));
+            harness.settle();
+        };
+        super::wire_menu_helpers(ui);
+        let checked = std::rc::Rc::new(std::cell::RefCell::new(None));
+        let received = checked.clone();
+        ui.on_forwarding_manager_submit(move |request, revision| {
+            *received.borrow_mut() = Some((request, revision));
+        });
+        click("…");
+        harness.press_key(slint::platform::Key::Return);
+        let (request, revision) = checked.borrow_mut().take().expect("row check request");
+        assert_eq!(request.action, "check");
+        assert_eq!(request.original.profile_id, "first");
+        ui.invoke_finish_forwarding_manager(revision, "offline".into(), "".into());
+        harness.settle();
+        displayed_text(&harness, "Configuration valid. SSH server is offline.");
+        click("Close");
+
+        use slint::platform::{Key, PointerEventButton};
+        let second = displayed_text(&harness, "Second SSH host")
+            .map_to_window(LogicalPoint::new(8.0, row_height / 2.0));
+        let right_click = |y| {
+            let position = slint::LogicalPosition::new(second.x, y);
+            let button = PointerEventButton::Right;
+            ui.window()
+                .dispatch_event(WindowEvent::PointerMoved { position });
+            ui.window()
+                .dispatch_event(WindowEvent::PointerPressed { position, button });
+            ui.window()
+                .dispatch_event(WindowEvent::PointerReleased { position, button });
+            harness.settle();
+        };
+        right_click(second.y);
+        harness.press_key(Key::End);
+        harness.press_key(Key::Return);
+        assert!(ui.get_modal_open());
+
+        let icon_size = ui.global::<Theme>().get_sidebar_glyph_size();
+        let option_icons = |root: &ItemRc, label: Option<&ItemRc>| {
+            let mut icons = Vec::new();
+            root.visit_descendants(|item| {
+                let size = item.geometry().size;
+                if !item.is_visible()
+                    || (size.width - icon_size).abs() > 0.5
+                    || (size.height - icon_size).abs() > 0.5
+                {
+                    return ControlFlow::<()>::Continue(());
+                }
+                if let Some(label) = label {
+                    let center =
+                        item.map_to_window(LogicalPoint::new(size.width / 2.0, size.height / 2.0));
+                    let label_start = label
+                        .map_to_window(LogicalPoint::new(0.0, label.geometry().size.height / 2.0));
+                    if (center.y - label_start.y).abs() > 0.5 || center.x >= label_start.x {
+                        return ControlFlow::Continue(());
+                    }
+                }
+                if let Some(image) = item.downcast::<ImageItem>() {
+                    icons.push(image.as_pin_ref().source());
+                } else if let Some(image) = item.downcast::<ClippedImage>() {
+                    icons.push(image.as_pin_ref().source());
+                }
+                ControlFlow::Continue(())
+            });
+            icons
+        };
+        let window = WindowInner::from_pub(ui.window());
+        let main = ItemRc::new_root(window.component());
+        let second_icon = option_icons(
+            &main,
+            Some(&displayed_text(&harness, "Group / Second SSH host")),
+        );
+        assert_eq!(second_icon.len(), 1);
+        click("Group / Second SSH host");
+        let popup_icons = {
+            let popups = window.active_popups();
+            let popup = popups
+                .iter()
+                .find(|popup| matches!(popup.window_kind, WindowKind::Popup))
+                .expect("server dropdown popup");
+            option_icons(&ItemRc::new_root(popup.component.clone()), None)
+        };
+        assert_eq!(popup_icons.len(), 2);
+        assert!(popup_icons.iter().all(|icon| icon.size().width > 0));
+        assert_eq!(second_icon[0], popup_icons[1]);
+        harness.press_key(Key::UpArrow);
+        harness.press_key(Key::Return);
+        let first_icon = option_icons(
+            &main,
+            Some(&displayed_text(&harness, "Group / First SSH host")),
+        );
+        assert_eq!(first_icon.as_slice(), &popup_icons[..1]);
+        assert_ne!(first_icon, second_icon);
+        for (placeholder, value) in [
+            ("Listening port or Unix socket path", "19080"),
+            (
+                "Destination host:port or Unix socket path",
+                "localhost:8080",
+            ),
+        ] {
+            click(placeholder);
+            ui.window()
+                .dispatch_event(WindowEvent::KeyPressed { text: value.into() });
+            ui.window()
+                .dispatch_event(WindowEvent::KeyReleased { text: value.into() });
+            harness.settle();
+        }
+        click("Save");
+        let (request, revision) = checked.borrow_mut().take().expect("new rule request");
+        assert_eq!(request.action, "new");
+        assert_eq!(request.profile_id, "first");
+        ui.invoke_finish_forwarding_manager(revision, "saved".into(), "".into());
+        harness.settle();
+        assert!(!ui.get_modal_open());
+
+        for clear_rows in [false, true] {
+            if clear_rows {
+                ui.set_forwarding_manager_rows(ModelRc::default());
+                harness.settle();
+            }
+            right_click(second.y + 100.0);
+            harness.press_key(Key::Return);
+            assert!(
+                ui.get_modal_open(),
+                "background menu opens with empty={clear_rows}"
+            );
+            assert!(find_displayed_text(&harness, "Group / First SSH host").is_none());
+            assert!(find_displayed_text(&harness, "Group / Second SSH host").is_none());
+            click("Cancel");
+        }
+
+        ui.set_connection_options(ModelRc::new(VecModel::from(vec![ConnectableSessionRow {
+            id: "first".into(),
+            name: "Saved SSH host".into(),
+            endpoint: "alice@server.example".into(),
+            system_platform: "ubuntu".into(),
+        }])));
+        let connection = std::rc::Rc::new(std::cell::RefCell::new(None));
+        let received = connection.clone();
+        ui.on_connect_session(move |id| *received.borrow_mut() = Some(id));
+        use i_slint_core::accessibility::AccessibleStringProperty;
+        let add = main
+            .visit_descendants(|item| {
+                if item.is_visible()
+                    && item
+                        .accessible_string_property(AccessibleStringProperty::Label)
+                        .as_deref()
+                        == Some("Open saved connection")
+                {
+                    return ControlFlow::Break(item.clone());
+                }
+                ControlFlow::Continue(())
+            })
+            .expect("saved connection picker button");
+        let size = add.geometry().size;
+        let point = add.map_to_window(LogicalPoint::new(size.width / 2.0, size.height / 2.0));
+        harness.click(slint::LogicalPosition::new(point.x, point.y));
+        let name = displayed_text(&harness, "Saved SSH host");
+        let endpoint = displayed_text(&harness, "alice@server.example");
+        let top = name.map_to_window(LogicalPoint::default());
+        let below = endpoint.map_to_window(LogicalPoint::default());
+        assert!((top.x - below.x).abs() < 0.5);
+        assert!(below.y >= top.y + name.geometry().size.height);
+        assert!(option_icons(&main, None).contains(&first_icon[0]));
+        click("alice@server.example");
+        assert_eq!(connection.borrow().as_deref(), Some("first"));
+
+        ui.hide().expect("hide forwarding manager window");
+    })
+    .join()
+    .expect("forwarding manager table regression");
+}
+
+#[test]
 fn sftp_transfer_counts_fit_their_labels_when_the_toolbar_has_room() {
     std::thread::spawn(|| {
         let harness = LayoutTestHarness::new();
@@ -404,8 +696,10 @@ fn shared_text_overflow_hover_preserves_full_label_and_button_click() {
                   _,
                   _,
                   _,
-                  connect| {
+                  connect,
+                  forward_agent| {
                 assert!(connect, "Save & connect keeps its intent");
+                assert!(!forward_agent, "Agent forwarding defaults off");
                 received.set(received.get() + 1);
             },
         );

@@ -92,7 +92,8 @@ pub(in crate::app) fn wire_session_editor(ui: &AppWindow, context: SessionEditor
               serial_flow_control,
               icon_id,
               reset_system,
-              connect_after_save| {
+              connect_after_save,
+              forward_agent| {
             log_ui_action("session-editor.save");
             let (editor_tab_id, editor_draft_id, existing_profile, serial_descriptor) = match state_for_save.lock() {
                 Ok(app) => {
@@ -161,6 +162,7 @@ pub(in crate::app) fn wire_session_editor(ui: &AppWindow, context: SessionEditor
                 }
             };
             if let Some(ssh) = profile.ssh_mut() {
+                ssh.forward_agent = forward_agent;
                 ssh.sftp_transfer_policy = sftp_override_limits.then(|| {
                     ax_ssh::config::SftpTransferPolicy::normalized(
                         sftp_per_tab_transfers,
@@ -849,6 +851,11 @@ pub(super) fn profile_from_editor_with_password(
                 .then(|| ssh.host_key_fingerprint.clone())
                 .flatten()
         });
+        let preserved_forwarding_history = existing
+            .and_then(SessionProfile::ssh)
+            .filter(|ssh| ssh.host.trim() == normalized_host && ssh.port == port)
+            .map(|ssh| ssh.forwarding_history.clone())
+            .unwrap_or_default();
         let ssh = profile
             .ssh_mut()
             .context("new SSH profile is missing SSH configuration")?;
@@ -878,6 +885,7 @@ pub(super) fn profile_from_editor_with_password(
                 false
             };
         ssh.host_key_fingerprint = preserved_fingerprint;
+        ssh.forwarding_history = preserved_forwarding_history;
         ssh.x11_forwarding = X11ForwardingMode::from_setting(x11_forwarding_mode);
         ssh.sftp_remote_path = sftp_remote_path.trim().to_owned();
         ssh.sftp_local_path = sftp_local_path.trim().to_owned();

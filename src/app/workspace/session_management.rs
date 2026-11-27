@@ -1,5 +1,6 @@
 use super::*;
 use crate::app::state::PersistenceCoordinator;
+use ax_ssh::config::{ForwardingPreset, ForwardingPresetMode};
 use serde::{Deserialize, Serialize};
 
 pub(super) const SESSION_TRANSFER_FORMAT: &str = "axssh-session-export";
@@ -394,7 +395,120 @@ fn sanitize_transferred_profile(profile: &mut SessionProfile) {
         ssh.credential_storage = None;
         ssh.credential_vault_key_saved = false;
         ssh.host_key_fingerprint = None;
+        ssh.forward_agent = false;
+        ssh.forwarding_history.clear();
     }
+}
+
+pub(in crate::app) async fn record_forwarding_preset(
+    state: &Arc<Mutex<AppState>>,
+    persistence: &PersistenceCoordinator,
+    profile_id: Uuid,
+    mode: &str,
+    listen: &str,
+    target: &str,
+) -> Result<bool> {
+    let mode = ForwardingPresetMode::from_setting(mode)
+        .ok_or_else(|| anyhow::anyhow!("unknown forwarding mode"))?;
+    let listen = listen.to_owned();
+    let target = target.to_owned();
+    update_session_store(state, persistence, move |candidate| {
+        let profile = candidate
+            .sessions
+            .iter_mut()
+            .find(|profile| profile.id == profile_id)
+            .context("session profile not found")?;
+        let ssh = profile
+            .ssh_mut()
+            .context("forwarding history requires an SSH profile")?;
+        let preset = ForwardingPreset::new(mode, listen, target)?;
+        ssh.record_forwarding_preset(preset)
+    })
+    .await
+}
+
+pub(in crate::app) async fn set_forwarding_preset_enabled(
+    state: &Arc<Mutex<AppState>>,
+    persistence: &PersistenceCoordinator,
+    profile_id: Uuid,
+    expected: ForwardingPreset,
+    enabled: bool,
+) -> Result<bool> {
+    update_session_store(state, persistence, move |candidate| {
+        let profile = candidate
+            .sessions
+            .iter_mut()
+            .find(|profile| profile.id == profile_id)
+            .context("session profile not found")?;
+        let ssh = profile
+            .ssh_mut()
+            .context("forwarding history requires an SSH profile")?;
+        let index = ssh
+            .forwarding_history
+            .iter()
+            .position(|preset| preset == &expected)
+            .context("forwarding rule changed; reopen the rule and try again")?;
+        ssh.set_forwarding_preset_enabled(index, enabled)
+    })
+    .await
+}
+
+pub(in crate::app) async fn save_forwarding_rule(
+    state: &Arc<Mutex<AppState>>,
+    persistence: &PersistenceCoordinator,
+    profile_id: Uuid,
+    original: Option<ForwardingPreset>,
+    replacement: Option<ForwardingPreset>,
+) -> Result<()> {
+    let parsed = replacement
+        .as_ref()
+        .map(super::super::ssh_tools::parse_forwarding_preset)
+        .transpose()?;
+    update_session_store(state, persistence, move |candidate| {
+        let history = &mut candidate
+            .sessions
+            .iter_mut()
+            .find(|profile| profile.id == profile_id)
+            .and_then(SessionProfile::ssh_mut)
+            .context("saved SSH server not found")?
+            .forwarding_history;
+        let existing = original
+            .as_ref()
+            .map(|original| {
+                history
+                    .iter()
+                    .position(|preset| preset == original)
+                    .context("forwarding rule changed; reopen the rule and try again")
+            })
+            .transpose()?;
+        if let Some(replacement) = replacement {
+            anyhow::ensure!(
+                !history.iter().enumerate().any(|(index, preset)| {
+                    Some(index) != existing
+                        && (preset.same_endpoints(&replacement)
+                            || super::super::ssh_tools::parse_forwarding_preset(preset)
+                                .ok()
+                                .as_ref()
+                                == parsed.as_ref())
+                }),
+                "this server already has the same forwarding rule"
+            );
+            if let Some(index) = existing {
+                history[index] = replacement;
+            } else {
+                let capacity = ax_ssh::config::MAX_FORWARDING_HISTORY;
+                anyhow::ensure!(
+                    history.len() < capacity,
+                    "this server already has {capacity} saved forwarding rules"
+                );
+                history.push(replacement);
+            }
+        } else if let Some(index) = existing {
+            history.remove(index);
+        }
+        Ok(())
+    })
+    .await
 }
 
 fn normalized_transfer_group_name(group_name: &str) -> Result<String> {

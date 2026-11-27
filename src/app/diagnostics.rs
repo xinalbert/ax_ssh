@@ -160,6 +160,7 @@ fn safe_menu_action(action: &str) -> &'static str {
         "close-tab" => "close-tab",
         "copy-terminal" => "copy-terminal",
         "export-selected" => "export-selected",
+        "forwarding-manager" => "forwarding-manager",
         "import-sessions" => "import-sessions",
         "new-local-shell" => "new-local-shell",
         "new-session" => "new-session",

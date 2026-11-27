@@ -1,4 +1,4 @@
-import { ElidedLabel } from "elided-controls.slint";
+import { ServerListItem } from "sidebar-controls.slint";
 import { Theme } from "../theme.slint";
 
 component ComboBoxChevron inherits Path {
@@ -17,21 +17,23 @@ component ComboBoxChevron inherits Path {
     stroke-line-join: round;
 }
 
-export component ThemedComboBox inherits FocusScope {
-    in property <[string]> model;
+component ComboBoxPopupControl inherits FocusScope {
+    in property <int> option-count;
+    in property <bool> show-server-icons: false;
     in-out property <int> current-index: 0;
     in property <bool> allow-empty-selection: false;
-    out property <string> current-value: root.current-index >= 0
-        && root.current-index < root.model.length
-        ? root.model[root.current-index]
-        : "";
+    in property <string> placeholder;
+    private property <bool> has-selection: root.current-index >= 0 && root.current-index < root.option-count;
+    out property <string> current-value: root.has-selection ? root.option-label(root.current-index) : "";
     callback selected(string, int);
+    pure callback option-label(int) -> string;
+    pure callback option-platform(int) -> string;
 
     private property <bool> popup-open: false;
     private property <length> popup-scroll-y: 0px;
     private property <int> visible-items: min(
         Theme.combo-box-popup-max-visible-items,
-        root.model.length,
+        root.option-count,
     );
 
     min-height: Theme.combo-box-control-height;
@@ -47,18 +49,18 @@ export component ThemedComboBox inherits FocusScope {
     accessible-value: root.current-value;
 
     function select(index: int) {
-        if !root.enabled || index < 0 || index >= root.model.length {
+        if !root.enabled || index < 0 || index >= root.option-count {
             return;
         }
         root.current-index = index;
-        root.selected(root.model[index], index);
+        root.selected(root.option-label(index), index);
     }
 
     function move-selection(delta: int) {
-        if root.model.length == 0 {
+        if root.option-count == 0 {
             return;
         }
-        root.select((root.current-index + delta).clamp(0, root.model.length - 1));
+        root.select((root.current-index + delta).clamp(0, root.option-count - 1));
         root.popup-scroll-y = -max(
             0,
             root.current-index - root.visible-items + 1,
@@ -66,7 +68,7 @@ export component ThemedComboBox inherits FocusScope {
     }
 
     function show-popup() {
-        if !root.enabled || root.model.length == 0 {
+        if !root.enabled || root.option-count == 0 {
             return;
         }
         root.popup-scroll-y = -max(
@@ -84,11 +86,11 @@ export component ThemedComboBox inherits FocusScope {
 
     accessible-action-expand => { root.show-popup(); }
 
-    changed model => {
-        if root.model.length == 0 {
+    changed option-count => {
+        if root.option-count == 0 {
             root.current-index = root.allow-empty-selection ? -1 : 0;
         } else {
-            root.current-index = root.current-index.clamp(root.allow-empty-selection ? -1 : 0, root.model.length - 1);
+            root.current-index = root.current-index.clamp(root.allow-empty-selection ? -1 : 0, root.option-count - 1);
         }
     }
 
@@ -159,19 +161,15 @@ export component ThemedComboBox inherits FocusScope {
                 return EventResult.reject;
             }
         }
-        ElidedLabel {
+        ServerListItem {
             x: Theme.combo-box-horizontal-padding;
-            width: parent.width
-                - 2 * Theme.combo-box-horizontal-padding
-                - Theme.combo-box-chevron-size
-                - Theme.space-sm;
+            width: max(0px, parent.width - self.x - Theme.combo-box-horizontal-padding
+                - Theme.combo-box-chevron-size - Theme.space-sm);
             height: parent.height;
-            text: root.current-value;
-            text-color: Theme.text;
-            font-size: Theme.font-body;
-            horizontal-alignment: left;
-            vertical-alignment: center;
-            accessible-role: none;
+            show-icon: root.show-server-icons && root.has-selection;
+            system-platform: self.show-icon ? root.option-platform(root.current-index) : "";
+            name: root.current-value.is-empty ? root.placeholder : root.current-value;
+            text-color: root.current-value.is-empty && !root.placeholder.is-empty ? Theme.muted : Theme.text;
         }
     }
 
@@ -212,7 +210,7 @@ export component ThemedComboBox inherits FocusScope {
                 clip: true;
                 accessible-role: list;
                 accessible-label: root.accessible-label;
-                accessible-item-count: root.model.length;
+                accessible-item-count: root.option-count;
 
                 options-flick := Flickable {
                     x: Theme.combo-box-popup-padding;
@@ -223,11 +221,12 @@ export component ThemedComboBox inherits FocusScope {
                     content-y <=> root.popup-scroll-y;
                     content-height: max(
                         self.height,
-                        root.model.length * Theme.combo-box-popup-row-height,
+                        root.option-count * Theme.combo-box-popup-row-height,
                     );
-                    interactive: root.model.length > root.visible-items;
+                    interactive: root.option-count > root.visible-items;
 
-                    for value[index] in root.model : Rectangle {
+                    for item[index] in root.option-count : option := Rectangle {
+                        private property <string> label: root.option-label(index);
                         x: 0px;
                         y: index * Theme.combo-box-popup-row-height;
                         width: options-flick.width;
@@ -237,7 +236,7 @@ export component ThemedComboBox inherits FocusScope {
                             : (option-touch.has-hover ? Theme.hover : Theme.panel);
                         border-radius: Theme.radius-small;
                         accessible-role: list-item;
-                        accessible-label: value;
+                        accessible-label: option.label;
 
                         if index == root.current-index : Rectangle {
                             x: 0px;
@@ -256,26 +255,22 @@ export component ThemedComboBox inherits FocusScope {
                                 root.close-popup();
                             }
                         }
-                        ElidedLabel {
+                        ServerListItem {
                             x: Theme.combo-box-horizontal-padding;
-                            width: parent.width
-                                - 2 * Theme.combo-box-horizontal-padding
-                                - (root.model.length > root.visible-items
+                            width: max(0px, parent.width - self.x - Theme.combo-box-horizontal-padding
+                                - (root.option-count > root.visible-items
                                     ? Theme.combo-box-scrollbar-width + Theme.space-sm
-                                    : 0px);
+                                    : 0px));
                             height: parent.height;
-                            text: value;
-                            text-color: Theme.text;
-                            font-size: Theme.font-body;
-                            font-weight: index == root.current-index ? 600 : 400;
-                            horizontal-alignment: left;
-                            vertical-alignment: center;
-                            accessible-role: none;
+                            name: option.label;
+                            name-weight: index == root.current-index ? 600 : 400;
+                            show-icon: root.show-server-icons;
+                            system-platform: self.show-icon ? root.option-platform(index) : "";
                         }
                     }
                 }
 
-                if root.model.length > root.visible-items : Rectangle {
+                if root.option-count > root.visible-items : Rectangle {
                     x: parent.width
                         - Theme.combo-box-popup-padding
                         - Theme.combo-box-scrollbar-width;
@@ -294,7 +289,7 @@ export component ThemedComboBox inherits FocusScope {
                         width: parent.width;
                         height: max(
                             Theme.combo-box-scrollbar-min-thumb-height,
-                            parent.height * root.visible-items / root.model.length,
+                            parent.height * root.visible-items / root.option-count,
                         );
                         background: Theme.muted;
                         border-radius: self.width / 2;
@@ -303,4 +298,26 @@ export component ThemedComboBox inherits FocusScope {
             }
         }
     }
+}
+
+export component ThemedComboBox inherits ComboBoxPopupControl {
+    in property <[string]> model;
+
+    option-count: root.model.length;
+    option-label(index) => { return root.model[index]; }
+}
+
+export struct ServerOption {
+    id: string,
+    name: string,
+    system_platform: string,
+}
+
+export component ServerComboBox inherits ComboBoxPopupControl {
+    in property <[ServerOption]> servers;
+
+    option-count: root.servers.length;
+    show-server-icons: true;
+    option-label(index) => { return root.servers[index].name; }
+    option-platform(index) => { return root.servers[index].system_platform; }
 }

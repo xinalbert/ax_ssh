@@ -1136,6 +1136,12 @@ pub(super) async fn run_sftp_session(
                         info!(%session_id, "SFTP controller command channel closed");
                         break;
                     }
+                    Some(SshCommand::Tool { reply, .. }) => {
+                        if reply.send(Err(anyhow::anyhow!("SSH tools require an SSH terminal pane"))).is_err() {
+                            debug!("SSH tool requester cancelled");
+                        }
+                        Ok(())
+                    }
                     Some(SshCommand::ClipboardImage { reply, .. }) => {
                         if reply.send(Err(anyhow::anyhow!("paste images into an SSH terminal pane"))).is_err() { debug!("attachment requester cancelled"); }
                         Ok(())

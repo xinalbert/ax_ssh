@@ -91,6 +91,9 @@ msgstr "Разрешить локальные подключения без ав
 msgid "Allow remote OSC 52 clipboard access"
 msgstr "Разрешить удалённый доступ к буферу обмена через OSC 52"
 
+msgid "Allow this server to request signatures from your local SSH agent."
+msgstr "Разрешить этому серверу запрашивать подписи у локального SSH-агента."
+
 msgid "Allow writes to the default clipboard; ask before remote reads"
 msgstr "Разрешить запись в основной буфер обмена; спрашивать перед удалённым чтением"
 
@@ -196,6 +199,9 @@ msgstr "Отмена"
 msgid "Cancel all"
 msgstr "Отменить все"
 
+msgid "Cancel command"
+msgstr "Отменить команду"
+
 msgid "Cancel selected"
 msgstr "Отменить выбранные"
 
@@ -207,6 +213,12 @@ msgstr "Canvas (пока недоступен)"
 
 msgid "Changes take effect after restarting AxSSH"
 msgstr "Изменения вступят в силу после перезапуска AxSSH"
+
+msgid "Check forwarding"
+msgstr "Проверить перенаправление"
+
+msgid "Checking forwarding…"
+msgstr "Проверка перенаправления…"
 
 msgid "Choose Custom to launch this path without a command shell"
 msgstr "Выберите «Свой», чтобы запустить этот путь без командной оболочки"
@@ -267,6 +279,15 @@ msgstr "Цветовая палитра"
 
 msgid "Compact terminal rendering"
 msgstr "Компактная отрисовка терминала"
+
+msgid "Configuration valid. Listener status is unavailable."
+msgstr "Конфигурация действительна. Состояние прослушивания недоступно."
+
+msgid "Configuration valid. SSH server is offline."
+msgstr "Конфигурация действительна. SSH-сервер не подключён."
+
+msgid "Configuration valid. This rule is not listening."
+msgstr "Конфигурация действительна. Это правило не прослушивает подключения."
 
 msgid "Connect"
 msgstr "Подключить"
@@ -400,6 +421,9 @@ msgstr "Удалить группу"
 msgid "Delete Server"
 msgstr "Удалить сервер"
 
+msgid "Delete forwarding"
+msgstr "Удалить перенаправление"
+
 msgid "Delete group"
 msgstr "Удалить группу"
 
@@ -414,6 +438,12 @@ msgstr "Удалить {0}? Серверы этой группы будут пе
 
 msgid "Deny"
 msgstr "Отклонить"
+
+msgid "Destination"
+msgstr "Назначение"
+
+msgid "Destination host:port or Unix socket path"
+msgstr "Узел:порт или путь к сокету Unix"
 
 msgid "Destination: {0}"
 msgstr "Назначение: {0}"
@@ -463,6 +493,9 @@ msgstr "Дублировать"
 msgid "Duplicate Group"
 msgstr "Дублировать группу"
 
+msgid "Dynamic SOCKS5 (-D)"
+msgstr "Динамический SOCKS5 (-D)"
+
 msgid "ETA"
 msgstr "Осталось"
 
@@ -472,6 +505,9 @@ msgstr "Изменить"
 msgid "Edit Server"
 msgstr "Изменить сервер"
 
+msgid "Edit forwarding"
+msgstr "Изменить перенаправление"
+
 msgid "Edit path"
 msgstr "Изменить путь"
 
@@ -480,6 +516,9 @@ msgstr "Редактировать выбранный удалённый фай�
 
 msgid "Enable semantic highlighting"
 msgstr "Включить семантическую подсветку"
+
+msgid "Enabled"
+msgstr "Включено"
 
 msgid "Encrypted application vault"
 msgstr "Зашифрованное хранилище приложения"
@@ -579,6 +618,24 @@ msgstr "Передний план"
 
 msgid "Forward"
 msgstr "Вперёд"
+
+msgid "Forward SSH agent"
+msgstr "Перенаправлять SSH-агент"
+
+msgid "Forwarding Manager"
+msgstr "Менеджер перенаправлений"
+
+msgid "Forwarding is listening."
+msgstr "Перенаправление прослушивает подключения."
+
+msgid "Forwarding is starting."
+msgstr "Запуск перенаправления."
+
+msgid "Forwarding mode"
+msgstr "Режим перенаправления"
+
+msgid "Forwarding rule actions"
+msgstr "Действия с правилом перенаправления"
 
 msgid "GPU"
 msgstr "GPU"
@@ -685,8 +742,17 @@ msgstr "Светлый"
 msgid "Line height"
 msgstr "Высота строки"
 
+msgid "Listen"
+msgstr "Прослушивание"
+
+msgid "Listening port or Unix socket path"
+msgstr "Порт прослушивания или путь к сокету Unix"
+
 msgid "Loading..."
 msgstr "Загрузка…"
+
+msgid "Local (-L)"
+msgstr "Локальный (-L)"
 
 msgid "Local SFTP file open snapshot limit in MiB"
 msgstr "Ограничение локальной копии перед открытием файлов SFTP в MiB"
@@ -718,6 +784,9 @@ msgstr "Локальный файл: {0} - Изменён: {1}"
 msgid "Local files"
 msgstr "Локальные файлы"
 
+msgid "Local port (0 for automatic)"
+msgstr "Локальный порт (0 — автоматически)"
+
 msgid "Local selection priority"
 msgstr "Приоритет локального выделения"
 
@@ -742,6 +811,9 @@ msgstr "МИКРОФОН"
 msgid "MOUSE"
 msgstr "МЫШЬ"
 
+msgid "Manage forwarding rules from all saved SSH servers."
+msgstr "Управление правилами перенаправления всех сохранённых SSH-серверов."
+
 msgid "Manual selection takes priority over automatic detection."
 msgstr "Ручной выбор имеет приоритет над автоматическим определением."
 
@@ -762,6 +834,9 @@ msgstr "Максимум отправок для всех вкладок SFTP"
 
 msgid "Minimize Window"
 msgstr "Свернуть окно"
+
+msgid "Mode"
+msgstr "Режим"
 
 msgid "Modified"
 msgstr "Изменено"
@@ -802,6 +877,9 @@ msgstr "Новый сервер"
 msgid "New Server shortcut"
 msgstr "Сочетание клавиш для нового сервера"
 
+msgid "New forwarding"
+msgstr "Новое перенаправление"
+
 msgid "New group"
 msgstr "Новая группа"
 
@@ -816,6 +894,9 @@ msgstr "Нет неудачных передач"
 
 msgid "No files"
 msgstr "Нет файлов"
+
+msgid "No forwarding rules"
+msgstr "Нет правил перенаправления"
 
 msgid "No known local X server was found"
 msgstr "Не найден известный локальный X-сервер"
@@ -843,6 +924,9 @@ msgstr "Нет активных передач"
 
 msgid "Off"
 msgstr "Выключено"
+
+msgid "Offline"
+msgstr "Не в сети"
 
 msgid "On: Alt/Option sends mouse gestures; off: standard xterm with Shift selection"
 msgstr "Включено: Alt/Option отправляет жесты мыши; выключено: обычный xterm с выделением через Shift"
@@ -970,6 +1054,9 @@ msgstr "Домашний каталог платформы"
 msgid "Port"
 msgstr "Порт"
 
+msgid "Port Forwarding"
+msgstr "Перенаправление портов"
+
 msgid "Positive status indicators"
 msgstr "Индикаторы успешного состояния"
 
@@ -1009,6 +1096,9 @@ msgstr "Поставщик"
 msgid "RENDERING"
 msgstr "ОТРИСОВКА"
 
+msgid "Recent forwarding rules"
+msgstr "Недавние правила перенаправления"
+
 msgid "Reduce terminal items and omit default background rectangles"
 msgstr "Уменьшить число элементов терминала и не рисовать прямоугольники стандартного фона"
 
@@ -1021,6 +1111,9 @@ msgstr "Обновить последовательные порты"
 msgid "Remembered password storage"
 msgstr "Хранение сохранённых паролей"
 
+msgid "Remote (-R)"
+msgstr "Удалённый (-R)"
+
 msgid "Remote and local file pane sizes"
 msgstr "Размеры панелей удалённых и локальных файлов"
 
@@ -1029,6 +1122,9 @@ msgstr "Удалённые каналы"
 
 msgid "Remote clipboard request"
 msgstr "Удалённый запрос буфера обмена"
+
+msgid "Remote command"
+msgstr "Удалённая команда"
 
 msgid "Remote default directory"
 msgstr "Удалённый каталог по умолчанию"
@@ -1056,6 +1152,9 @@ msgstr "Убрать"
 
 msgid "Remove revoked record"
 msgstr "Удалить отозванную запись"
+
+msgid "Remove this saved rule? It will no longer start on reconnect."
+msgstr "Удалить сохранённое правило? При повторном подключении оно больше не будет запускаться."
 
 msgid "Rename"
 msgstr "Переименовать"
@@ -1096,6 +1195,9 @@ msgstr "Восстановить настройки платформы по ум
 msgid "Restore the default filters for this platform"
 msgstr "Восстановить фильтры по умолчанию для этой платформы"
 
+msgid "Result"
+msgstr "Результат"
+
 msgid "Resume"
 msgstr "Продолжить"
 
@@ -1131,6 +1233,12 @@ msgstr "Правый щелчок всегда вставляет"
 
 msgid "Right-click copy or paste"
 msgstr "Копирование или вставка правым щелчком"
+
+msgid "Run"
+msgstr "Выполнить"
+
+msgid "Run Remote Command"
+msgstr "Выполнить удалённую команду"
 
 msgid "Runtime logs"
 msgstr "Журналы выполнения"
@@ -1212,6 +1320,9 @@ msgstr "Сохранить пароль SSH для будущих подключ
 
 msgid "Save Workspace"
 msgstr "Сохранить рабочую область"
+
+msgid "Save an SSH server to add forwarding rules."
+msgstr "Сохраните SSH-сервер, чтобы добавить правила перенаправления."
 
 msgid "Save audio settings"
 msgstr "Сохранить настройки аудио"
@@ -1314,6 +1425,9 @@ msgstr "Стоповые биты последовательного порта"
 
 msgid "Serial transport"
 msgstr "Последовательный транспорт"
+
+msgid "Server"
+msgstr "Сервер"
 
 msgid "Server SFTP bandwidth limit in MiB per second"
 msgstr "Ограничение пропускной способности SFTP сервера в MiB в секунду"
@@ -1423,6 +1537,9 @@ msgstr "Разделить по вертикали (Alt+Shift+L)"
 msgid "Start for first X11 application"
 msgstr "Запустить для первого приложения X11"
 
+msgid "Start forwarding"
+msgstr "Начать перенаправление"
+
 msgid "Status"
 msgstr "Состояние"
 
@@ -1434,6 +1551,9 @@ msgstr "Стоповые биты"
 
 msgid "Stop editing"
 msgstr "Завершить редактирование"
+
+msgid "Stop forwarding"
+msgstr "Остановить перенаправление"
 
 msgid "Success"
 msgstr "Успех"
@@ -1904,6 +2024,10 @@ msgstr "Семейство шрифтов"
 msgctxt "settings-search"
 msgid "Font size"
 msgstr "Размер шрифта"
+
+msgctxt "settings-search"
+msgid "Forwarding Manager"
+msgstr "Менеджер перенаправлений"
 
 msgctxt "settings-search"
 msgid "General"
