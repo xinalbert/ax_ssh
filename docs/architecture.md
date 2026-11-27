@@ -955,7 +955,10 @@ tab-local terminal connection notice deliberately remains non-blocking.
    exposed blank rows stay below it; the model must not scroll content down or
    synthesize blank history to force the cursor to the new bottom edge. Shrinks,
    alternate screens, an active scroll region, a non-bottom cursor, and a user
-   viewing scrollback retain upstream resize semantics. Transport output reaches
+   viewing scrollback use the terminal grid's resize path. The Alacritty 0.26.0
+   patch maps the cursor across soft wraps by counting source cells. A
+   right-edge placeholder for a wide character occupies a display cell only.
+   Transport output reaches
    the model unchanged: a bare `LF` advances the row without resetting the
    column, and reflow preserves that resulting state. AxSSH does not rewrite
    terminal output in its renderer or presentation path.
@@ -979,9 +982,15 @@ tab-local terminal connection notice deliberately remains non-blocking.
    with a fixed block cursor or local alignment heuristic. Blank-run compaction
    preserves inverse spaces: SGR 7 swaps their foreground into a visible
    background, including when a TUI uses that cell as its own cursor while
-   hiding the protocol cursor. Terminal-local
-   `OSC 4`, `OSC 10`, `OSC 11`, and `OSC 12` palette changes resolve into the
-   same snapshot colors used for rendering and color-query replies. `CSI 14 t`
+   hiding the protocol cursor. SGR 21 uses the existing double underline style
+   and preserves bold. LNM (`CSI 20 h/l`) controls LF, VT, FF and the Return
+   key. IND keeps its column. DEC private mode 1048 saves or restores the cursor
+   on the current screen. Mode 1049 switches screens. The terminal parser reports
+   the selected 1015 and 1016 modes at the point each DECRQM arrives. Mode 1016
+   uses physical pixels when SGR mouse mode is also selected.
+   Terminal-local `OSC 4`, `OSC 10`, `OSC 11`, and `OSC 12` queries resolve
+   against the palette in effect at dispatch. Replies echo the sequence's BEL
+   or ST terminator. `CSI 14 t`
    reports the physical extent of the text grid and `CSI 16 t` reports the rounded
    physical cell height and width; both are deferred within a shared bound until
    layout metrics are known. The grid extent multiplies fractional physical cell
@@ -989,17 +998,21 @@ tab-local terminal connection notice deliberately remains non-blocking.
    bounds SGR pixel mouse reports and feeds local/SSH PTY resize. Window-operation
    queries `CSI 13 t`, `CSI 15 t`, and `CSI 19 t` remain unanswered because this model does not own window position
    or full-screen geometry, and it never substitutes text-area dimensions for those
-   values. Protocol callbacks use a 16-event bounded queue; overflow is logged and
-   excess responses may be dropped, so this is a backpressure safety limit rather
-   than an unbounded query-response guarantee. `OSC 0` and `OSC 2` update only the runtime
+   values. Protocol callbacks share an ordered, 16-event queue. Overflow is logged
+   and excess responses may be dropped. The local VTE 0.15.0 patch discards
+   canceled OSC strings and strings beyond 96 KiB of payload or 16 parameters.
+   It waits for the complete BEL or seven-bit ST terminator before dispatch.
+   `OSC 0` and `OSC 2` update only the runtime
    Terminal Tab title; `CSI 22 t` and `CSI 23 t` save and restore the title
    stack, and an empty title is valid. Dynamic titles are never persisted to
    profiles or workspaces. `BEL` produces a short-lived visual hint. `OSC 8`
-   hyperlinks are bounded in the terminal DTO and only HTTP(S) targets may be
-   opened by an explicit user action; other schemes remain inert. `OSC 52`
+   hyperlinks are bounded to a 2 KiB URI and an optional 256-byte ID before
+   entering the grid. Hit ranges group contiguous cells of the same link on
+   the current row. Only an explicit user action opens HTTP(S) links. `OSC 52`
    clipboard access is an explicit opt-in under **Settings > Terminal**. When
-   enabled, remote writes to the default clipboard are accepted with a 64 KiB
-   decoded-text bound. A remote read of that same default clipboard creates a
+   enabled, the terminal accepts the single `c` target or its empty-target alias
+   with a 64 KiB decoded-text bound. Malformed payloads are ignored. A remote
+   read of that same default clipboard creates a
    tab-local confirmation notice; Allow reads only the default clipboard and
    sends the bounded formatter response to the current worker, while Deny,
    timeout (20 seconds), disconnect, retry, or tab close invalidates it.

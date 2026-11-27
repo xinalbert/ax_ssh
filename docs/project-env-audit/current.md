@@ -3,21 +3,23 @@
 ## 项目类型
 
 - 根目录：`<repo-root>`；独立 Rust 2024/Slint 桌面应用，Cargo package 为 `ax_ssh`。
-- 当前范围：五项直接依赖和兼容传递依赖升级；保持现有 Rust/平台/Slint/vendor 基线与 SSH 信任契约。
+- 当前范围：终端协议 base。终端网格和解析器使用锁定版本的本地补丁。
 
 ## 运行环境
 
 - MSRV 为 Rust 1.92.0，edition 2024；Cargo.lock 是可复现依赖来源。
 - 锁定 Slint 1.18.1、Tokio 1.54.1、russh 0.65.4、RSA 0.10.0、russh-sftp 3.0.1、notify 8.2.2、rubato 5.1.0、rand 0.10.4 和 uuid 1.29.3。CPAL 0.17.3 支持 macOS 11。
+- Alacritty 0.26.0 和 VTE 0.15.0 经 `[patch.crates-io]` 解析到 `vendor/alacritty_terminal/` 与 `vendor/vte/`，Unicode 宽度库锁定 0.2.3。
 - `build.rs` 编译 `ui/app.slint`，生成类型只在 `src/app.rs` 声明。
-- 本机 macOS ARM64，默认 rustc/Cargo 1.99.0、Python 3.14.6、cargo-audit 0.22.2；另有 Rust 1.92.0，本轮用显式 +1.92.0 命令检查 MSRV，不变更默认 toolchain。
+- 本机 macOS ARM64，默认 rustc/Cargo 1.99.0、Python 3.14.6、cargo-audit 0.22.2；另有 Rust 1.92.0，可用显式 `+1.92.0` 检查声明的 MSRV。
 - 默认 toolchain 安装 `aarch64-apple-darwin`、`x86_64-pc-windows-msvc`；本机没有 Windows/Linux 原生 runner，未安装 Intel macOS/Linux Rust target。
+- Windows x86_64 可使用本机 `cargo xwin`、SDK/CRT 缓存、LLVM 及 NASM 交叉验证。首次 Windows 检查按锁文件补取了本地缺失的 wgpu 依赖。
 
 ## 测试环境
 
 - Rust 内置测试，SSH/SFTP 使用显式信任的隔离 loopback peer、注入凭据和临时目录；不连接用户服务器或真实 keyring。
 - CI 对 Windows x86_64/ARM64、Linux x86_64/ARM64、macOS ARM64/Intel 执行 target check、严格 all-target Clippy 和 build；仅原生 target 运行测试。
-- 依赖升级的本机验证结果见[实施记录](../project-implementation-tracker/current.md)。稳定工具链运行 8 项 SSH 回归、480 library + 578 binary + 7 integration tests，macOS ARM64 target check/Clippy/build 通过。
+- 终端协议 base 的本机与交叉验证详见[实施记录](../project-implementation-tracker/current.md)。macOS ARM64 原生 check、严格 Clippy 和链接通过；Windows x86_64 经 cargo-xwin 完成交叉检查与链接。
 
 ## 关键命令
 
@@ -47,4 +49,4 @@ git diff --check
 
 ## 最后确认时间
 
-- 2026-11-23 14:12 +0800：russh/RSA 和兼容依赖升级完成，稳定工具链与 macOS ARM64 target 门禁通过，RustSec 无豁免扫描未发现漏洞。其它平台原生验证与真实设备/GUI 验收保留。
+- 2026-11-27 17:25 +0800：确认 Alacritty 0.26.0 本地补丁，Rust 1.92 与 macOS ARM64、Windows x86_64 构建通过。其它平台交由原生 CI。

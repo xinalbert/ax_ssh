@@ -432,13 +432,16 @@ EOF/Close 的 SSH transport 断开，以及非主动 Telnet/Serial 断开，都�
 Shift 标点。物理数字小键盘不再单独拦截为终端 application-keypad 模式；它的文本或逻辑键与其他键盘输入一样走标准路径，
 物理身份只作为事件元数据保留。NumLock、IME、AltGr 和带修饰的小键盘输入继续使用平台标准行为。没有标准定义的带修饰 Escape、Tab 或 Return 组合不会
 发出私有 Kitty/CSI-u 或 `modifyOtherKeys` 序列。标准终端事件也会保留：OSC 0/2 可更新运行时 Terminal Tab 标题，CSI 22/23
-恢复标题栈，BEL 产生短暂视觉提示。动态标题只存在运行时，不写入 profile 或 workspace。OSC 8
-超链接使用有界 URI，只有用户显式操作时才允许打开 HTTP(S) 目标，其他 scheme 保持 inert。F13-F16 使用 xterm
-标准的 Shift-F1-F4 形式（`CSI 1;2P` 到 `CSI 1;2S`），F17-F24 使用标准扩展 tilde 形式。终端根据实测文本区度量回答
-`CSI 14 t`、`CSI 16 t` 和 `CSI 18 t`；没有窗口/屏幕几何时，不伪造 `CSI 13 t`、`CSI 15 t` 或 `CSI 19 t`。远端 OSC 52
+恢复标题栈，BEL 产生短暂视觉提示。动态标题只存在运行时，不写入 profile 或 workspace。OSC 颜色查询按查询时的
+调色板应答，同批包含多次颜色设置也按输入顺序处理。OSC 8 超链接的 URI 上限为 2 KiB，用户显式操作才能打开
+HTTP(S) 目标。SGR 21 绘制双下划线并保留粗体。应用启用 LNM（`CSI 20 h`）后，Return 发送 CRLF，
+LF、VT、FF 移到下一行行首。DEC 私有模式 1048 在当前屏保存和恢复光标。F13-F16 使用 xterm
+标准的 Shift-F1-F4 形式（`CSI 1;2P` 到 `CSI 1;2S`），F17-F24 使用标准扩展 tilde 形式。
+终端根据实测文本区和单格尺寸应答 `CSI 14 t` 和 `CSI 16 t`，按当前行列数应答 `CSI 18 t`。远端 OSC 52
 剪贴板访问默认关闭；要允许远端程序访问本机默认剪贴板，请在 **Settings > Terminal > Allow remote OSC 52 clipboard access**
-中开启。远端写入只使用默认剪贴板，解码文本上限为 64 KiB；远端读取会在对应 Tab 显示 Allow/Deny 提示，只有 Allow 才读取默认剪贴板，Deny、20 秒超时、断开、重试或关闭 Tab 都会取消请求。selection clipboard 访问和图形协议仍关闭。普通终端纵向放大时，可用的真实 scrollback 会显示在当前视图上方；没有历史时，
-已有输出保持在顶部，新增空行留在底部。全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通
+中开启。远端写入默认剪贴板使用单个 `c` 或空目标，解码文本上限为 64 KiB。远端读取会在对应 Tab 显示 Allow/Deny 提示，只有 Allow 才读取默认剪贴板，Deny、20 秒超时、断开、重试或关闭 Tab 都会取消请求。selection clipboard 访问和图形协议仍关闭。普通终端纵向放大时，可用的真实 scrollback 会显示在当前视图上方；没有历史时，
+已有输出保持在顶部，新增空行留在底部。调整宽度使双格字符换到下一行时，光标会保留在文字中的位置，后续输出从该位置继续。
+全屏程序的 application-cursor 模式会正确影响 Home 与 End。普通
 启用 xterm mouse reporting 的全屏程序可以收到按下、释放、滚轮、拖动和 cell motion，编码按程序选择的
 SGR、UTF-8 或传统格式发送。默认使用 **标准 xterm 鼠标路由**：普通点击、释放、拖动和 motion 按 reporting
 转发，`Shift` 绕过 reporting 进入本地选区，`Alt`/`Option` 只作为上报的 modifier bit。在
@@ -605,6 +608,9 @@ JetBrains Mono 绘制网格，不改写保存的选择。缺失的汉字优先�
 覆盖范围取决于已安装字体。符号沿用程序输出的 ANSI 前景色，因此文字圆点可以变色；显式 emoji 序列及
 默认 emoji 保持 emoji 呈现。
 恢复已有终端或重试终端时也会自动初始化相同的字体回退。
+
+字符格按码点计宽，东亚模糊宽度字符按窄字符处理。连接后的 emoji 可能占多格。
+选择与复制使用逻辑格顺序，保留原始 Unicode 文本。
 基本盒线、块字符和 Powerline 分隔符按字符格几何绘制，使边界相接。普通文字按实际字体的排字宽度
 分配绘制范围，使宽回退字形不被较窄的逻辑格裁掉；终端列位置和复制沿用原始字符格模型。
 

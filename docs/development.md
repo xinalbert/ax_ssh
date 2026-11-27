@@ -209,6 +209,12 @@ remain cached, and the release profile keeps its existing ThinLTO settings. If
 an older checkout already has affected artifacts, remove only this package's
 development output with `cargo clean --profile dev --package ax_ssh`.
 
+The terminal builds with locally patched VTE 0.15.0 and alacritty_terminal
+0.26.0. Each crate directory under `vendor/` records its original checksum,
+license, and patch. When updating VTE or Alacritty, run the protocol baseline
+with `cargo test --locked --offline --lib terminal::tests::protocol_base`
+and review the callbacks forwarded by `src/terminal/protocol.rs`.
+
 ## Change rules
 
 - Keep Slint generated types in `src/app.rs`; domain and transport modules must

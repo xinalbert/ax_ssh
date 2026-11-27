@@ -594,7 +594,8 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    视口在 resize 后也恢复有界 display offset；Follow 和备用屏继续保留各自的底部/备用屏语义。
    历史不足时，已有主屏内容保持顶部对齐，新增空行留在底部；模型不得向下滚动内容或伪造
    空白历史来强制将光标置于新底边。缩小时、备用屏、活动滚动区域、非底行光标和用户正在查看
-   scrollback 时保持上游 resize 语义。`TerminalSnapshot` 只携带有样式的可见行及光标/mouse 元数据，
+   scrollback 时都走终端网格的 resize 路径。Alacritty 0.26.0 本地补丁按源格数映射软换行后的光标。
+   行末宽字符占位只占显示格。`TerminalSnapshot` 只携带有样式的可见行及光标/mouse 元数据，
    transport 输出会原样进入该模型：裸 `LF` 只推进到下一行而不复位列，reflow 保留由此产生的状态。
    AxSSH 不会在终端 renderer 或 presentation 路径改写终端输出。
    不再重复构造扁平纯文本副本。非活动 Tab 的输出留在 Rust 状态；每个可见 pane 只把自己的有界字符格
@@ -606,16 +607,21 @@ callback 竞争。按 Tab 归属的 terminal connection notice 刻意继续保�
    上游同步 deadline 释放；没有旧帧时不发布局部首帧。它不缓存无界输出，也不改变软换行/reflow、mouse reporting、worker 或 SSH transport
    语义。snapshot 保留协议光标形状和闪烁请求，以及隐藏文字和每种已支持的 SGR 下划线样式及颜色，Slint 不再用固定
    block 光标或本地对齐启发式替代它们。空白 run 压缩会保留反色空格：SGR 7 把前景色交换成可见背景，
-   因此 TUI 隐藏协议光标并用该字符格自行绘制光标时不会丢失色块。终端局部的 `OSC 4`、`OSC 10`、`OSC 11` 与 `OSC 12`
-   调色板变更会解析为同一份快照颜色，用于显示和颜色查询应答。`CSI 14 t` 回报文本字符格的物理像素范围，`CSI 16 t`
+   因此 TUI 隐藏协议光标并用该字符格自行绘制光标时不会丢失色块。SGR 21 使用双下划线并保留粗体。
+   LNM（`CSI 20 h/l`）控制 LF、VT、FF 和 Return，IND 保持当前列。DEC 私有模式 1048 保存或恢复当前屏的
+   光标，1049 用于切屏。每个 DECRQM 查询按到达时报告 1015、1016，1016 在同时选中 SGR 鼠标模式时使用物理像素。
+   `OSC 4`、`OSC 10`、`OSC 11` 与 `OSC 12` 以解析查询时的调色板应答，并沿用查询的 BEL 或 ST 终止符。
+   `CSI 14 t` 回报文本字符格的物理像素范围，`CSI 16 t`
    回报取整后的物理单格高宽；布局度量就绪前两种查询共用有界的延后容量。小数物理格宽/高先乘列数/行数再取整；同一文本区
    像素范围用于 SGR 像素鼠标边界及本地/SSH PTY resize。窗口操作查询 `CSI 13 t`、`CSI 15 t`
    和 `CSI 19 t` 因模型不拥有窗口位置或完整屏幕几何而保持不应答，绝不把文本区尺寸冒充这些值。协议 callback
-   使用容量为 16 的有界队列；队列满时会记录诊断，超出上限的应答可能丢弃，因此这是背压安全边界，不是无界查询应答保证。`OSC 0` 和 `OSC 2`
+   共用容量为 16 的有序队列，队列满时记录诊断，超出上限的应答可能丢弃。VTE 0.15.0 本地补丁等待完整 BEL
+   或 7 位 ST，丢弃已取消、负载超过 96 KiB 或参数超过 16 个的 OSC 字符串。`OSC 0` 和 `OSC 2`
    只更新运行时 Terminal Tab 标题；`CSI 22 t` 与 `CSI 23 t` 保存和恢复标题栈，空标题也是合法值。
-   动态标题不会写入 profile 或 workspace。`BEL` 只产生短暂视觉提示。`OSC 8` 超链接在终端 DTO
-   中有界保存，只有 HTTP(S) 目标能在用户显式操作后交给系统打开，其他 scheme 保持 inert。`OSC 52`
-   剪贴板访问必须在 **Settings > Terminal** 中显式开启。开启后，远端写入本机默认剪贴板仍受 64 KiB 解码文本上限约束；远端读取同一默认剪贴板时，先在对应 Tab 显示确认提示。
+   动态标题不会写入 profile 或 workspace。`BEL` 只产生短暂视觉提示。`OSC 8` 链接进入字符格前限制 URI 为
+   2 KiB、可选 ID 为 256 字节。命中范围以当前行中链接身份相同的连续字符格为准。只有用户显式操作才能打开 HTTP(S) 链接。
+   `OSC 52` 剪贴板访问必须在 **Settings > Terminal** 中显式开启。有效目标为单个 `c` 或空目标别名，
+   解码文本上限为 64 KiB，畸形负载被忽略。远端读取默认剪贴板时，先在对应 Tab 显示确认提示。
    只有 Allow 会读取默认剪贴板并向当前 worker 回写有界响应；Deny、20 秒超时、断开、重试或关闭 Tab 都会使请求失效。selection clipboard 访问和图形协议仍关闭。
    有界事件由终端 monitor 取得后投递到 Slint UI 线程，worker 不直接调用平台剪贴板 API，剪贴板内容也不会写入日志或持久化配置。其余终端协议边界也是有意保留的：tertiary device attributes、除状态/光标（`5`/`6`）以外的 DSR 查询，以及窗口位置/完整屏幕查询（`CSI 13 t`、`CSI 15 t`、`CSI 19 t`）在 AxSSH 不拥有对应设备或几何时保持不应答。Kitty keyboard/CSI-u、xterm `modifyOtherKeys`、Sixel、Kitty graphics 和 iTerm2 inline-image 协议保持关闭，不用文本 cell 近似；即使开启默认剪贴板访问，OSC 52 selection 目标也仍关闭。
    小屏窗口下限为 `520x360`；终端布局、持久化默认尺寸和模型统一使用非零的 `10x3`

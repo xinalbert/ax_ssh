@@ -165,6 +165,11 @@ Software presentation 选择器和 pane layout hint 仍只属于 macOS。
 旧工作区若已有受影响产物，只清理本 package 的开发输出：
 `cargo clean --profile dev --package ax_ssh`。
 
+终端从 `vendor/` 构建本地修补的 VTE 0.15.0 和 alacritty_terminal 0.26.0。
+源码附带各自的原始 crate 校验值、许可证和补丁记录。
+升级 VTE 或 Alacritty 时，运行 `cargo test --locked --offline --lib terminal::tests::protocol_base`，
+并核对 `src/terminal/protocol.rs` 转发的回调。
+
 ## 修改规则
 
 - Slint 生成类型集中在 `src/app.rs`；领域模块和传输模块不得依赖 UI。

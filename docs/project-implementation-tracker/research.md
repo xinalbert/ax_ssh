@@ -994,6 +994,7 @@
 - 对实施计划的影响：监听、规则、入站通道和取消操作全部归 terminal worker，remote handler 只接受已登记规则。TCP 远端规则要求 loopback address 和 origin，Unix 本地 listener 检查 owner-only parent 和文件 identity。
 - 未解决问题：真实 OpenSSH server 的 GatewayPorts、AllowTcpForwarding、AllowStreamLocalForwarding 策略和 GUI 原生操作仍待实机验收。
 
+
 ## 2026-11-27 SFTP 字节级续传语义
 
 - 时间：2026-11-27 13:05 +0800
@@ -1005,3 +1006,13 @@
 - 关键结论：OpenSSH `-a` 会尝试从已有部分或完整文件继续，但假设已有内容与源内容一致，内容不同可能产生损坏结果。AxSSH 因此保留自有部分文件身份，记录连续确认 offset，并在恢复前读回远端或本地前缀计算 SHA-256。`fsync@openssh.com` 可用于服务端文件句柄同步，但普通续传不依赖该扩展。
 - 对实施计划的影响：R1 先实现下载断点和前缀验证，R2 复用同一任务的远端临时文件并截去未确认尾部，R3 使用私有 checkpoint 目录在应用启动后提供恢复行。远端 rename 回复不确定时进入人工检查。
 - 未解决问题：真实 OpenSSH daemon、断网时系统文件锁行为及 GUI 文案需要人工验收。
+
+## 2026-11-27 终端协议兼容性 base 参考
+
+- 时间：2026-11-27 14:34 +0800
+- 检索问题：当前工作区对 CSI/SGR、DEC VT、XTerm Control Sequences、OSC 与 Unicode 的实际覆盖范围，以及 parser 识别和应用端到端支持的差别。
+- 检索原因：用户要求将本次逐项核对结果放入 base 计划，供后续模型参考，并明确先别施工。
+- 来源列表：[base 计划的 S1–S9 来源表](notes/base/plan.md#标准与上游来源)，包括 xterm、固定 VTE/Alacritty crate、OSC 8/厂商扩展及 UAX 29/11/9；[E1–E7 源码入口](notes/base/plan.md#源码与所有权入口)为当时工作区的实现与已有测试。
+- 关键结论：常用 VT/ANSI 和部分 xterm 扩展已接通，但 SGR 21 为取消粗体而非 xterm 双下划线，备用屏 47/1047/1048 未分派，DCS/图形/8 位 C1 不完整。OSC 的颜色查询同批时序、剪贴板参数和链接 id 存在边界；其中时序问题仅为静态推导。Unicode 支持 UTF-8/中文双格/零宽附着，Emoji 排字合并不改变按码点累计的格宽；已有测试将 👩‍💻 记作 4 格，不能宣称完整字素/Bidi 合规。策略限制与语义差异分开记录。
+- 对实施计划的影响：新增 [base 计划](notes/base/plan.md)，B0 仅文档归档完成，B1–B7 均 pending、暂缓开工；当前 SFTP 目标和活动步骤不变，不创建 Worker。
+- 未解决问题：没有本次运行的协议专项、vttest、UAX 一致性、真实 transport/GUI 或跨平台验收；未来用户授权后先重读锁文件与源码、复现差异并决定支持范围，不自动补齐所有历史或厂商指令。

@@ -35,6 +35,7 @@ languages have quick guides matching the README language badges.
 
 ## Project records
 
+- CSI/SGR, DEC VT, xterm, OSC, and Unicode compatibility with implementation and verification records. [Base terminal compatibility plan](project-implementation-tracker/notes/base/plan.md)
 - [Implementation tracker](project-implementation-tracker/current.md): active
   work, decisions, risks, and verification status
 - [Environment audit](project-env-audit/current.md): repository, dependency,

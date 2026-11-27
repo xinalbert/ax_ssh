@@ -32,5 +32,6 @@
 
 ## 项目记录
 
+- CSI/SGR、DEC VT、xterm、OSC 和 Unicode 的兼容矩阵、实施及验证记录。[Base 终端兼容性计划](project-implementation-tracker/notes/base/plan.md)
 - [项目实施记录](project-implementation-tracker/current.md)：当前工作、决策、风险和验证状态
 - [环境审计](project-env-audit/current.md)：仓库、依赖和本地工具链证据

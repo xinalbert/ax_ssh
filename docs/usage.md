@@ -744,14 +744,20 @@ Standard terminal events are preserved: OSC 0/2 can update the runtime Terminal
 Tab title, CSI 22/23 restores the title stack, and BEL produces a short visual
 hint. Dynamic titles are runtime-only and are not saved in profiles or workspaces.
 F13-F16 use the xterm shifted-F1-F4 forms (`CSI 1;2P` through `CSI 1;2S`),
-and F17-F24 use the standard extended tilde forms. The terminal answers
-`CSI 14 t`, `CSI 16 t`, and `CSI 18 t` from measured text-area metrics; it does
-not fabricate `CSI 13 t`, `CSI 15 t`, or `CSI 19 t` without window/screen geometry.
-OSC 8 links use a bounded URI and can open only explicit HTTP(S) targets; other
-schemes are inert. Remote OSC 52 clipboard writes are disabled by default. To
+and F17-F24 use the standard extended tilde forms. SGR 21 draws a double
+underline and preserves bold. When an application sets LNM (`CSI 20 h`),
+Return sends CRLF and LF, VT, and FF move to the start of the next row.
+DEC private mode 1048 saves and restores the cursor on the active screen.
+The terminal answers `CSI 14 t` and `CSI 16 t` from measured text-area and
+cell metrics. `CSI 18 t` uses the current row and column counts.
+OSC color queries use the palette at the point of the query, including when a
+single output batch contains several palette changes. OSC 8 links accept URIs
+up to 2 KiB and open HTTP(S) targets only after explicit user action.
+Remote OSC 52 clipboard access is disabled by default. To
 allow a remote program to copy text into the local default clipboard, enable
 **Settings > Terminal > Allow remote OSC 52 clipboard access**. Remote writes
-use only the default clipboard and are limited to 64 KiB of decoded text. A
+use the default clipboard with a single `c` target or an empty target and a
+64 KiB decoded-text limit. A
 remote read shows an Allow/Deny notice for that tab; Allow reads only the
 default clipboard (maximum 64 KiB), while Deny, a 20-second timeout, disabling access, disconnect, retry, or tab
 close cancels the request. Selection clipboard access and image protocols stay
@@ -766,6 +772,8 @@ with no TERM/PTY/NAWS contract.
 When a normal terminal grows taller, actual scrollback may become visible above
 the current viewport. If no history is available, existing output stays at the
 top and the added blank rows remain below it.
+When a resize wraps a wide character onto the next row, the cursor keeps its
+position in the text and subsequent output continues from that position.
 Full-screen programs that enable xterm mouse reporting receive clicks,
 releases, wheel events, drag motion, and cell motion using their selected SGR,
 UTF-8, or legacy encoding. **Standard xterm mouse routing** is the default:
@@ -1049,6 +1057,10 @@ fonts. Symbols retain the program's ANSI foreground color, so a text circle can
 change colors without becoming a color emoji. Explicit emoji sequences and
 default emoji keep emoji presentation. Restored and retried terminals initialize
 the same font fallbacks automatically.
+
+The grid uses per-code-point widths and treats ambiguous East Asian characters
+as narrow. Joined emoji can occupy several cells. Selection and copying use
+logical cell order and preserve the original Unicode text.
 Basic box lines, block elements, and Powerline separators use cell geometry to
 join at grid boundaries. Ordinary text uses the font's measured shaping width
 for its paint area, so wide fallback glyphs are not clipped to a narrow logical

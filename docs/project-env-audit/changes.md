@@ -1326,3 +1326,20 @@
 - 受影响文件：只清理忽略的 `target/`；同步当前环境和实施记录中的产物状态。
 - 更新后的命令或环境：已验证的 Skia 0.153.3 ARM64 归档单独保存到用户缓存目录，保留后续构建的本地下载来源。运行中的编译结束后再清理，未终止应用；下次构建需重新编译。
 - 验证结果：清理前后 Git 状态、暂存及未暂存差异摘要完全一致；提交前复核与已验证升级内容相同，复用升级后 1030 项测试、原生构建和 MSRV 检查结果，重新运行文档、生成图标、skill/tracker 和 diff 校验。
+
+## 2026-11-27 终端 VTE 本地补丁与平台验证
+
+- 日期：2026-11-27 16:10 +0800
+- 原因：终端协议 base 需要在解析阶段区分 OSC 终止、LNM 与 SGR。
+- 受影响文件：`Cargo.toml`、`Cargo.lock`、`vendor/vte/`。
+- 环境更新：VTE 版本仍为 0.15.0，解析来源切换至本地补丁。Windows x86_64 交叉验证使用本机缓存的 SDK/CRT、LLVM 和 NASM。Rust 1.92 检查使用经 gzip/tar 核对的匹配 ARM64 Skia 0.153.3 归档，恢复直连下载失败。
+- 验证结果：Rust 1.92 locked/offline check、macOS ARM64 target check/严格 Clippy/build、Windows x86_64 cargo-xwin check/严格 Clippy/build。macOS 产物为 ARM64 Mach-O，Windows 为 x86-64 PE32+。
+- 剩余范围：Intel macOS、Windows ARM64、Linux 及 Windows 原生测试交由 CI。
+
+## 2026-11-27 Alacritty 终端网格补丁
+
+- 日期：2026-11-27 17:25 +0800
+- 变化原因：按源格数修复主屏宽字符重排的光标列。
+- 受影响文件：`Cargo.toml`、`Cargo.lock`、`vendor/alacritty_terminal/`。
+- 环境变化：Alacritty 源切换到本地补丁，版本保持 0.26.0。源归档 SHA-256 与原锁文件一致。
+- 验证结果：Rust 1.92 locked/offline check、macOS ARM64 与 Windows x86_64 的 check、严格 Clippy、链接构建通过。其它平台原生运行交由 CI。
