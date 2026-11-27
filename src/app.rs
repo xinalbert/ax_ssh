@@ -434,6 +434,9 @@ pub fn run(log_directory: PathBuf) -> Result<()> {
         }
     }
     for worker in workers {
+        if let TerminalWorker::Ssh(handle) = &worker {
+            handle.preserve_sftp_transfers_on_shutdown();
+        }
         drop(shutdowns.start(runtime.handle(), worker));
     }
     let workers_timed_out = !runtime.block_on(shutdowns.finish(Duration::from_secs(25)));

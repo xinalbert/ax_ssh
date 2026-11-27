@@ -15,7 +15,7 @@ use self::sftp::run_sftp_session;
 use self::shell::{TerminalSessionTask, run_terminal_session, x11_mode_for};
 
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::time::Instant;
 
 use anyhow::{Context, Result};
@@ -81,6 +81,7 @@ pub enum SshSessionEvent {
     Output(TerminalOutputChunk),
     Sftp(SftpBrowserEvent),
     SftpTransfer(SftpTransferEvent),
+    SftpRecovery(Vec<crate::sftp::SftpRecovery>),
     SftpWrite(SftpWriteEvent),
     X11ForwardingEnabled,
     X11ForwardingUnavailable(String),
@@ -196,6 +197,7 @@ struct SshSessionLaunch {
     x11_settings: X11Settings,
     audio_format: crate::audio::AudioFormat,
     sftp_policy: crate::config::SftpTransferPolicy,
+    sftp_recovery_directory: Option<std::path::PathBuf>,
 }
 
 struct SshSessionTask {
@@ -206,6 +208,8 @@ struct SshSessionTask {
     x11_settings: X11Settings,
     audio_format: crate::audio::AudioFormat,
     sftp_policy: crate::config::SftpTransferPolicy,
+    sftp_recovery_directory: Option<std::path::PathBuf>,
+    preserve_sftp_transfers: Arc<AtomicBool>,
     command_rx: mpsc::Receiver<SshCommand>,
     resize_rx: watch::Receiver<TerminalSize>,
     latency_foreground_rx: watch::Receiver<bool>,
@@ -220,6 +224,7 @@ pub struct SshSessionHandle {
     latency_foreground_tx: watch::Sender<bool>,
     next_input_sequence: AtomicU64,
     upload_queue_slots: Arc<Semaphore>,
+    preserve_sftp_transfers: Arc<AtomicBool>,
     task: JoinHandle<()>,
 }
 
@@ -494,6 +499,7 @@ impl SshSessionHandle {
                 x11_settings: settings.x11,
                 audio_format: settings.audio_format,
                 sftp_policy: crate::config::SftpTransferSettings::default().policy(None),
+                sftp_recovery_directory: None,
             },
         )
     }
@@ -504,6 +510,17 @@ impl SshSessionHandle {
         profile: SessionProfile,
         secret: Zeroizing<String>,
         sftp_policy: crate::config::SftpTransferPolicy,
+    ) -> (Self, mpsc::Receiver<SshSessionEvent>) {
+        Self::spawn_sftp_with_recovery(runtime, session_id, profile, secret, sftp_policy, None)
+    }
+
+    pub fn spawn_sftp_with_recovery(
+        runtime: &Handle,
+        session_id: Uuid,
+        profile: SessionProfile,
+        secret: Zeroizing<String>,
+        sftp_policy: crate::config::SftpTransferPolicy,
+        sftp_recovery_directory: Option<std::path::PathBuf>,
     ) -> (Self, mpsc::Receiver<SshSessionEvent>) {
         Self::spawn_with_mode(
             runtime,
@@ -516,6 +533,7 @@ impl SshSessionHandle {
                 x11_settings: X11Settings::default(),
                 audio_format: SshTerminalSettings::default().audio_format,
                 sftp_policy,
+                sftp_recovery_directory,
             },
         )
     }
@@ -533,12 +551,14 @@ impl SshSessionHandle {
             x11_settings,
             audio_format,
             sftp_policy,
+            sftp_recovery_directory,
         } = launch;
         let (command_tx, command_rx) = mpsc::channel(COMMAND_CAPACITY);
         let (resize_tx, resize_rx) = watch::channel(initial_size);
         let (latency_foreground_tx, latency_foreground_rx) = watch::channel(false);
         let (event_tx, event_rx) = mpsc::channel(EVENT_CAPACITY);
         let upload_queue_slots = Arc::new(Semaphore::new(SFTP_TRANSFER_QUEUE_WINDOW));
+        let preserve_sftp_transfers = Arc::new(AtomicBool::new(false));
         let worker_span = tracing::info_span!(
             "ssh_worker",
             worker_session_id = %session_id,
@@ -556,6 +576,8 @@ impl SshSessionHandle {
                 x11_settings,
                 audio_format,
                 sftp_policy,
+                sftp_recovery_directory,
+                preserve_sftp_transfers: preserve_sftp_transfers.clone(),
                 command_rx,
                 resize_rx,
                 latency_foreground_rx,
@@ -571,10 +593,16 @@ impl SshSessionHandle {
                 latency_foreground_tx,
                 next_input_sequence: AtomicU64::new(1),
                 upload_queue_slots,
+                preserve_sftp_transfers,
                 task,
             },
             event_rx,
         )
+    }
+
+    /// Keep verified work when the application is closing.
+    pub fn preserve_sftp_transfers_on_shutdown(&self) {
+        self.preserve_sftp_transfers.store(true, Ordering::Release);
     }
 
     /// Change sampling cadence without queuing commands or cancelling a probe.
@@ -917,6 +945,8 @@ async fn run_session(task: SshSessionTask) {
         x11_settings,
         audio_format,
         sftp_policy,
+        sftp_recovery_directory,
+        preserve_sftp_transfers,
         mut command_rx,
         resize_rx,
         latency_foreground_rx,
@@ -988,7 +1018,7 @@ async fn run_session(task: SshSessionTask) {
         send_event(&event_tx, SshSessionEvent::Disconnected, session_id).await;
         return;
     };
-    let connection = match connection_result {
+    let mut connection = match connection_result {
         Ok(connection) => connection,
         Err(error) => {
             if let Some(SshError::HostKeyRevoked { actual, public_key }) =
@@ -1048,6 +1078,18 @@ async fn run_session(task: SshSessionTask) {
     };
 
     if mode == SshSessionMode::Sftp {
+        if let Some(directory) = sftp_recovery_directory {
+            let origin = connection.sftp_resume_origin.clone();
+            match tokio::task::spawn_blocking(move || {
+                crate::sftp::ResumeStore::open(directory, origin)
+            })
+            .await
+            {
+                Ok(Ok(store)) => connection.sftp_resume = Some(store),
+                Ok(Err(error)) => warn!(%error, "SFTP recovery storage unavailable"),
+                Err(error) => warn!(%error, "SFTP recovery storage initialization failed"),
+            }
+        }
         run_sftp_session(
             connection,
             session_id,
@@ -1056,6 +1098,7 @@ async fn run_session(task: SshSessionTask) {
             event_tx,
             sftp_policy,
             latency_foreground_rx,
+            preserve_sftp_transfers,
         )
         .await;
         return;
@@ -1208,6 +1251,7 @@ mod tests {
             latency_foreground_tx: watch::channel(false).0,
             next_input_sequence: AtomicU64::new(0),
             upload_queue_slots: Arc::new(Semaphore::new(SFTP_TRANSFER_QUEUE_WINDOW)),
+            preserve_sftp_transfers: Arc::new(AtomicBool::new(false)),
             task,
         };
         let shutdown = tokio::spawn(handle.shutdown());
@@ -1226,6 +1270,7 @@ mod tests {
             latency_foreground_tx: watch::channel(false).0,
             next_input_sequence: AtomicU64::new(0),
             upload_queue_slots: Arc::new(Semaphore::new(SFTP_TRANSFER_QUEUE_WINDOW)),
+            preserve_sftp_transfers: Arc::new(AtomicBool::new(false)),
             task: tokio::spawn(std::future::pending::<()>()),
         };
         let ids = vec![Uuid::new_v4(), Uuid::new_v4()];

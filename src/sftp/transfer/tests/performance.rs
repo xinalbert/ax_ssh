@@ -243,3 +243,288 @@ async fn failed_final_metadata_check_never_publishes_a_full_download() {
     );
     server.await.expect("peer joined");
 }
+
+#[tokio::test]
+async fn interrupted_download_reopens_saved_partial_and_rejects_changed_prefix() {
+    let root = TestCacheDir::new();
+    fs::create_dir(root.path()).expect("local destination");
+    let journal = root.path().join("journal");
+    let bytes = content();
+    let offset = u64::from(DOWNLOAD_CHUNK_BYTES);
+    let mut transfer = SftpDownloadRequest::for_local_download(
+        Uuid::new_v4(),
+        "/srv/report.bin".into(),
+        root.path().to_owned(),
+        vec!["report.bin".into()],
+        bytes.len() as u64,
+    )
+    .expect("download request");
+    let store = ResumeStore::open(journal.clone(), "fixture-server".into()).expect("journal");
+    transfer.enable_resume(Some(&store));
+    let (client, mut peer) = tokio::io::duplex(128 * 1024);
+    let server_content = bytes.clone();
+    let (stop, stopped) = tokio::sync::oneshot::channel();
+    let server = tokio::spawn(async move {
+        while let Some(packet) = request(&mut peer).await {
+            let id = packet.get_request_id();
+            match packet {
+                Packet::Init(_) => reply(&mut peer, 2, &Version::new()).await,
+                Packet::Lstat(_) | Packet::Fstat(_) => {
+                    let attrs = resume_test_attrs(server_content.len() as u64);
+                    reply(&mut peer, 105, &Attrs { id, attrs }).await;
+                }
+                Packet::Open(_) => {
+                    reply(
+                        &mut peer,
+                        102,
+                        &RemoteHandle {
+                            id,
+                            handle: "file".into(),
+                        },
+                    )
+                    .await
+                }
+                Packet::Read(read) if read.offset == 0 => {
+                    tokio::time::sleep(PROGRESS_INTERVAL).await;
+                    reply(
+                        &mut peer,
+                        103,
+                        &Data {
+                            id,
+                            data: server_content[..offset as usize].to_vec(),
+                        },
+                    )
+                    .await;
+                    stopped.await.expect("client received first chunk");
+                    return;
+                }
+                packet => panic!("unexpected SFTP request: {packet:?}"),
+            }
+        }
+    });
+    let (events, mut receiver) = mpsc::channel(SFTP_TRANSFER_EVENT_CAPACITY);
+    let progress = tokio::spawn(async move {
+        while let Some(event) = receiver.recv().await {
+            if matches!(event, SftpTransferEvent::Progress { downloaded_bytes, .. } if downloaded_bytes == offset)
+            {
+                stop.send(()).expect("peer awaits interruption");
+                return;
+            }
+        }
+        panic!("no progress observed before interruption");
+    });
+    timeout(
+        Duration::from_secs(5),
+        download_to_local(client, &transfer, &TransferCancellation::new(), &events),
+    )
+    .await
+    .expect("interruption settles")
+    .expect_err("connection interrupted");
+    server.await.expect("peer completes");
+    progress.await.expect("progress observed");
+    assert!(!root.path().join("report.bin").exists());
+    assert_eq!(
+        store.recoveries().expect("interrupted record")[0].offset,
+        offset
+    );
+    transfer.resume = None;
+    drop(store);
+
+    let store = ResumeStore::open(journal, "fixture-server".into()).expect("restart opens journal");
+    transfer.enable_resume(Some(&store));
+    let (events, mut receiver) = mpsc::channel(SFTP_TRANSFER_EVENT_CAPACITY);
+    let reads = Arc::new(Mutex::new(Vec::new()));
+    let mut changed = bytes.clone();
+    changed[0] ^= 1;
+    let (client, peer) = tokio::io::duplex(128 * 1024);
+    russh_sftp::server::run(
+        peer,
+        DownloadTestServer {
+            reported_size: changed.len() as u64,
+            content: Arc::new(changed),
+            reads: reads.clone(),
+        },
+    )
+    .await;
+    let error = download_to_local(client, &transfer, &TransferCancellation::new(), &events)
+        .await
+        .expect_err("same-size change rejected");
+    assert!(error.to_string().contains("does not match"), "{error:#}");
+    assert!(!root.path().join("report.bin").exists());
+    reads.lock().expect("read log").clear();
+
+    let (client, peer) = tokio::io::duplex(128 * 1024);
+    russh_sftp::server::run(
+        peer,
+        DownloadTestServer {
+            reported_size: bytes.len() as u64,
+            content: Arc::new(bytes.clone()),
+            reads: reads.clone(),
+        },
+    )
+    .await;
+    let (published, _) =
+        download_to_local(client, &transfer, &TransferCancellation::new(), &events)
+            .await
+            .expect("validated download resumed");
+    assert_eq!(fs::read(published).expect("downloaded data"), bytes);
+    assert!(std::iter::from_fn(|| receiver.try_recv().ok()).any(|event| {
+        matches!(event, SftpTransferEvent::ContinuedFromPartial { offset: resumed, .. } if resumed == offset)
+    }));
+    assert_eq!(
+        reads
+            .lock()
+            .expect("read log")
+            .iter()
+            .filter(|(start, _)| *start == 0)
+            .count(),
+        1
+    );
+    assert!(
+        store
+            .recoveries()
+            .expect("published journal removed")
+            .is_empty()
+    );
+}
+
+fn resume_test_attrs(size: u64) -> FileAttributes {
+    let mut attrs = FileAttributes::empty();
+    attrs.set_regular(true);
+    attrs.size = Some(size);
+    attrs.mtime = Some(10);
+    attrs
+}
+
+#[tokio::test]
+async fn upload_resumes_at_confirmed_prefix_and_discards_unconfirmed_tail() {
+    let root = TestCacheDir::new();
+    fs::create_dir(root.path()).expect("source directory");
+    let bytes = content();
+    let prefix = DOWNLOAD_CHUNK_BYTES as usize;
+    let local = root.path().join("upload.bin");
+    fs::write(&local, &bytes).expect("upload source");
+    let mut transfer = SftpUploadRequest::from_local_file(
+        Uuid::new_v4(),
+        Uuid::new_v4(),
+        "/srv/upload.bin".into(),
+        local.clone(),
+        bytes.len() as u64,
+        Vec::new(),
+    )
+    .expect("upload request");
+    let store =
+        ResumeStore::open(root.path().join("journal"), "fixture-server".into()).expect("journal");
+    transfer.enable_resume(Some(&store));
+    let key = ResumeKey {
+        transfer_id: transfer.transfer_id,
+        direction: TransferDirection::Upload,
+        remote_path: transfer.remote_path.clone(),
+        local_path: local,
+    };
+    let mut record = store
+        .create(key, bytes.len() as u64)
+        .expect("plan record")
+        .expect("space");
+    record.offset = prefix as u64;
+    record.digest = Sha256::digest(&bytes[..prefix]).into();
+    record.local_source = Some(transfer.local_identity.as_ref().clone());
+    store.save(&record).expect("persist checkpoint");
+    let expected = bytes.clone();
+    let (client, mut peer) = tokio::io::duplex(128 * 1024);
+    let server = tokio::spawn(async move {
+        let mut remote = expected[..prefix].to_vec();
+        remote.extend_from_slice(b"unconfirmed tail");
+        let mut truncated = false;
+        let mut published = false;
+        while let Some(packet) = request(&mut peer).await {
+            let id = packet.get_request_id();
+            match packet {
+                Packet::Init(_) => reply(&mut peer, 2, &Version::new()).await,
+                Packet::Lstat(query) if query.path == "/srv/upload.bin" => {
+                    reply(
+                        &mut peer,
+                        101,
+                        &Status {
+                            id,
+                            status_code: StatusCode::NoSuchFile,
+                            error_message: String::new(),
+                            language_tag: String::new(),
+                        },
+                    )
+                    .await
+                }
+                Packet::Lstat(_) | Packet::Fstat(_) => {
+                    reply(
+                        &mut peer,
+                        105,
+                        &Attrs {
+                            id,
+                            attrs: resume_test_attrs(remote.len() as u64),
+                        },
+                    )
+                    .await
+                }
+                Packet::Open(open) => {
+                    assert!(!open.pflags.contains(OpenFlags::TRUNCATE));
+                    reply(
+                        &mut peer,
+                        102,
+                        &RemoteHandle {
+                            id,
+                            handle: "partial".into(),
+                        },
+                    )
+                    .await;
+                }
+                Packet::Read(read) => {
+                    assert!(read.offset as usize + read.len as usize <= prefix);
+                    data_reply(&mut peer, read, &remote).await;
+                }
+                Packet::FSetStat(set) => {
+                    assert_eq!(set.attrs.size, Some(prefix as u64));
+                    remote.truncate(prefix);
+                    truncated = true;
+                    reply(&mut peer, 101, &upload_test_status(id)).await;
+                }
+                Packet::Write(write) => {
+                    assert!(truncated);
+                    assert_eq!(write.offset as usize, remote.len());
+                    remote.extend_from_slice(&write.data);
+                    reply(&mut peer, 101, &upload_test_status(id)).await;
+                }
+                Packet::Close(_) => reply(&mut peer, 101, &upload_test_status(id)).await,
+                Packet::Rename(_) => {
+                    assert_eq!(remote, expected);
+                    published = true;
+                    reply(&mut peer, 101, &upload_test_status(id)).await;
+                }
+                packet => panic!("unexpected SFTP request: {packet:?}"),
+            }
+        }
+        assert!(published);
+    });
+    let (events, mut receiver) = mpsc::channel(SFTP_TRANSFER_EVENT_CAPACITY);
+    let outcome = timeout(
+        Duration::from_secs(5),
+        upload_initialized(client, &transfer, &TransferCancellation::new(), &events),
+    )
+    .await
+    .expect("upload settles")
+    .expect("resumed upload");
+    assert!(matches!(outcome, UploadOutcome::Published));
+    server.await.expect("server saw verified publication");
+    assert!(matches!(
+        receiver.try_recv(),
+        Ok(SftpTransferEvent::CheckingPartial { .. })
+    ));
+    assert!(
+        matches!(receiver.try_recv(), Ok(SftpTransferEvent::ContinuedFromPartial { offset, .. }) if offset == prefix as u64)
+    );
+    assert!(
+        store
+            .recoveries()
+            .expect("published record removed")
+            .is_empty()
+    );
+}

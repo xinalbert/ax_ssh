@@ -36,11 +36,6 @@ where
         .strip_suffix(&request.name)
         .unwrap_or("")
         .trim_end_matches('/');
-    let temporary = format!(
-        "{parent}/.{}.axssh-upload-{}",
-        request.name,
-        request.execution_id()
-    );
     if let Err(error) =
         ensure_remote_upload_directories(&session, &request.remote_directories, cancellation).await
     {
@@ -109,6 +104,53 @@ where
             return Err(error);
         }
     };
+    let checkpoint = if let Some(store) = &request.resume {
+        let (record, existing) = load_checkpoint(
+            store.clone(),
+            ResumeKey {
+                transfer_id: request.transfer_id,
+                direction: TransferDirection::Upload,
+                remote_path: request.remote_path.clone(),
+                local_path: request.local_path.clone(),
+            },
+            request.total_bytes,
+        )
+        .await?;
+        if let Some(mut record) = record {
+            if existing {
+                anyhow::ensure!(
+                    record.local_source.as_ref() == Some(request.local_identity.as_ref()),
+                    "SFTP upload source changed; restart the transfer"
+                );
+            }
+            record.local_source = Some(request.local_identity.as_ref().clone());
+            Some((store, record, existing))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    let partial_id = checkpoint
+        .as_ref()
+        .map_or(request.execution_id(), |(_, record, _)| record.partial_id);
+    let temporary = remote_upload_partial_path(parent, &request.name, partial_id);
+    let existing_checkpoint = checkpoint
+        .as_ref()
+        .is_some_and(|(_, _, existing)| *existing);
+    let remote_partial = if existing_checkpoint {
+        let attrs = await_step(
+            cancellation,
+            deadline,
+            REQUEST_TIMEOUT,
+            "inspecting partial upload",
+            session.lstat(temporary.clone()),
+        )
+        .await??;
+        Some(validate_regular_metadata(&attrs.attrs)?)
+    } else {
+        None
+    };
     let handle = await_step(
         cancellation,
         deadline,
@@ -116,16 +158,103 @@ where
         "opening remote upload file",
         session.open(
             temporary.clone(),
-            OpenFlags::CREATE | OpenFlags::EXCLUDE | OpenFlags::WRITE,
-            FileAttributes::default(),
+            if existing_checkpoint {
+                OpenFlags::READ | OpenFlags::WRITE
+            } else {
+                OpenFlags::CREATE | OpenFlags::EXCLUDE | OpenFlags::WRITE
+            },
+            if checkpoint.is_some() {
+                FileAttributes {
+                    permissions: Some(0o600),
+                    ..FileAttributes::empty()
+                }
+            } else {
+                FileAttributes::default()
+            },
         ),
     )
     .await?
     .context("cannot open remote upload file")?
     .handle;
-    let (mut chunks, mut reader) = start_local_upload_reader(request, cancellation);
-    let mut offset = 0_u64;
-    let mut next_offset = 0_u64;
+    let setup = async {
+        let Some((store, record, existing)) = checkpoint.as_ref() else {
+            return Ok(Sha256::new());
+        };
+        if !existing {
+            save_checkpoint(store, record).await?;
+            return Ok(Sha256::new());
+        }
+        let attrs = await_step(
+            cancellation,
+            deadline,
+            REQUEST_TIMEOUT,
+            "checking opened partial upload",
+            session.fstat(handle.clone()),
+        )
+        .await??;
+        let opened = validate_regular_metadata(&attrs.attrs)?;
+        anyhow::ensure!(
+            Some(opened) == remote_partial
+                && opened.size >= record.offset
+                && opened.size <= record.size,
+            "SFTP partial upload does not match its checkpoint"
+        );
+        send_transfer_state(
+            event_tx,
+            SftpTransferEvent::CheckingPartial {
+                transfer_id: request.transfer_id,
+                total_bytes: request.total_bytes,
+            },
+        )
+        .await?;
+        let hasher = verify_local_upload_prefix(request, record, cancellation).await?;
+        verify_remote_prefix(&session, &handle, record, cancellation, deadline).await?;
+        if opened.size > record.offset {
+            await_step(
+                cancellation,
+                deadline,
+                REQUEST_TIMEOUT,
+                "discarding unconfirmed upload tail",
+                session.fsetstat(
+                    handle.clone(),
+                    FileAttributes {
+                        size: Some(record.offset),
+                        ..FileAttributes::empty()
+                    },
+                ),
+            )
+            .await??;
+        }
+        send_transfer_state(
+            event_tx,
+            SftpTransferEvent::ContinuedFromPartial {
+                transfer_id: request.transfer_id,
+                offset: record.offset,
+                total_bytes: request.total_bytes,
+            },
+        )
+        .await?;
+        Ok::<_, anyhow::Error>(hasher)
+    }
+    .await;
+    let mut queued_hasher = match setup {
+        Ok(hasher) => hasher,
+        Err(error) => {
+            if let Err(close_error) = timeout(REQUEST_TIMEOUT, session.close(handle)).await {
+                debug!(%close_error, "cannot close unverified SFTP upload");
+            }
+            if !existing_checkpoint {
+                remove_upload_temporary(&session, &temporary).await;
+            }
+            close_upload_session(&session);
+            return Err(error);
+        }
+    };
+    let mut checkpoint = checkpoint.map(|(store, record, _)| (store, record));
+    let mut offset = checkpoint.as_ref().map_or(0, |(_, record)| record.offset);
+    let (mut chunks, mut reader) = start_local_upload_reader_at(request, cancellation, offset);
+    let mut next_offset = offset;
+    let mut confirmed_digest: [u8; 32] = queued_hasher.clone().finalize().into();
     let mut last_progress = Instant::now();
     let result = async {
         let mut requests = RequestWindow::new();
@@ -151,6 +280,10 @@ where
                     anyhow::bail!("local upload reader returned an invalid chunk size");
                 }
                 let chunk_offset = next_offset;
+                let digest = checkpoint.as_ref().map(|_| {
+                    queued_hasher.update(&chunk);
+                    queued_hasher.clone().finalize().into()
+                });
                 requests
                     .push(async move {
                         cancellation.limit(chunk_bytes).await?;
@@ -163,16 +296,24 @@ where
                         )
                         .await?
                         .context("cannot write remote upload")?;
-                        Ok(chunk_bytes)
+                        Ok((chunk_bytes, digest))
                     })
                     .await?;
                 next_offset += chunk_bytes;
             }
-            let chunk_bytes = requests
+            let (chunk_bytes, digest) = requests
                 .next()
                 .await
                 .context("SFTP write window ended unexpectedly")??;
             offset += chunk_bytes;
+            if let (Some((store, record)), Some(digest)) = (&mut checkpoint, digest) {
+                confirmed_digest = digest;
+                if offset - record.offset >= CHECKPOINT_INTERVAL {
+                    record.offset = offset;
+                    record.digest = confirmed_digest;
+                    save_checkpoint(store, record).await?;
+                }
+            }
             if last_progress.elapsed() >= PROGRESS_INTERVAL || offset == request.total_bytes {
                 send_progress(
                     event_tx,
@@ -188,6 +329,17 @@ where
         Ok::<_, anyhow::Error>(())
     }
     .await;
+    let preserve = cancellation.preserves_checkpoint()
+        || result.as_ref().is_err_and(transfer_error_is_recoverable);
+    if let Some((store, record)) = &mut checkpoint
+        && offset > record.offset
+    {
+        record.offset = offset;
+        record.digest = confirmed_digest;
+        if let Err(error) = save_checkpoint(store, record).await {
+            warn!(transfer_id = %request.transfer_id, %error, "could not advance SFTP upload checkpoint");
+        }
+    }
     // Dropping the receiver releases a blocked local reader on every error.
     drop(chunks);
     let reader_result = match timeout(WRITER_CLEANUP_TIMEOUT, &mut reader).await {
@@ -214,16 +366,25 @@ where
             let current = inspect_remote_upload_target(&session, &target_path).await?;
             cancellation.wait_until_running().await?;
             if overwrite {
-                if current != existing {
-                    anyhow::bail!("remote upload target changed before publication");
-                }
+                anyhow::ensure!(
+                    current == existing,
+                    "remote upload target changed before publication"
+                );
+            } else {
+                anyhow::ensure!(
+                    current.is_none(),
+                    "remote upload target appeared before publication"
+                );
+            }
+            if let Some((store, record)) = &mut checkpoint {
+                record.publishing = true;
+                save_checkpoint(store, record).await?;
+            }
+            if overwrite {
                 posix_rename_upload(&session, &temporary, &target_path)
                     .await
                     .context(UploadPublicationUncertain)
             } else {
-                if current.is_some() {
-                    anyhow::bail!("remote upload target appeared before publication");
-                }
                 timeout(
                     REQUEST_TIMEOUT,
                     session.rename(temporary.clone(), target_path.clone()),
@@ -238,12 +399,28 @@ where
         }
         .await;
         if let Err(error) = published {
-            remove_upload_temporary(&session, &temporary).await;
+            if !error.is::<UploadPublicationUncertain>()
+                && !cancellation.preserves_checkpoint()
+                && !transfer_error_is_recoverable(&error)
+            {
+                remove_upload_temporary(&session, &temporary).await;
+                if let Some((store, _)) = &checkpoint {
+                    remove_checkpoint(store, request.transfer_id).await;
+                }
+            }
             close_upload_session(&session);
             return Err(error);
         }
-    } else {
+        if let Some((store, _)) = &checkpoint {
+            remove_checkpoint(store, request.transfer_id).await;
+        }
+    } else if checkpoint.is_none()
+        || (!preserve && !result.as_ref().is_err_and(transfer_error_is_recoverable))
+    {
         remove_upload_temporary(&session, &temporary).await;
+        if let Some((store, _)) = &checkpoint {
+            remove_checkpoint(store, request.transfer_id).await;
+        }
     }
     close_upload_session(&session);
     result.map(|()| UploadOutcome::Published)
@@ -263,15 +440,24 @@ pub(super) async fn remove_upload_temporary(session: &RawSftpSession, path: &str
     }
 }
 
+#[cfg(test)]
 pub(super) fn start_local_upload_reader(
     request: &SftpUploadRequest,
     cancellation: &TransferCancellation,
+) -> (mpsc::Receiver<Result<Vec<u8>>>, JoinHandle<Result<()>>) {
+    start_local_upload_reader_at(request, cancellation, 0)
+}
+
+fn start_local_upload_reader_at(
+    request: &SftpUploadRequest,
+    cancellation: &TransferCancellation,
+    offset: u64,
 ) -> (mpsc::Receiver<Result<Vec<u8>>>, JoinHandle<Result<()>>) {
     let request = request.clone();
     let cancellation = cancellation.clone();
     let (sender, receiver) = mpsc::channel(WRITER_QUEUE_CAPACITY);
     let task = tokio::task::spawn_blocking(move || {
-        let result = read_local_upload_chunks(&request, &cancellation, &sender);
+        let result = read_local_upload_chunks(&request, &cancellation, &sender, offset);
         if let Err(error) = &result
             && sender
                 .blocking_send(Err(anyhow::anyhow!("{error:#}")))
@@ -308,6 +494,7 @@ pub(super) fn read_local_upload_chunks(
     request: &SftpUploadRequest,
     cancellation: &TransferCancellation,
     sender: &mpsc::Sender<Result<Vec<u8>>>,
+    mut offset: u64,
 ) -> Result<()> {
     let metadata =
         fs::symlink_metadata(&request.local_path).context("cannot inspect local upload source")?;
@@ -319,7 +506,8 @@ pub(super) fn read_local_upload_chunks(
     }
     let mut file =
         LocalFile::open(&request.local_path).context("cannot open local upload source")?;
-    let mut offset = 0;
+    file.seek(SeekFrom::Start(offset))
+        .context("cannot seek local upload source")?;
     while offset < request.total_bytes {
         if cancellation.is_cancelled() {
             return Err(cancelled_error());
@@ -335,6 +523,29 @@ pub(super) fn read_local_upload_chunks(
         offset += length as u64;
     }
     validate_local_upload_file(request, &file)
+}
+
+async fn verify_local_upload_prefix(
+    request: &SftpUploadRequest,
+    record: &ResumeRecord,
+    cancellation: &TransferCancellation,
+) -> Result<Sha256> {
+    let (request, record, cancellation) = (request.clone(), record.clone(), cancellation.clone());
+    tokio::task::spawn_blocking(move || {
+        let mut file = LocalFile::open(&request.local_path)
+            .context("cannot open upload source for checkpoint verification")?;
+        validate_local_upload_file(&request, &file)?;
+        let hasher = hash_local_prefix(&mut file, record.offset, &cancellation)?;
+        validate_local_upload_file(&request, &file)?;
+        let digest: [u8; 32] = hasher.clone().finalize().into();
+        anyhow::ensure!(
+            record.digest == digest,
+            "SFTP upload source prefix changed; restart the transfer"
+        );
+        Ok(hasher)
+    })
+    .await
+    .context("SFTP upload prefix verification task failed")?
 }
 
 pub(super) fn local_file_identity(metadata: &fs::Metadata) -> LocalFileIdentity {

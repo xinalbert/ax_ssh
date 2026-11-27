@@ -4,12 +4,12 @@ mod edit;
 mod transfer;
 
 pub use transfer::{
-    LocalDownloadFingerprint, SftpConflictChoice, SftpTransferAction, SftpTransferEvent,
-    cleanup_stale_sftp_open_cache, configure_global_upload_limit, snapshot_local_file_for_open,
-    transfer_name_matches_filter,
+    LocalDownloadFingerprint, SftpConflictChoice, SftpRecovery, SftpTransferAction,
+    SftpTransferEvent, abandon_sftp_recoveries, cleanup_stale_sftp_open_cache,
+    configure_global_upload_limit, snapshot_local_file_for_open, transfer_name_matches_filter,
 };
 pub(crate) use transfer::{
-    SFTP_TRANSFER_EVENT_CAPACITY, SFTP_TRANSFER_QUEUE_WINDOW, SftpDiscoveredDownload,
+    ResumeStore, SFTP_TRANSFER_EVENT_CAPACITY, SFTP_TRANSFER_QUEUE_WINDOW, SftpDiscoveredDownload,
     SftpDiscoverySummary, SftpDownloadHandle, SftpDownloadRequest, SftpDownloadRoot, SftpSession,
     SftpSessionCache, SftpUploadHandle, SftpUploadRequest, TransferCancellation,
     TransferRateLimiter, discover_download_requests, transfer_error_is_recoverable,

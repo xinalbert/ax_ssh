@@ -1426,6 +1426,47 @@ fn sftp_transfer_state_covers_progress_pause_resume_and_terminal_phases() {
 }
 
 #[test]
+fn sftp_recovery_rows_keep_checkpoint_progress_and_replay_intents() {
+    let mut sftp = SftpBrowserState::default();
+    let transfer_id = Uuid::new_v4();
+    let local_path = std::env::temp_dir().join(format!("axssh-resume-{transfer_id}.bin"));
+
+    sftp.offer_recovered_transfer(ax_ssh::sftp::SftpRecovery {
+        transfer_id,
+        remote_path: "/srv/report.bin".to_owned(),
+        local_path: local_path.clone(),
+        total_bytes: 100,
+        offset: 40,
+        upload: false,
+        publication_uncertain: false,
+    });
+
+    assert_eq!(sftp.transfers.len(), 1);
+    assert_eq!(sftp.transfers[0].phase, SftpTransferPhase::Paused);
+    assert_eq!(sftp.transfers[0].downloaded_bytes, 40);
+    assert_eq!(sftp.transfers[0].status, "Ready to resume");
+    assert!(sftp.transfer_intents().iter().any(|intent| matches!(
+        intent,
+        SftpTransferIntent::DownloadRoot { transfer_id: id, remote_path, .. }
+            if *id == transfer_id && remote_path == "/srv/report.bin"
+    )));
+
+    sftp.offer_recovered_transfer(ax_ssh::sftp::SftpRecovery {
+        transfer_id: Uuid::new_v4(),
+        remote_path: "/srv/uncertain.bin".to_owned(),
+        local_path,
+        total_bytes: 20,
+        offset: 10,
+        upload: true,
+        publication_uncertain: true,
+    });
+    assert_eq!(sftp.transfers[1].phase, SftpTransferPhase::Failed);
+    assert!(sftp.transfer_intents().iter().all(|intent| {
+        !matches!(intent, SftpTransferIntent::Upload { remote_path, .. } if remote_path == "/srv/uncertain.bin")
+    }));
+}
+
+#[test]
 fn sftp_transfer_rows_do_not_drop_entries_after_512() {
     let mut sftp = SftpBrowserState::default();
     for index in 0..520 {

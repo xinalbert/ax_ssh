@@ -84,7 +84,14 @@ pub(super) fn start_session_worker(
                 ax_ssh::sftp::configure_global_upload_limit(usize::from(
                     app.sessions.settings.sftp_transfers.global_uploads,
                 ));
-                SshSessionHandle::spawn_sftp(runtime, tab_id, profile.clone(), secret, policy)
+                SshSessionHandle::spawn_sftp_with_recovery(
+                    runtime,
+                    tab_id,
+                    profile.clone(),
+                    secret,
+                    policy,
+                    Some(app.config.sftp_recovery_path(tab_id)),
+                )
             }
         };
         let terminal = app

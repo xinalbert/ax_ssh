@@ -137,6 +137,13 @@ pub(super) fn spawn_session_monitor(
                         );
                     }
                 }
+                SshSessionEvent::SftpRecovery(recoveries) => {
+                    mutate_terminal_attempt(&state, tab_id, profile.id, attempt_id, |terminal| {
+                        for recovery in recoveries {
+                            terminal.sftp.offer_recovered_transfer(recovery);
+                        }
+                    });
+                }
                 SshSessionEvent::Connected => {
                     let Some(active) = mutate_terminal_attempt(
                         &state,
@@ -419,6 +426,13 @@ pub(super) fn spawn_session_monitor(
                                 terminal
                                     .sftp
                                     .start_transfer(transfer_id, remote_path, name, total_bytes);
+                            }
+                            SftpTransferEvent::CheckingPartial { transfer_id, total_bytes } => {
+                                terminal.sftp.update_transfer_progress(transfer_id, 0, total_bytes);
+                                terminal.sftp.set_transfer_status(transfer_id, "Checking saved transfer data…");
+                            }
+                            SftpTransferEvent::ContinuedFromPartial { transfer_id, offset, total_bytes } => {
+                                terminal.sftp.continue_at_checkpoint(transfer_id, offset, total_bytes);
                             }
                             SftpTransferEvent::Progress {
                                 transfer_id,

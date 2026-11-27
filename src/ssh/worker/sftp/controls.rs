@@ -67,6 +67,10 @@ impl TransferControls {
         control.is_cancelled() || !control.is_paused()
     }
 
+    pub(super) fn suspend(&self) {
+        self.page.suspend();
+    }
+
     pub(super) fn retain_live(&mut self, live: &HashSet<Uuid>) {
         self.entries
             .retain(|id, entry| !entry.submitted || live.contains(id));

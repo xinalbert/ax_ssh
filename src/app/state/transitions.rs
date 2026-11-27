@@ -130,6 +130,12 @@ pub(in crate::app) fn retire_session_attempt(
                 let preserve_sftp_transfers = terminal.reconnect_enabled;
                 let generation = terminal.reconnect_generation();
                 terminal.finish_reconnect_attempt(generation);
+                if terminal.is_sftp() && preserve_sftp_transfers {
+                    terminal
+                        .worker
+                        .as_ref()
+                        .map(TerminalWorker::preserve_sftp_transfers_on_shutdown);
+                }
                 terminal.worker = None;
                 terminal.clear_pending_clipboard_read();
                 terminal.media.cancel();

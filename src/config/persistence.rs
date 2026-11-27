@@ -75,6 +75,12 @@ impl ConfigStore {
         self.path.with_file_name("workspace.json")
     }
 
+    pub fn sftp_recovery_path(&self, tab_id: Uuid) -> PathBuf {
+        self.path
+            .with_file_name("sftp-recovery")
+            .join(tab_id.to_string())
+    }
+
     pub fn load_workspace(&self) -> Result<Option<WorkspaceSnapshot>> {
         let path = self.workspace_path();
         if !path.exists() {

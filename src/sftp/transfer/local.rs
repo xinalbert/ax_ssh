@@ -95,11 +95,29 @@ impl LocalDownloadTarget {
         self.prepare_with_choice(None, None, false)
     }
 
+    #[cfg(test)]
     fn prepare_with_choice(
         &self,
         choice: Option<SftpConflictChoice>,
         expected: Option<LocalDownloadFingerprint>,
         interactive: bool,
+    ) -> Result<LocalPendingFile> {
+        self.prepare_resumable(
+            choice,
+            expected,
+            interactive,
+            None,
+            &TransferCancellation::new(),
+        )
+    }
+
+    fn prepare_resumable(
+        &self,
+        choice: Option<SftpConflictChoice>,
+        expected: Option<LocalDownloadFingerprint>,
+        interactive: bool,
+        checkpoint: Option<(ResumeStore, ResumeRecord, bool)>,
+        cancellation: &TransferCancellation,
     ) -> Result<LocalPendingFile> {
         let root = fs::canonicalize(&self.root)
             .with_context(|| format!("cannot resolve local download directory {:?}", self.root))?;
@@ -160,8 +178,67 @@ impl LocalDownloadTarget {
             }
             (None, _) => None,
         };
-        let part_path = canonical_parent.join(format!(".{name}.axssh-{}.part", self.transfer_id));
-        let mut pending = LocalPendingFile::create(root, canonical_parent, part_path, final_path)?;
+        let part_id = checkpoint
+            .as_ref()
+            .map_or(self.transfer_id, |(_, record, _)| record.partial_id);
+        let part_path = canonical_parent.join(format!(".{name}.axssh-{part_id}.part"));
+        let mut pending = if let Some((store, mut record, existing)) = checkpoint {
+            let (mut pending, hasher) = if existing {
+                let before = fs::symlink_metadata(&part_path)
+                    .context("cannot inspect SFTP partial download")?;
+                anyhow::ensure!(
+                    before.is_file() && Some(PartialIdentity::of(&before)) == record.local_partial,
+                    "SFTP partial download was replaced; restart the transfer"
+                );
+                let mut options = OpenOptions::new();
+                options.read(true).write(true);
+                #[cfg(unix)]
+                {
+                    use std::os::unix::fs::OpenOptionsExt;
+                    options.custom_flags(libc::O_NOFOLLOW | libc::O_NONBLOCK);
+                }
+                let mut file = options
+                    .open(&part_path)
+                    .context("cannot reopen SFTP partial download")?;
+                let opened = file.metadata()?;
+                anyhow::ensure!(
+                    opened.is_file()
+                        && Some(PartialIdentity::of(&opened)) == record.local_partial
+                        && opened.len() >= record.offset,
+                    "SFTP partial download no longer matches its checkpoint"
+                );
+                let hasher = hash_local_prefix(&mut file, record.offset, cancellation)?;
+                let digest: [u8; 32] = hasher.clone().finalize().into();
+                anyhow::ensure!(
+                    digest == record.digest,
+                    "SFTP partial download contents changed; restart the transfer"
+                );
+                file.set_len(record.offset)
+                    .context("cannot discard unconfirmed local download tail")?;
+                (
+                    LocalPendingFile::from_file(
+                        file,
+                        root,
+                        canonical_parent,
+                        part_path,
+                        final_path,
+                        false,
+                    ),
+                    hasher,
+                )
+            } else {
+                let mut pending =
+                    LocalPendingFile::create(root, canonical_parent, part_path, final_path)?;
+                record.local_partial = Some(PartialIdentity::of(&pending.file_mut()?.metadata()?));
+                store.save(&record)?;
+                (pending, Sha256::new())
+            };
+            pending.checkpoint = Some((store, record, hasher));
+            pending.cleanup_path = None;
+            pending
+        } else {
+            LocalPendingFile::create(root, canonical_parent, part_path, final_path)?
+        };
         pending.overwrite = overwrite;
         pending.keep_both = (choice == Some(SftpConflictChoice::KeepBoth)).then(|| name.clone());
         Ok(pending)
@@ -177,6 +254,7 @@ pub(super) struct LocalPendingFile {
     cleanup_path: Option<PathBuf>,
     overwrite: Option<LocalDownloadFingerprint>,
     keep_both: Option<String>,
+    checkpoint: Option<(ResumeStore, ResumeRecord, Sha256)>,
 }
 
 impl LocalPendingFile {
@@ -196,16 +274,30 @@ impl LocalPendingFile {
         let file = options
             .open(&part_path)
             .with_context(|| format!("cannot create partial local download {part_path:?}"))?;
-        Ok(Self {
+        Ok(Self::from_file(
+            file, root, parent, part_path, final_path, true,
+        ))
+    }
+
+    fn from_file(
+        file: LocalFile,
+        root: PathBuf,
+        parent: PathBuf,
+        part_path: PathBuf,
+        final_path: PathBuf,
+        cleanup: bool,
+    ) -> Self {
+        Self {
             file: Some(file),
             root,
             parent,
             part_path: part_path.clone(),
             final_path,
-            cleanup_path: Some(part_path),
+            cleanup_path: cleanup.then_some(part_path),
             overwrite: None,
             keep_both: None,
-        })
+            checkpoint: None,
+        }
     }
 
     fn file_mut(&mut self) -> Result<&mut LocalFile> {
@@ -221,6 +313,15 @@ impl LocalPendingFile {
             .context("local download file was already finalized")?;
         file.flush().context("cannot flush local download")?;
         file.sync_all().context("cannot sync local download")?;
+        if let Some((store, record, _)) = &mut self.checkpoint {
+            let actual = fs::symlink_metadata(&self.part_path)?;
+            anyhow::ensure!(
+                actual.is_file() && Some(PartialIdentity::of(&actual)) == record.local_partial,
+                "SFTP partial download was replaced before publication"
+            );
+            record.publishing = true;
+            store.save(record)?;
+        }
         drop(file);
         verify_local_download_parent(&self.root, &self.parent)?;
         if let Some(expected) = &self.overwrite {
@@ -280,11 +381,13 @@ pub(super) async fn prepare_local_download(
     choice: Option<SftpConflictChoice>,
     expected: Option<LocalDownloadFingerprint>,
     interactive: bool,
+    checkpoint: Option<(ResumeStore, ResumeRecord, bool)>,
     cancellation: &TransferCancellation,
     deadline: Instant,
 ) -> Result<LocalPendingFile> {
+    let control = cancellation.clone();
     let task = tokio::task::spawn_blocking(move || {
-        target.prepare_with_choice(choice, expected, interactive)
+        target.prepare_resumable(choice, expected, interactive, checkpoint, &control)
     });
     await_step(
         cancellation,
@@ -306,15 +409,34 @@ pub(super) async fn prepare_local_directory(
         .context("local download directory task failed")?
 }
 
-pub(super) fn write_local_file(
+#[cfg(test)]
+fn write_local_file(
+    pending: LocalPendingFile,
+    chunks: mpsc::Receiver<Vec<u8>>,
+    expected_bytes: u64,
+    cancellation: &TransferCancellation,
+) -> Result<PathBuf> {
+    write_local_file_with_checkpoint(pending, chunks, expected_bytes, cancellation, None)
+}
+
+pub(super) fn write_local_file_with_checkpoint(
     mut pending: LocalPendingFile,
     mut chunks: mpsc::Receiver<Vec<u8>>,
     expected_bytes: u64,
     cancellation: &TransferCancellation,
+    disposition: Option<tokio::sync::oneshot::Receiver<DownloadDisposition>>,
 ) -> Result<PathBuf> {
-    let mut written = 0_u64;
+    let mut written = pending
+        .checkpoint
+        .as_ref()
+        .map_or(0, |(_, record, _)| record.offset);
     while let Some(chunk) = chunks.blocking_recv() {
         if cancellation.is_cancelled() {
+            if cancellation.preserves_checkpoint() {
+                pending.checkpoint_at(written, true)?;
+            } else {
+                pending.discard_checkpoint()?;
+            }
             return Err(cancelled_error());
         }
         written = written
@@ -327,18 +449,86 @@ pub(super) fn write_local_file(
             .file_mut()?
             .write_all(&chunk)
             .context("cannot write local download")?;
+        if let Some((_, _, hasher)) = &mut pending.checkpoint {
+            hasher.update(&chunk);
+            pending.checkpoint_at(written, false)?;
+        }
     }
     if cancellation.is_cancelled() {
+        if cancellation.preserves_checkpoint() {
+            pending.checkpoint_at(written, true)?;
+        } else {
+            pending.discard_checkpoint()?;
+        }
         return Err(cancelled_error());
     }
-    if written != expected_bytes {
+    let disposition = disposition.map_or(DownloadDisposition::Publish, |receiver| {
+        receiver
+            .blocking_recv()
+            .unwrap_or(DownloadDisposition::Retain)
+    });
+    if disposition == DownloadDisposition::Retain {
+        pending.checkpoint_at(written, true)?;
+    } else if disposition == DownloadDisposition::Discard {
+        pending.discard_checkpoint()?;
+    }
+    if written != expected_bytes || disposition != DownloadDisposition::Publish {
         return Err(IncompleteLocalWrite {
             expected: expected_bytes,
             actual: written,
         }
         .into());
     }
-    pending.finish()
+    pending.checkpoint_at(written, true)?;
+    let record = pending
+        .checkpoint
+        .as_ref()
+        .map(|(store, record, _)| (store.clone(), record.key.transfer_id));
+    let path = pending.finish()?;
+    if let Some((store, id)) = record
+        && let Err(error) = store.remove(id)
+    {
+        warn!(transfer_id = %id, %error, "cannot clear published SFTP download checkpoint");
+    }
+    Ok(path)
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum DownloadDisposition {
+    Publish,
+    Retain,
+    Discard,
+}
+
+impl LocalPendingFile {
+    fn checkpoint_at(&mut self, offset: u64, force: bool) -> Result<()> {
+        let Some((store, record, hasher)) = &mut self.checkpoint else {
+            return Ok(());
+        };
+        if offset == record.offset || (!force && offset - record.offset < CHECKPOINT_INTERVAL) {
+            return Ok(());
+        }
+        self.file
+            .as_ref()
+            .context("missing partial download file")?
+            .sync_data()
+            .context("cannot sync SFTP partial download")?;
+        record.offset = offset;
+        record.digest = hasher.clone().finalize().into();
+        store.save(record)
+    }
+
+    fn discard_checkpoint(&mut self) -> Result<()> {
+        if let Some((store, record, _)) = &self.checkpoint {
+            store.remove(record.key.transfer_id)?;
+            if fs::symlink_metadata(&self.part_path).is_ok_and(|metadata| {
+                metadata.is_file() && Some(PartialIdentity::of(&metadata)) == record.local_partial
+            }) {
+                self.cleanup_path = Some(self.part_path.clone());
+            }
+        }
+        Ok(())
+    }
 }
 
 pub(super) async fn await_local_writer_success(

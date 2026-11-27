@@ -110,6 +110,7 @@ pub(crate) struct TransferCancellation {
 
 struct TransferCancellationInner {
     cancelled: AtomicBool,
+    suspended: AtomicBool,
     paused: AtomicBool,
     notify: Arc<Notify>,
     parent: Option<TransferCancellation>,
@@ -125,6 +126,7 @@ impl TransferCancellation {
         Self {
             inner: Arc::new(TransferCancellationInner {
                 cancelled: AtomicBool::new(false),
+                suspended: AtomicBool::new(false),
                 paused: AtomicBool::new(false),
                 notify: Arc::new(Notify::new()),
                 parent: None,
@@ -141,6 +143,7 @@ impl TransferCancellation {
         Self {
             inner: Arc::new(TransferCancellationInner {
                 cancelled: AtomicBool::new(false),
+                suspended: AtomicBool::new(false),
                 paused: AtomicBool::new(false),
                 notify: self.inner.notify.clone(),
                 parent: Some(self.clone()),
@@ -159,6 +162,21 @@ impl TransferCancellation {
         }
     }
 
+    pub(crate) fn suspend(&self) {
+        self.inner.suspended.store(true, Ordering::Release);
+        self.inner.notify.notify_waiters();
+    }
+
+    pub(super) fn preserves_checkpoint(&self) -> bool {
+        !self.inner.cancelled.load(Ordering::Acquire)
+            && (self.inner.suspended.load(Ordering::Acquire)
+                || self
+                    .inner
+                    .parent
+                    .as_ref()
+                    .is_some_and(Self::preserves_checkpoint))
+    }
+
     pub(crate) fn pause(&self) {
         if !self.is_cancelled() && !self.inner.paused.swap(true, Ordering::AcqRel) {
             self.inner.notify.notify_waiters();
@@ -173,6 +191,7 @@ impl TransferCancellation {
 
     pub(crate) fn is_cancelled(&self) -> bool {
         self.inner.cancelled.load(Ordering::Acquire)
+            || self.inner.suspended.load(Ordering::Acquire)
             || self.inner.parent.as_ref().is_some_and(Self::is_cancelled)
     }
 

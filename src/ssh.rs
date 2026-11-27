@@ -758,6 +758,8 @@ pub struct SshConnection {
     handle: Arc<client::Handle<ClientHandler>>,
     sftp_slots: Arc<tokio::sync::Semaphore>,
     sftp_sessions: crate::sftp::SftpSessionCache,
+    sftp_resume_origin: String,
+    sftp_resume: Option<crate::sftp::ResumeStore>,
 }
 
 impl SshConnection {
@@ -802,7 +804,7 @@ impl SshConnection {
         let mut handle = connect_transport(
             profile,
             ssh.host_key_fingerprint.clone(),
-            observation,
+            observation.clone(),
             dispatchers,
         )
         .await?;
@@ -863,6 +865,16 @@ impl SshConnection {
             handle: Arc::new(handle),
             sftp_sessions: crate::sftp::SftpSessionCache::new(sftp_slots.clone()),
             sftp_slots,
+            sftp_resume_origin: serde_json::to_string(&(
+                profile.id,
+                &ssh.host,
+                ssh.port,
+                &ssh.username,
+                observation
+                    .get()?
+                    .context("authenticated SSH connection has no server fingerprint")?,
+            ))?,
+            sftp_resume: None,
         })
     }
 

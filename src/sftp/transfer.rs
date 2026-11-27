@@ -6,6 +6,7 @@ mod discovery;
 mod download;
 mod local;
 pub(super) mod pipeline;
+mod resume;
 mod session;
 mod upload;
 
@@ -14,6 +15,8 @@ pub use self::control::configure_global_upload_limit;
 pub(crate) use self::control::{TransferRateLimiter, UploadPermit};
 pub(crate) use self::discovery::discover_download_requests;
 pub use self::discovery::transfer_name_matches_filter;
+pub(crate) use self::resume::ResumeStore;
+pub use self::resume::{SftpRecovery, abandon_sftp_recoveries};
 pub(crate) use self::session::{SftpSession, SftpSessionCache};
 
 use self::cache::*;
@@ -22,6 +25,7 @@ use self::discovery::*;
 use self::download::*;
 use self::local::*;
 use self::pipeline::{REQUEST_WINDOW, RequestWindow};
+use self::resume::*;
 use self::upload::*;
 
 use std::collections::HashSet;
@@ -29,7 +33,7 @@ use std::error::Error as StdError;
 use std::fmt;
 use std::fs::{self, File as LocalFile, OpenOptions};
 use std::future::Future;
-use std::io::{self, Read, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Component, Path, PathBuf};
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex, OnceLock};
@@ -40,6 +44,7 @@ use directories::ProjectDirs;
 use russh_sftp::client::{Config, RawSftpSession};
 use russh_sftp::protocol::{File, FileAttributes, OpenFlags, Packet, StatusCode};
 use sha1::{Digest, Sha1};
+use sha2::Sha256;
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::runtime::Handle;
 use tokio::sync::{Mutex as AsyncMutex, Notify, mpsc};
@@ -164,6 +169,15 @@ impl LocalDownloadFingerprint {
 
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum SftpTransferEvent {
+    CheckingPartial {
+        transfer_id: Uuid,
+        total_bytes: u64,
+    },
+    ContinuedFromPartial {
+        transfer_id: Uuid,
+        offset: u64,
+        total_bytes: u64,
+    },
     ControlState {
         transfer_id: Uuid,
         paused: bool,
@@ -267,6 +281,7 @@ pub(crate) struct SftpUploadRequest {
     conflict_choice: Option<SftpConflictChoice>,
     expected_remote: Option<RemoteUploadFingerprint>,
     execution_id: Uuid,
+    resume: Option<ResumeStore>,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -275,7 +290,7 @@ struct RemoteUploadFingerprint {
     modified: Option<u32>,
 }
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct LocalFileIdentity {
     length: u64,
     modified: Option<SystemTime>,
@@ -337,6 +352,7 @@ impl SftpUploadRequest {
             conflict_choice: None,
             expected_remote: None,
             execution_id: Uuid::new_v4(),
+            resume: None,
         })
     }
 
@@ -375,6 +391,12 @@ impl SftpUploadRequest {
     pub(crate) fn execution_id(&self) -> Uuid {
         self.execution_id
     }
+
+    pub(crate) fn enable_resume(&mut self, store: Option<&ResumeStore>) {
+        if self.local_path.is_absolute() {
+            self.resume = store.cloned();
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -388,6 +410,7 @@ pub(crate) struct SftpDownloadRequest {
     conflict_batch: Option<Uuid>,
     conflict_choice: Option<SftpConflictChoice>,
     expected_local: Option<LocalDownloadFingerprint>,
+    resume: Option<ResumeStore>,
 }
 
 pub(crate) enum SftpDiscoveredDownload {
@@ -426,6 +449,7 @@ impl SftpDownloadRequest {
             conflict_batch: None,
             conflict_choice: None,
             expected_local: None,
+            resume: None,
         })
     }
 
@@ -449,6 +473,7 @@ impl SftpDownloadRequest {
             conflict_batch: None,
             conflict_choice: None,
             expected_local: None,
+            resume: None,
         })
     }
 
@@ -523,6 +548,12 @@ impl SftpDownloadRequest {
 
     pub(crate) fn set_expected_local(&mut self, local: LocalDownloadFingerprint) {
         self.expected_local = Some(local);
+    }
+
+    pub(crate) fn enable_resume(&mut self, store: Option<&ResumeStore>) {
+        if self.local_path().is_some_and(|path| path.is_absolute()) {
+            self.resume = store.cloned();
+        }
     }
 }
 
@@ -743,7 +774,7 @@ impl SftpUploadHandle {
     }
 
     pub(crate) async fn shutdown(mut self) -> Result<()> {
-        if !self.task.is_finished() {
+        if !self.task.is_finished() && !self.cancellation.is_cancelled() {
             self.cancellation.cancel();
         }
         match timeout(SHUTDOWN_TIMEOUT, &mut self.task).await {
@@ -811,7 +842,7 @@ impl SftpDownloadHandle {
     }
 
     pub(crate) async fn shutdown(mut self) -> Result<()> {
-        if !self.task.is_finished() {
+        if !self.task.is_finished() && !self.cancellation.is_cancelled() {
             self.cancellation.cancel();
         }
         match timeout(SHUTDOWN_TIMEOUT, &mut self.task).await {
@@ -988,7 +1019,9 @@ async fn run_download<F, Fut>(
         }
     };
     let terminal_event = match result {
-        Ok((local_path, _total_bytes)) if cancellation.is_cancelled() => {
+        Ok((local_path, _total_bytes))
+            if cancellation.is_cancelled() && !cancellation.preserves_checkpoint() =>
+        {
             if writes_local_target && !preserve_published {
                 remove_local_download_best_effort(
                     local_path,
@@ -1009,7 +1042,9 @@ async fn run_download<F, Fut>(
             local_path,
             total_bytes,
         },
-        Err(error) if is_cancelled(&error) => SftpTransferEvent::Cancelled { transfer_id },
+        Err(error) if is_cancelled(&error) && !cancellation.preserves_checkpoint() => {
+            SftpTransferEvent::Cancelled { transfer_id }
+        }
         Err(error) if error.is::<DownloadSkipped>() => SftpTransferEvent::Skipped { transfer_id },
         Err(error) if request.conflict_batch.is_some() && error.is::<LocalDownloadConflict>() => {
             match (
@@ -1037,7 +1072,8 @@ async fn run_download<F, Fut>(
         Err(error) => SftpTransferEvent::Failed {
             transfer_id,
             message: bounded_error(&error),
-            recoverable: transfer_error_is_recoverable(&error),
+            recoverable: transfer_error_is_recoverable(&error)
+                || cancellation.preserves_checkpoint(),
         },
     };
     let cleanup_path = match &terminal_event {
@@ -1056,10 +1092,13 @@ async fn run_download<F, Fut>(
         }
     };
     if !delivered && let Some(path) = cleanup_path {
-        if writes_local_target && !preserve_published {
+        if writes_local_target
+            && !(request.conflict_choice == Some(SftpConflictChoice::Overwrite)
+                || cancellation.preserves_checkpoint())
+        {
             remove_local_download_best_effort(path, "terminal transfer event was not delivered")
                 .await;
-        } else if !writes_local_target {
+        } else if !writes_local_target && !cancellation.preserves_checkpoint() {
             remove_cache_file_best_effort(path, "terminal transfer event was not delivered").await;
         }
     }
@@ -1105,8 +1144,7 @@ async fn run_upload<F, Fut, S>(
                 if let Err(error) = transfer_retry_delay(&cancellation, retries).await {
                     break Err(error);
                 }
-                // A previous remote temporary file may remain after channel loss.
-                // Never reuse it or publish unverified bytes from that execution.
+                // Checkpoints retain their own partial ID across attempts.
                 request.execution_id = Uuid::new_v4();
             }
             result => break result,
@@ -1123,7 +1161,9 @@ async fn run_upload<F, Fut, S>(
         Ok(UploadOutcome::Skipped) => SftpTransferEvent::Skipped {
             transfer_id: request.transfer_id,
         },
-        Ok(UploadOutcome::Published) if cancellation.is_cancelled() => {
+        Ok(UploadOutcome::Published)
+            if cancellation.is_cancelled() && !cancellation.preserves_checkpoint() =>
+        {
             SftpTransferEvent::Cancelled {
                 transfer_id: request.transfer_id,
             }
@@ -1133,13 +1173,16 @@ async fn run_upload<F, Fut, S>(
             local_path: PathBuf::new(),
             total_bytes,
         },
-        Err(error) if is_cancelled(&error) => SftpTransferEvent::Cancelled {
-            transfer_id: request.transfer_id,
-        },
+        Err(error) if is_cancelled(&error) && !cancellation.preserves_checkpoint() => {
+            SftpTransferEvent::Cancelled {
+                transfer_id: request.transfer_id,
+            }
+        }
         Err(error) => SftpTransferEvent::Failed {
             transfer_id: request.transfer_id,
             message: bounded_error(&error),
-            recoverable: transfer_error_is_recoverable(&error),
+            recoverable: transfer_error_is_recoverable(&error)
+                || cancellation.preserves_checkpoint(),
         },
     };
     let _ = send_transfer_state(&event_tx, terminal).await;
@@ -1215,7 +1258,7 @@ where
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct RemoteFileMetadata {
     size: u64,
     modified: Option<u32>,

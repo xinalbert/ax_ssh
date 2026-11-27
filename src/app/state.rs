@@ -496,6 +496,7 @@ pub(super) struct SftpTransferState {
     pub(super) total_bytes: u64,
     pub(super) bytes_per_second: u64,
     started_at: Option<Instant>,
+    progress_baseline: u64,
     pub(super) status: String,
     local_path: Option<PathBuf>,
     remote_path: Option<String>,

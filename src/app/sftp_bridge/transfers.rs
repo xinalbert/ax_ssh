@@ -213,6 +213,7 @@ pub(super) fn wire_transfers(
     let ui_for_transfer_cancel = ui.as_weak();
     let state_for_transfer_cancel = state.clone();
     let router_for_transfer_cancel = window_router.clone();
+    let runtime_for_transfer_cancel = runtime.clone();
     ui.on_cancel_sftp_transfer(move |id| {
         log_ui_action("sftp.cancel-transfer");
         sync_window_active(
@@ -229,7 +230,7 @@ pub(super) fn wire_transfers(
                     if !terminal.sftp.transfer_is_cancellable(transfer_id) {
                         anyhow::bail!("SFTP transfer is no longer cancellable");
                     }
-                    if !terminal.sftp.reconnect_replay_pending && terminal.connected {
+                    if terminal.connected {
                         terminal
                             .worker
                             .as_ref()
@@ -246,12 +247,22 @@ pub(super) fn wire_transfers(
                             "Cancelled".to_owned(),
                         );
                     }
-                    Ok(())
+                    Ok((!terminal.connected).then_some(transfer_id))
                 },
             )
         });
         match result {
-            Ok(()) => dispatch_active_snapshot(&ui_for_transfer_cancel, &state_for_transfer_cancel),
+            Ok(offline) => {
+                let ids = offline.into_iter().collect();
+                record_offline_cancellation(
+                    &runtime_for_transfer_cancel,
+                    &state_for_transfer_cancel,
+                    &router_for_transfer_cancel,
+                    window_id,
+                    ids,
+                );
+                dispatch_active_snapshot(&ui_for_transfer_cancel, &state_for_transfer_cancel);
+            }
             Err(error) => set_status(
                 &ui_for_transfer_cancel,
                 &format!("Cannot cancel SFTP transfer: {error}"),
@@ -296,7 +307,13 @@ pub(super) fn wire_transfers(
         }
     });
 
-    wire_selected_transfer_actions(ui, state.clone(), window_router.clone(), window_id);
+    wire_selected_transfer_actions(
+        ui,
+        state.clone(),
+        runtime.clone(),
+        window_router.clone(),
+        window_id,
+    );
 
     let ui_for_reveal_transfer = ui.as_weak();
     let state_for_reveal_transfer = state.clone();
@@ -1086,6 +1103,7 @@ pub(super) fn queue_local_upload_paths(
 pub(super) fn wire_selected_transfer_actions(
     ui: &AppWindow,
     state: Arc<Mutex<AppState>>,
+    runtime: Handle,
     window_router: WindowRouter,
     window_id: Uuid,
 ) {
@@ -1097,13 +1115,24 @@ pub(super) fn wire_selected_transfer_actions(
         let state = state.clone();
         let router = window_router.clone();
         let weak = ui.as_weak();
+        let runtime = runtime.clone();
         let callback = move || {
             sync_window_active(&router, window_id, &state);
             let result = with_window_sftp_transfer_intent(&state, &router, window_id, |terminal| {
-                request_all_transfer_actions(terminal, action)
+                let offline_ids =
+                    if action == ax_ssh::sftp::SftpTransferAction::Cancel && !terminal.connected {
+                        cancellable_transfer_ids(terminal)
+                    } else {
+                        Vec::new()
+                    };
+                request_all_transfer_actions(terminal, action)?;
+                Ok(offline_ids)
             });
             match result {
-                Ok(()) => dispatch_active_snapshot(&weak, &state),
+                Ok(offline_ids) => {
+                    record_offline_cancellation(&runtime, &state, &router, window_id, offline_ids);
+                    dispatch_active_snapshot(&weak, &state);
+                }
                 Err(error) => set_status(&weak, &format!("Cannot control SFTP transfers: {error}")),
             }
         };
@@ -1188,19 +1217,61 @@ pub(super) fn wire_selected_transfer_actions(
             window_id,
             |terminal| {
                 let transfer_ids = terminal.sftp.selected_transfer_ids_for_active_page();
+                let offline_ids = if terminal.connected {
+                    Vec::new()
+                } else {
+                    transfer_ids.clone()
+                };
                 request_selected_transfer_actions(
                     terminal,
                     transfer_ids,
                     SelectedTransferAction::Cancel,
-                )
+                )?;
+                Ok(offline_ids)
             },
         );
         match result {
-            Ok(()) => dispatch_active_snapshot(&ui_for_cancel, &state_for_cancel),
+            Ok(offline_ids) => {
+                record_offline_cancellation(
+                    &runtime,
+                    &state_for_cancel,
+                    &router_for_cancel,
+                    window_id,
+                    offline_ids,
+                );
+                dispatch_active_snapshot(&ui_for_cancel, &state_for_cancel);
+            }
             Err(error) => set_status(
                 &ui_for_cancel,
                 &format!("Cannot cancel selected SFTP transfers: {error}"),
             ),
+        }
+    });
+}
+
+fn record_offline_cancellation(
+    runtime: &Handle,
+    state: &Arc<Mutex<AppState>>,
+    router: &WindowRouter,
+    window_id: Uuid,
+    ids: Vec<Uuid>,
+) {
+    if ids.is_empty() {
+        return;
+    }
+    let Some(tab_id) = router.active_tab(window_id) else {
+        return;
+    };
+    let Some(directory) = state
+        .lock()
+        .ok()
+        .map(|app| app.config.sftp_recovery_path(tab_id))
+    else {
+        return;
+    };
+    runtime.spawn_blocking(move || {
+        if let Err(error) = ax_ssh::sftp::abandon_sftp_recoveries(&directory, &ids) {
+            warn!(%error, "cannot record cancellation of SFTP checkpoints");
         }
     });
 }
@@ -1220,9 +1291,7 @@ pub(super) fn request_selected_transfer_actions(
     if transfer_ids.is_empty() {
         anyhow::bail!("no selected transfers support this action");
     }
-    if matches!(action, SelectedTransferAction::Cancel)
-        && (!terminal.connected || terminal.sftp.reconnect_replay_pending)
-    {
+    if matches!(action, SelectedTransferAction::Cancel) && !terminal.connected {
         for transfer_id in transfer_ids {
             let _ = terminal.sftp.request_transfer_cancel(transfer_id);
             terminal.sftp.finish_transfer(
@@ -1348,14 +1417,9 @@ pub(super) fn request_all_transfer_actions(
     action: ax_ssh::sftp::SftpTransferAction,
 ) -> Result<()> {
     use ax_ssh::sftp::SftpTransferAction;
-    let ids = terminal
-        .sftp
-        .transfers
-        .iter()
-        .filter(|transfer| transfer.phase.cancellable())
-        .map(|transfer| transfer.id)
-        .collect::<Vec<_>>();
-    let connected = terminal.connected && !terminal.sftp.reconnect_replay_pending;
+    let ids = cancellable_transfer_ids(terminal);
+    let connected = terminal.connected
+        && (!terminal.sftp.reconnect_replay_pending || action == SftpTransferAction::Cancel);
     if connected {
         terminal
             .worker
@@ -1393,6 +1457,16 @@ pub(super) fn request_all_transfer_actions(
         }
     }
     Ok(())
+}
+
+fn cancellable_transfer_ids(terminal: &TerminalTabState) -> Vec<Uuid> {
+    terminal
+        .sftp
+        .transfers
+        .iter()
+        .filter(|transfer| transfer.phase.cancellable())
+        .map(|transfer| transfer.id)
+        .collect()
 }
 
 #[cfg(test)]

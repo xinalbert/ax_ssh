@@ -253,6 +253,82 @@ impl SftpBrowserState {
         self.transfer_intent_revision = self.transfer_intent_revision.wrapping_add(1);
     }
 
+    pub(in crate::app) fn offer_recovered_transfer(
+        &mut self,
+        recovery: ax_ssh::sftp::SftpRecovery,
+    ) {
+        let id = recovery.transfer_id;
+        if self.transfer_intents.contains_key(&id) || self.transfers.iter().any(|row| row.id == id)
+        {
+            return;
+        }
+        let Some(parent) = recovery.local_path.parent().map(PathBuf::from) else {
+            return;
+        };
+        let Some(name) = recovery.local_path.file_name() else {
+            return;
+        };
+        if self
+            .queue_transfer_event(
+                id,
+                name.to_string_lossy().into_owned(),
+                recovery.total_bytes,
+                recovery.upload,
+                Some(recovery.local_path.clone()),
+                Some(recovery.remote_path.clone()),
+            )
+            .is_err()
+        {
+            return;
+        }
+        if recovery.publication_uncertain {
+            self.finish_transfer(
+                id,
+                SftpTransferPhase::Failed,
+                "Publication was interrupted. Check the destination before retrying.".into(),
+            );
+            return;
+        }
+        let batch_id = Uuid::new_v4();
+        if recovery.upload {
+            self.register_upload_intent(
+                id,
+                batch_id,
+                recovery.remote_path,
+                recovery.local_path,
+                recovery.total_bytes,
+                Vec::new(),
+            );
+        } else {
+            self.register_download_root_intent(
+                id,
+                Some(batch_id),
+                recovery.remote_path,
+                parent,
+                Vec::new(),
+                false,
+            );
+        }
+        self.apply_transfer_control(id, true, self.transfers_paused);
+        self.update_transfer_progress(id, recovery.offset, recovery.total_bytes);
+        if let Some(row) = self.transfers.iter_mut().find(|row| row.id == id) {
+            row.status = "Ready to resume".to_owned();
+        }
+        self.reconnect_replay_pending = true;
+    }
+
+    pub(in crate::app) fn continue_at_checkpoint(&mut self, id: Uuid, offset: u64, total: u64) {
+        self.update_transfer_progress(id, offset, total);
+        if let Some(transfer) = self.transfers.iter_mut().find(|transfer| transfer.id == id)
+            && transfer.phase == transfer.direction.active_phase()
+        {
+            transfer.started_at = Some(Instant::now());
+            transfer.progress_baseline = offset;
+            transfer.bytes_per_second = 0;
+            transfer.status = format!("Resumed at {offset} bytes");
+        }
+    }
+
     pub(in crate::app) fn remove_transfer_intent(&mut self, transfer_id: Uuid) {
         let removed = self.transfer_intents.remove(&transfer_id).is_some();
         self.transfer_intent_order.retain(|id| *id != transfer_id);
@@ -538,6 +614,7 @@ impl SftpBrowserState {
             total_bytes,
             bytes_per_second: 0,
             started_at: None,
+            progress_baseline: 0,
             status: if self.transfers_paused {
                 "Paused"
             } else {
@@ -604,6 +681,7 @@ impl SftpBrowserState {
         }
         transfer.total_bytes = total_bytes;
         transfer.started_at = Some(Instant::now());
+        transfer.progress_baseline = 0;
     }
 
     pub(in crate::app) fn record_transfer_conflict(&mut self, conflict: PendingSftpConflict) {
@@ -709,8 +787,12 @@ impl SftpBrowserState {
         if let Some(started_at) = transfer.started_at {
             let elapsed = started_at.elapsed().as_secs_f64();
             if elapsed > 0.0 {
-                transfer.bytes_per_second =
-                    (transfer.downloaded_bytes as f64 / elapsed).min(u64::MAX as f64) as u64;
+                transfer.bytes_per_second = (transfer
+                    .downloaded_bytes
+                    .saturating_sub(transfer.progress_baseline)
+                    as f64
+                    / elapsed)
+                    .min(u64::MAX as f64) as u64;
             }
         }
         transfer.status = if total_bytes == 0 {
@@ -890,7 +972,9 @@ impl SftpBrowserState {
             }
             transfer.phase = SftpTransferPhase::Paused;
             transfer.bytes_per_second = 0;
-            transfer.status = "Paused".to_owned();
+            if transfer.status != "Ready to resume" {
+                transfer.status = "Paused".to_owned();
+            }
         } else if matches!(
             transfer.phase,
             SftpTransferPhase::Paused | SftpTransferPhase::Pausing | SftpTransferPhase::Resuming

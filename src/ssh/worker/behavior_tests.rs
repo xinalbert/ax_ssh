@@ -549,6 +549,8 @@ impl Fixture {
             handle: Arc::new(transport),
             sftp_sessions: crate::sftp::SftpSessionCache::new(sftp_slots.clone()),
             sftp_slots,
+            sftp_resume_origin: String::new(),
+            sftp_resume: None,
         }
     }
 
@@ -570,6 +572,7 @@ impl Fixture {
             event_tx,
             policy,
             latency_rx,
+            Arc::new(AtomicBool::new(false)),
         ));
         (
             SshSessionHandle {
@@ -579,6 +582,7 @@ impl Fixture {
                 latency_foreground_tx,
                 next_input_sequence: AtomicU64::new(1),
                 upload_queue_slots: Arc::new(Semaphore::new(SFTP_TRANSFER_QUEUE_WINDOW)),
+                preserve_sftp_transfers: Arc::new(AtomicBool::new(false)),
                 task,
             },
             event_rx,

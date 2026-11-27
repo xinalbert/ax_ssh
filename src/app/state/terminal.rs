@@ -536,6 +536,12 @@ impl TerminalBackend {
 }
 
 impl TerminalWorker {
+    pub(in crate::app) fn preserve_sftp_transfers_on_shutdown(&self) {
+        if let Self::Ssh(worker) = self {
+            worker.preserve_sftp_transfers_on_shutdown();
+        }
+    }
+
     pub(in crate::app) fn sftp_download_submitter(
         &self,
     ) -> Result<ax_ssh::ssh::SftpDownloadSubmitter> {

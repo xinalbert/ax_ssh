@@ -308,6 +308,7 @@ enum PendingSftpCancellation {
     Missing,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub(super) async fn run_sftp_session(
     connection: SshConnection,
     session_id: Uuid,
@@ -316,6 +317,7 @@ pub(super) async fn run_sftp_session(
     event_tx: mpsc::Sender<SshSessionEvent>,
     policy: crate::config::SftpTransferPolicy,
     latency_foreground_rx: watch::Receiver<bool>,
+    preserve_sftp_transfers: Arc<AtomicBool>,
 ) {
     let per_tab_limit =
         usize::from(policy.per_tab_transfers).min(super::super::sftp_stream::TRANSFER_CHANNELS);
@@ -547,6 +549,8 @@ pub(super) async fn run_sftp_session(
                         {
                             continue;
                         }
+                        let mut request = request;
+                        request.enable_resume(connection.sftp_resume.as_ref());
                         let transfer_id = request.transfer_id();
                         if transfer_id != root_transfer_id {
                             child_roots.insert(transfer_id, root_transfer_id);
@@ -833,7 +837,8 @@ pub(super) async fn run_sftp_session(
                             )
                             .await;
                             Ok(())
-                        } else if let Some(request) = single_file_request {
+                        } else if let Some(mut request) = single_file_request {
+                            request.enable_resume(connection.sftp_resume.as_ref());
                             if available_sftp_transfer_slots(&transfers, &pending_by_transfer, &queued_requests)
                                 <= download_conflicts.pending_len() {
                                 send_sftp_transfer_event(&event_tx, SftpTransferEvent::Failed {
@@ -922,6 +927,7 @@ pub(super) async fn run_sftp_session(
                         Ok(())
                     }
                     Some(SshCommand::OpenSftpUpload { mut request, queue_slot, accepted }) => {
+                        request.enable_resume(connection.sftp_resume.as_ref());
                         let transfer_id = request.transfer_id();
                         let control = controls.register(transfer_id, None);
                         if control.is_cancelled() {
@@ -1003,6 +1009,9 @@ pub(super) async fn run_sftp_session(
                     }
                     Some(SshCommand::CancelSftpTransfer { transfer_id }) => {
                         controls.apply(SftpTransferAction::Cancel, false, vec![transfer_id]);
+                        if !transfers.iter().any(|task| task.transfer_id() == transfer_id) {
+                            discard_transfer_checkpoints(&connection, &writes, vec![transfer_id]).await;
+                        }
                         if directory_transfers.contains_key(&transfer_id) {
                             cancel_directory_download(
                                 transfer_id,
@@ -1203,6 +1212,8 @@ pub(super) async fn run_sftp_session(
                     SftpTransferEvent::Queued { .. }
                     | SftpTransferEvent::Started { .. }
                     | SftpTransferEvent::Progress { .. }
+                    | SftpTransferEvent::CheckingPartial { .. }
+                    | SftpTransferEvent::ContinuedFromPartial { .. }
                     | SftpTransferEvent::ControlState { .. }
                     | SftpTransferEvent::Paused { .. }
                     | SftpTransferEvent::Resumed { .. }
@@ -1225,6 +1236,12 @@ pub(super) async fn run_sftp_session(
                     if let Err(error) = transfer.shutdown().await {
                         warn!(%session_id, %transfer_id, %error, "failed to join completed SFTP transfer");
                     }
+                }
+                if let SftpTransferEvent::Cancelled { transfer_id }
+                    | SftpTransferEvent::Skipped { transfer_id }
+                    | SftpTransferEvent::Failed { transfer_id, recoverable: false, .. } = &transfer_event
+                {
+                    discard_transfer_checkpoints(&connection, &writes, vec![*transfer_id]).await;
                 }
                 let mut forward_event = true;
                 if let SftpTransferEvent::DownloadConflict { transfer_id, local, .. } = &transfer_event {
@@ -1300,6 +1317,18 @@ pub(super) async fn run_sftp_session(
                     break;
                 }
                 if initial_page_ready {
+                    if let Some(store) = connection.sftp_resume.clone() {
+                        match tokio::task::spawn_blocking(move || Ok::<_, anyhow::Error>((store.recoveries()?, store.abandoned_ids()?))).await {
+                            Ok(Ok((recoveries, abandoned))) => {
+                                discard_transfer_checkpoints(&connection, &writes, abandoned).await;
+                                if !recoveries.is_empty() && !send_event(&event_tx, SshSessionEvent::SftpRecovery(recoveries), session_id).await {
+                                    break;
+                                }
+                            }
+                            Ok(Err(error)) => warn!(%error, "cannot load SFTP recovery records"),
+                            Err(error) => warn!(%error, "SFTP recovery record task failed"),
+                        }
+                    }
                     if !send_event(&event_tx, SshSessionEvent::Connected, session_id).await {
                         break;
                     }
@@ -1368,7 +1397,11 @@ pub(super) async fn run_sftp_session(
             _ => {}
         }
     }
-    controls.apply(SftpTransferAction::Cancel, true, Vec::new());
+    if connection.is_closed() || preserve_sftp_transfers.load(Ordering::Acquire) {
+        controls.suspend();
+    } else {
+        controls.apply(SftpTransferAction::Cancel, true, Vec::new());
+    }
     shutdown_pending_sftp_discoveries(&mut discoveries, &mut discovery_by_transfer, session_id)
         .await;
     release_probes.abort_all();
@@ -1384,6 +1417,47 @@ pub(super) async fn run_sftp_session(
     disconnect_sftp_connection(&connection, session_id).await;
     if !failed {
         send_event(&event_tx, SshSessionEvent::Disconnected, session_id).await;
+    }
+}
+
+async fn discard_transfer_checkpoints(
+    connection: &SshConnection,
+    writes: &SftpWriteWorker,
+    ids: Vec<Uuid>,
+) {
+    let Some(store) = connection.sftp_resume.clone() else {
+        return;
+    };
+    if ids.is_empty() {
+        return;
+    }
+    match tokio::task::spawn_blocking(move || {
+        ids.into_iter()
+            .filter_map(|id| match store.discard(id) {
+                Ok(path) => path,
+                Err(error) => {
+                    warn!(transfer_id = %id, %error, "cannot discard SFTP checkpoint");
+                    None
+                }
+            })
+            .collect::<Vec<_>>()
+    })
+    .await
+    {
+        Ok(paths) => {
+            for path in paths {
+                if let Err(error) = writes.request(
+                    Uuid::new_v4(),
+                    SftpWriteOperation::Remove {
+                        path,
+                        directory: false,
+                    },
+                ) {
+                    warn!(%error, "cannot queue cleanup of a partial SFTP upload");
+                }
+            }
+        }
+        Err(error) => warn!(%error, "SFTP checkpoint cleanup task failed"),
     }
 }
 

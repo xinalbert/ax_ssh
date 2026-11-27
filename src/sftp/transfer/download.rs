@@ -103,23 +103,82 @@ pub(super) async fn download_open_local_handle(
         .clone()
         .context("local SFTP download is missing its target")?;
     let preserve_published = request.conflict_choice == Some(SftpConflictChoice::Overwrite);
+    let checkpoint = if let Some(store) = &request.resume {
+        let (record, existing) = load_checkpoint(
+            store.clone(),
+            ResumeKey {
+                transfer_id: request.transfer_id,
+                direction: TransferDirection::Download,
+                remote_path: request.remote_path.clone(),
+                local_path: target.final_path(),
+            },
+            initial.size,
+        )
+        .await?;
+        if let Some(mut record) = record {
+            if existing {
+                anyhow::ensure!(
+                    record
+                        .remote_source
+                        .is_some_and(|source| source.size == initial.size),
+                    "SFTP download source size changed; restart the transfer"
+                );
+                if record.offset != 0 {
+                    send_transfer_state(
+                        event_tx,
+                        SftpTransferEvent::CheckingPartial {
+                            transfer_id: request.transfer_id,
+                            total_bytes: initial.size,
+                        },
+                    )
+                    .await?;
+                    verify_remote_prefix(session, handle, &record, cancellation, deadline).await?;
+                }
+            }
+            record.remote_source = Some(initial);
+            Some((store.clone(), record, existing))
+        } else {
+            None
+        }
+    } else {
+        None
+    };
+    let offset = checkpoint
+        .as_ref()
+        .map_or(0, |(_, record, _)| record.offset);
     let pending = prepare_local_download(
         target,
         request.conflict_choice,
         request.expected_local.clone(),
         request.conflict_batch.is_some(),
+        checkpoint,
         cancellation,
         deadline,
     )
     .await?;
+    if offset != 0 {
+        send_transfer_state(
+            event_tx,
+            SftpTransferEvent::ContinuedFromPartial {
+                transfer_id: request.transfer_id,
+                offset,
+                total_bytes: initial.size,
+            },
+        )
+        .await?;
+    }
     let (chunk_tx, chunk_rx) = mpsc::channel(WRITER_QUEUE_CAPACITY);
-    // Abort only this writer on an invalid stream. User cancellation belongs
-    // to the transfer and must remain independent of an attempt's cleanup.
-    let writer_abort = TransferCancellation::new();
-    let writer_cancel = writer_abort.clone();
+    let (disposition_tx, disposition_rx) = tokio::sync::oneshot::channel();
+    let writer_cancel = cancellation.clone();
     let expected_bytes = initial.size;
     let mut writer = tokio::task::spawn_blocking(move || {
-        write_local_file(pending, chunk_rx, expected_bytes, &writer_cancel)
+        write_local_file_with_checkpoint(
+            pending,
+            chunk_rx,
+            expected_bytes,
+            &writer_cancel,
+            Some(disposition_rx),
+        )
     });
 
     let stream_result = stream_remote_file(
@@ -128,16 +187,24 @@ pub(super) async fn download_open_local_handle(
         &request.remote_path,
         request.transfer_id,
         initial,
+        offset,
         cancellation,
         event_tx,
         &chunk_tx,
         deadline,
     )
     .await;
-    if stream_result.is_err() {
-        // A full byte count is insufficient: EOF and metadata validation must
-        // also succeed before the writer is allowed to publish its part file.
-        writer_abort.cancel();
+    let disposition = match &stream_result {
+        Ok(()) => DownloadDisposition::Publish,
+        Err(error)
+            if transfer_error_is_recoverable(error) || cancellation.preserves_checkpoint() =>
+        {
+            DownloadDisposition::Retain
+        }
+        Err(_) => DownloadDisposition::Discard,
+    };
+    if disposition_tx.send(disposition).is_err() {
+        debug!(transfer_id = %request.transfer_id, "SFTP local writer ended before stream disposition");
     }
     drop(chunk_tx);
 
@@ -301,6 +368,7 @@ pub(super) async fn download_open_handle(
         &request.remote_path,
         request.transfer_id,
         initial,
+        0,
         cancellation,
         event_tx,
         &chunk_tx,
@@ -339,14 +407,15 @@ pub(super) async fn stream_remote_file(
     remote_path: &str,
     transfer_id: Uuid,
     expected: RemoteFileMetadata,
+    offset: u64,
     cancellation: &TransferCancellation,
     event_tx: &mpsc::Sender<SftpTransferEvent>,
     chunk_tx: &mpsc::Sender<Vec<u8>>,
     deadline: Instant,
 ) -> Result<()> {
     let started = Instant::now();
-    let mut downloaded_bytes = 0_u64;
-    let mut next_offset = 0_u64;
+    let mut downloaded_bytes = offset;
+    let mut next_offset = offset;
     let mut requests = RequestWindow::new();
     let mut last_progress = Instant::now();
     while downloaded_bytes < expected.size {
@@ -391,7 +460,7 @@ pub(super) async fn stream_remote_file(
             .await
             .context("SFTP read window ended unexpectedly")??;
         let chunk_bytes = data.len() as u64;
-        if downloaded_bytes == 0 {
+        if downloaded_bytes == offset {
             tracing::info!(%transfer_id, elapsed_ms = started.elapsed().as_millis(), "SFTP download first data received");
         }
         await_step(
@@ -452,7 +521,7 @@ pub(super) async fn stream_remote_file(
 }
 
 pub(super) async fn read_remote_chunk(
-    session: &SftpSession,
+    session: &RawSftpSession,
     handle: &str,
     offset: u64,
     length: u32,
