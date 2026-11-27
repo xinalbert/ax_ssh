@@ -673,11 +673,20 @@ msgstr "インターフェース"
 msgid "Identity"
 msgstr "識別情報"
 
+msgid "Import"
+msgstr "インポート"
+
+msgid "Import OpenSSH Configuration"
+msgstr "OpenSSH 設定をインポート"
+
 msgid "Import from Clipboard"
 msgstr "クリップボードからインポート"
 
 msgid "Import from Clipboard shortcut"
 msgstr "クリップボードからインポートするショートカット"
+
+msgid "Import preview"
+msgstr "インポートのプレビュー"
 
 msgid "In the macOS Keychain dialog, choose Always Allow to keep access after restarting this version of AxSSH."
 msgstr "macOSのキーチェーンダイアログで「常に許可」を選ぶと、このバージョンのAxSSHを再起動した後もアクセスを維持できます。"
@@ -973,6 +982,9 @@ msgstr "保存した接続を開く"
 msgid "Open the AxSSH issue tracker"
 msgstr "AxSSHの不具合報告ページを開く"
 
+msgid "OpenSSH configuration path"
+msgstr "OpenSSH 設定ファイルのパス"
+
 msgid "Option acts as Meta"
 msgstr "OptionをMetaとして使用"
 
@@ -1059,6 +1071,9 @@ msgstr "ポート転送"
 
 msgid "Positive status indicators"
 msgstr "正常状態の表示"
+
+msgid "Preview"
+msgstr "プレビュー"
 
 msgid "Previous Tab"
 msgstr "前のタブ"

@@ -175,6 +175,7 @@ export component DesktopMenuTitlebar inherits Rectangle {
                     MenuActions.item("save-workspace", @tr("Save Workspace"), root.actions-enabled),
                     MenuActions.separator(),
                     MenuActions.item("import-sessions", @tr("Import from Clipboard"), root.actions-enabled),
+                    MenuActions.item("openssh-import", @tr("Import OpenSSH Configuration"), root.actions-enabled),
                     MenuActions.item("export-selected", @tr("Export Selected to Clipboard"), root.actions-enabled),
                 ];
                 submenu-id: "open-recent";

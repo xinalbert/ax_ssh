@@ -39,6 +39,7 @@ pub(in crate::app) fn wire_session_management(
     runtime: Handle,
     persistence: Arc<PersistenceCoordinator>,
 ) {
+    wire_openssh_import(ui, state.clone(), runtime.clone(), persistence.clone());
     let ui_for_duplicate = ui.as_weak();
     let state_for_duplicate = state.clone();
     let runtime_for_duplicate = runtime.clone();
@@ -219,6 +220,124 @@ pub(in crate::app) fn wire_session_management(
             }
         });
     });
+}
+
+fn wire_openssh_import(
+    ui: &AppWindow,
+    state: Arc<Mutex<AppState>>,
+    runtime: Handle,
+    persistence: Arc<PersistenceCoordinator>,
+) {
+    let weak = ui.as_weak();
+    // The callback and the completion both run on the UI thread. The mutex
+    // lets the completion carry this state through invoke_from_event_loop.
+    let pending = Arc::new(Mutex::new(OpenSshPreview::default()));
+    ui.on_openssh_import_action(move |action, path, request| {
+        let Ok(mut preview) = pending.lock() else {
+            return;
+        };
+        match action.as_str() {
+            "preview" => {
+                preview.revision = Some(request);
+                preview.profiles.clear();
+                let weak = weak.clone();
+                let pending = pending.clone();
+                let path = PathBuf::from(path.trim());
+                runtime.spawn(async move {
+                    let result = tokio::task::spawn_blocking(move || {
+                        ax_ssh::config::read_openssh_import(&path)
+                    })
+                    .await
+                    .context("OpenSSH configuration read failed")
+                    .and_then(|result| result);
+                    if let Err(error) = slint::invoke_from_event_loop(move || {
+                        let Ok(mut preview) = pending.lock() else {
+                            return;
+                        };
+                        if preview.revision != Some(request) {
+                            return;
+                        }
+                        let (text, ready) = match result {
+                            Ok(import) => {
+                                let text = describe_openssh_import(&import);
+                                preview.profiles = import.profiles;
+                                (text, !preview.profiles.is_empty())
+                            }
+                            Err(error) => (format!("{error:#}"), false),
+                        };
+                        drop(preview);
+                        if let Some(ui) = weak.upgrade() {
+                            ui.invoke_finish_openssh_import(request, text.into(), ready);
+                        }
+                    }) {
+                        debug!(%error, "cannot publish OpenSSH import preview");
+                    }
+                });
+            }
+            "apply" if preview.revision == Some(request) && !preview.profiles.is_empty() => {
+                let profiles = std::mem::take(&mut preview.profiles);
+                let state = state.clone();
+                let persistence = persistence.clone();
+                let weak = weak.clone();
+                runtime.spawn(async move {
+                    let result = update_session_store(&state, &persistence, move |candidate| {
+                        let count = profiles.len();
+                        for mut profile in profiles {
+                            profile.name = unique_imported_session_name(candidate, &profile.name)?;
+                            candidate.upsert(profile);
+                        }
+                        Ok(count)
+                    })
+                    .await;
+                    let message = match result {
+                        Ok(count) => {
+                            refresh_session_models(&weak, &state);
+                            refresh_workspace(&weak, &state);
+                            format!("Imported {count} OpenSSH configurations")
+                        }
+                        Err(error) => format!("Cannot import sessions: {error:#}"),
+                    };
+                    if let Err(error) = slint::invoke_from_event_loop(move || {
+                        if let Some(ui) = weak.upgrade() {
+                            ui.invoke_finish_openssh_import(request, message.into(), false);
+                        }
+                    }) {
+                        debug!(%error, "cannot publish OpenSSH import result");
+                    }
+                });
+            }
+            "close" => *preview = OpenSshPreview::default(),
+            _ => {}
+        }
+    });
+}
+
+#[derive(Default)]
+struct OpenSshPreview {
+    revision: Option<i32>,
+    profiles: Vec<SessionProfile>,
+}
+
+fn describe_openssh_import(import: &ax_ssh::config::OpenSshImport) -> String {
+    let mut lines = Vec::new();
+    for profile in &import.profiles {
+        if let Some(ssh) = profile.ssh() {
+            let auth = match ssh.auth {
+                AuthMethod::PrivateKey { .. } => "private key",
+                AuthMethod::SshAgent => "SSH agent",
+                AuthMethod::Password => "password",
+            };
+            lines.push(format!(
+                "{} → {}@{}:{} ({auth})",
+                profile.name, ssh.username, ssh.host, ssh.port
+            ));
+        }
+    }
+    if !import.notes.is_empty() {
+        lines.push(String::new());
+        lines.extend(import.notes.iter().cloned());
+    }
+    lines.join("\n")
 }
 
 pub(super) async fn duplicate_session_profile(

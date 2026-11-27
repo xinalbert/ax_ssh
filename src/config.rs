@@ -5,6 +5,7 @@
 //! opening a network connection.
 
 mod language;
+mod openssh_import;
 mod persistence;
 mod session;
 mod settings;
@@ -20,6 +21,7 @@ pub use crate::terminal_dimensions::{
 };
 
 pub use self::language::UiLanguage;
+pub use self::openssh_import::{OpenSshImport, read_openssh_import};
 pub use self::persistence::ConfigStore;
 pub(crate) use self::persistence::write_private_file_atomically;
 pub use self::session::{

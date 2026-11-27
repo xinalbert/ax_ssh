@@ -1,0 +1,61 @@
+import { ElidedButton } from "elided-controls.slint";
+import { FlatTextEdit } from "flat-text-edit.slint";
+import { FlatTextInput } from "flat-text-input.slint";
+import { ModalFrame } from "modal-frame.slint";
+import { Theme } from "../theme.slint";
+
+export component OpenSshImportDialog inherits ModalFrame {
+    in property <string> preview;
+    in property <bool> busy;
+    in property <bool> ready;
+    callback read(string);
+    callback apply();
+    callback close();
+    callback path-edited();
+
+    private property <string> path: "~/.ssh/config";
+    dialog-width: Theme.host-dialog-width;
+    dialog-height: 392px;
+    dismissed => { root.close(); }
+
+    VerticalLayout {
+        padding: Theme.dialog-padding;
+        spacing: Theme.space-md;
+        Text {
+            text: @tr("Import OpenSSH Configuration");
+            color: Theme.text;
+            font-size: Theme.font-title;
+            font-weight: 700;
+        }
+        FlatTextInput {
+            text <=> root.path;
+            enabled: !root.busy;
+            placeholder-text: @tr("OpenSSH configuration path");
+            accessible-label: @tr("OpenSSH configuration path");
+            edited(value) => { root.path-edited(); }
+            accepted(value) => {
+                if !root.busy && !value.is-empty { root.read(value); }
+            }
+        }
+        FlatTextEdit {
+            text: root.preview;
+            read-only: true;
+            accessible-label: @tr("Import preview");
+        }
+        HorizontalLayout {
+            alignment: end;
+            spacing: Theme.space-md;
+            ElidedButton { text: @tr("Close"); clicked => { root.close(); } }
+            ElidedButton {
+                text: @tr("Preview");
+                enabled: !root.busy && !root.path.is-empty;
+                clicked => { root.read(root.path); }
+            }
+            ElidedButton {
+                text: @tr("Import");
+                enabled: root.ready && !root.busy;
+                clicked => { root.apply(); }
+            }
+        }
+    }
+}

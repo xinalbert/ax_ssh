@@ -2,6 +2,7 @@ import { AuthenticationDialog, CredentialAccessDialog, HostKeyDialog } from "sec
 import { SessionManagementDialog } from "session-management-dialog.slint";
 import { SftpTransferConflictDialog } from "sftp-transfer-conflict-dialog.slint";
 import { SftpRenameDialog } from "sftp-rename-dialog.slint";
+import { OpenSshImportDialog } from "openssh-import-dialog.slint";
 import { SshForwardingHistoryRow, SshToolsDialog } from "ssh-tools-dialog.slint";
 import { ForwardingRuleDialog } from "forwarding-rule-dialog.slint";
 import { ForwardingManagerRow, ForwardingManagerRequest } from "forwarding-manager-page.slint";
@@ -55,13 +56,14 @@ export component OverlayHost inherits Rectangle {
     pure callback ssh-tool-history-entry(string, int) -> SshForwardingHistoryRow;
     callback ssh-tool-action(string, string, string, string, string, int);
     callback forwarding-manager-submit(ForwardingManagerRequest, int);
+    callback openssh-import-action(string, string, int);
     callback resolve-sftp-transfer-conflict(string, string, bool);
     callback rename-remote-sftp(string, string, string);
 
     private property <bool> security-open: root.security.host_key_open || root.security.password_open;
     out property <bool> modal-open: root.security-open
         || root.workspace-file-open || root.session-management-open || root.transfer-conflict-open
-        || root.sftp-rename-open || !root.ssh-tool-mode.is-empty
+        || root.sftp-rename-open || !root.ssh-tool-mode.is-empty || root.openssh-import-open
         || !root.forwarding-manager-action.is-empty;
 
     private property <string> forwarding-manager-action;
@@ -130,6 +132,12 @@ export component OverlayHost inherits Rectangle {
     private property <[string]> ssh-tool-history-options;
     private property <int> ssh-tool-history-index: -1;
     private property <bool> ssh-tool-history-enabled: true;
+    private property <bool> openssh-import-open;
+    private property <bool> openssh-import-busy;
+    private property <bool> openssh-import-ready;
+    private property <int> openssh-import-revision;
+    private property <string> openssh-import-preview;
+
     public function show-ssh-tool(mode: string, target: string) {
         if root.modal-open || target.is-empty { return; }
         root.ssh-tool-target = target;
@@ -164,6 +172,23 @@ export component OverlayHost inherits Rectangle {
                     root.ssh-tool-history-index,
                 ).enabled;
             }
+        }
+    }
+
+    public function show-openssh-import() {
+        if root.modal-open { return; }
+        root.openssh-import-open = true;
+        root.openssh-import-busy = false;
+        root.openssh-import-ready = false;
+        root.openssh-import-preview = "";
+        root.openssh-import-revision += 1;
+    }
+
+    public function finish-openssh-import(revision: int, text: string, ready: bool) {
+        if revision == root.openssh-import-revision && root.openssh-import-open {
+            root.openssh-import-preview = text;
+            root.openssh-import-busy = false;
+            root.openssh-import-ready = ready;
         }
     }
 
@@ -223,6 +248,33 @@ export component OverlayHost inherits Rectangle {
             root.ssh-tool-history-index = -1;
             root.ssh-tool-action-name = "";
             root.ssh-tool-revision += 1;
+        }
+    }
+
+    if !root.security-open && root.openssh-import-open : OpenSshImportDialog {
+        preview: root.openssh-import-preview;
+        ready: root.openssh-import-ready;
+        busy: root.openssh-import-busy;
+        read(path) => {
+            root.openssh-import-revision += 1;
+            root.openssh-import-ready = false;
+            root.openssh-import-preview = "";
+            root.openssh-import-busy = true;
+            root.openssh-import-action("preview", path, root.openssh-import-revision);
+        }
+        path-edited => {
+            root.openssh-import-ready = false;
+            root.openssh-import-preview = "";
+        }
+        apply => {
+            root.openssh-import-busy = true;
+            root.openssh-import-ready = false;
+            root.openssh-import-action("apply", "", root.openssh-import-revision);
+        }
+        close => {
+            root.openssh-import-open = false;
+            root.openssh-import-action("close", "", root.openssh-import-revision);
+            root.openssh-import-revision += 1;
         }
     }
 
@@ -342,7 +394,7 @@ export component OverlayHost inherits Rectangle {
     }
 
     if !root.security-open && !root.workspace-file-open && !root.session-management-open && !root.sftp-rename-open
-        && root.ssh-tool-mode.is-empty && root.transfer-conflict-open : SftpTransferConflictDialog {
+        && root.ssh-tool-mode.is-empty && !root.openssh-import-open && root.transfer-conflict-open : SftpTransferConflictDialog {
         upload: root.transfer-conflict-upload;
         conflict-id: root.transfer-conflict-id;
         file-name: root.transfer-conflict-name;

@@ -580,11 +580,15 @@ export component AppWindow inherits Window {
     pure callback ssh-tool-history(string) -> [string];
     pure callback ssh-tool-history-entry(string, int) -> SshForwardingHistoryRow;
     callback ssh-tool-action(string, string, string, string, string, int);
+    callback openssh-import-action(string, string, int);
     public function finish-ssh-tool(revision: int, message: string, alternate: bool) {
         overlay-host.finish-ssh-tool(revision, message, alternate);
     }
     public function finish-forwarding-manager(revision: int, result: string, details: string) {
         overlay-host.finish-forwarding-manager(revision, result, details);
+    }
+    public function finish-openssh-import(revision: int, message: string, ready: bool) {
+        overlay-host.finish-openssh-import(revision, message, ready);
     }
     callback refresh-serial-ports();
     callback serial-mode-changed(bool);
@@ -718,6 +722,8 @@ export component AppWindow inherits Window {
             overlay-host.show-workspace-file-dialog("save", root.workspace-default-path);
         } else if action == "import-sessions" {
             workspace-shell.import-session-config();
+        } else if action == "openssh-import" {
+            overlay-host.show-openssh-import();
         } else if action == "ssh-exec" || action == "ssh-forward" {
             overlay-host.show-ssh-tool(action == "ssh-exec" ? "exec" : "forward", root.ssh-tool-target(root.active-pane-id));
         } else if action == "forwarding-manager" {
@@ -833,6 +839,11 @@ export component AppWindow inherits Window {
                 enabled: root.main-window-menu-enabled;
                 shortcut: root.import-sessions-menu-shortcut;
                 activated => { root.execute-menu-command("import-sessions", ""); }
+            }
+            MenuItem {
+                title: @tr("Import OpenSSH Configuration");
+                enabled: root.main-window-menu-enabled;
+                activated => { root.execute-menu-command("openssh-import", ""); }
             }
             MenuItem {
                 title: @tr("Export Selected to Clipboard");
@@ -1300,6 +1311,7 @@ export component AppWindow inherits Window {
         forwarding-manager-submit(request, revision) => {
             root.forwarding-manager-submit(request, revision);
         }
+        openssh-import-action(action, path, revision) => { root.openssh-import-action(action, path, revision); }
         rename-remote-sftp(tab-id, path, name) => { root.rename-remote-sftp(tab-id, path, name); }
     }
 

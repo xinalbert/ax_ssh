@@ -673,11 +673,20 @@ msgstr "OBERFLÄCHE"
 msgid "Identity"
 msgstr "Identität"
 
+msgid "Import"
+msgstr "Importieren"
+
+msgid "Import OpenSSH Configuration"
+msgstr "OpenSSH-Konfiguration importieren"
+
 msgid "Import from Clipboard"
 msgstr "Aus Zwischenablage importieren"
 
 msgid "Import from Clipboard shortcut"
 msgstr "Tastenkürzel zum Importieren aus der Zwischenablage"
+
+msgid "Import preview"
+msgstr "Importvorschau"
 
 msgid "In the macOS Keychain dialog, choose Always Allow to keep access after restarting this version of AxSSH."
 msgstr "Wählen Sie im macOS-Schlüsselbunddialog „Immer erlauben“, um den Zugriff auch nach einem Neustart dieser Version von AxSSH zu behalten."
@@ -973,6 +982,9 @@ msgstr "Gespeicherte Verbindung öffnen"
 msgid "Open the AxSSH issue tracker"
 msgstr "AxSSH-Issue-Tracker öffnen"
 
+msgid "OpenSSH configuration path"
+msgstr "Pfad zur OpenSSH-Konfiguration"
+
 msgid "Option acts as Meta"
 msgstr "Option als Meta"
 
@@ -1059,6 +1071,9 @@ msgstr "Portweiterleitung"
 
 msgid "Positive status indicators"
 msgstr "Positive Statusanzeigen"
+
+msgid "Preview"
+msgstr "Vorschau"
 
 msgid "Previous Tab"
 msgstr "Vorheriger Tab"

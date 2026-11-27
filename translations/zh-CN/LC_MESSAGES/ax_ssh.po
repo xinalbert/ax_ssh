@@ -673,11 +673,20 @@ msgstr "界面"
 msgid "Identity"
 msgstr "标识"
 
+msgid "Import"
+msgstr "导入"
+
+msgid "Import OpenSSH Configuration"
+msgstr "导入 OpenSSH 配置"
+
 msgid "Import from Clipboard"
 msgstr "从剪贴板导入"
 
 msgid "Import from Clipboard shortcut"
 msgstr "从剪贴板导入快捷键"
+
+msgid "Import preview"
+msgstr "导入预览"
 
 msgid "In the macOS Keychain dialog, choose Always Allow to keep access after restarting this version of AxSSH."
 msgstr "在 macOS 钥匙串对话框中选择“始终允许”，即可在重启此版本的 AxSSH 后继续访问。"
@@ -973,6 +982,9 @@ msgstr "打开已保存的连接"
 msgid "Open the AxSSH issue tracker"
 msgstr "打开 AxSSH 问题跟踪器"
 
+msgid "OpenSSH configuration path"
+msgstr "OpenSSH 配置文件路径"
+
 msgid "Option acts as Meta"
 msgstr "Option 作为 Meta"
 
@@ -1059,6 +1071,9 @@ msgstr "端口转发"
 
 msgid "Positive status indicators"
 msgstr "成功状态指示"
+
+msgid "Preview"
+msgstr "预览"
 
 msgid "Previous Tab"
 msgstr "上一个标签页"
