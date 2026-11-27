@@ -227,29 +227,108 @@ fn unicode_sequences_preserve_scalar_columns_and_source_text_through_reflow() {
     }
     assert_eq!(terminal.selection_text(3, 0, 3, column - 1), text);
 
-    terminal.resize(11, 4);
+    for columns in [10, 11] {
+        terminal.resize(columns, 4);
+        let narrow = terminal.snapshot();
+        let first_row = narrow
+            .lines
+            .iter()
+            .position(|line| {
+                line.runs
+                    .first()
+                    .is_some_and(|run| run.text.starts_with('A'))
+            })
+            .unwrap();
+        assert!(narrow.cursor_row > first_row);
+        assert_eq!(
+            terminal.selection_text(first_row, 0, narrow.cursor_row, narrow.cursor_column - 1),
+            text,
+            "{columns} columns"
+        );
+        terminal.resize(40, 4);
+        let wide = terminal.snapshot();
+        assert_eq!(wide.cursor_column, column, "{columns} columns");
+        assert_eq!(
+            terminal.selection_text(wide.cursor_row, 0, wide.cursor_row, column - 1),
+            text,
+            "{columns} columns"
+        );
+    }
+}
+
+#[test]
+fn reflow_keeps_the_cursor_after_text_when_a_wide_cell_wraps() {
+    let text = "123456789中Z";
+    for (columns, narrow_cursor) in [(10, 3), (11, 1)] {
+        let mut terminal = TerminalModel::new(40, 4, 10);
+        terminal.process(b"\x1b[4;1H");
+        terminal.process(text.as_bytes());
+        assert_eq!(terminal.snapshot().cursor_column, 12);
+
+        terminal.resize(columns, 4);
+        let actual_narrow_cursor = terminal.snapshot().cursor_column;
+        terminal.resize(40, 4);
+        let wide = terminal.snapshot();
+        assert_eq!(
+            terminal.selection_text(wide.cursor_row, 0, wide.cursor_row, 11),
+            text
+        );
+        terminal.process(b"!");
+        assert_eq!(
+            (
+                actual_narrow_cursor,
+                wide.cursor_column,
+                terminal.contents().lines().last()
+            ),
+            (narrow_cursor, 12, Some("123456789中Z!")),
+            "{columns} columns"
+        );
+    }
+}
+
+#[test]
+fn reflow_keeps_the_write_position_at_a_full_row_after_a_wide_wrap() {
+    let text = "123456789中12345678";
+    let mut terminal = TerminalModel::new(40, 4, 10);
+    terminal.process(b"\x1b[4;1H");
+    terminal.process(text.as_bytes());
+    terminal.resize(10, 4);
     let narrow = terminal.snapshot();
-    let first_row = narrow
-        .lines
-        .iter()
-        .position(|line| {
-            line.runs
-                .first()
-                .is_some_and(|run| run.text.starts_with('A'))
-        })
-        .unwrap();
-    assert!(narrow.cursor_row > first_row);
+    assert_eq!(narrow.cursor_column, 9);
+    assert!(terminal.term.grid().cursor.input_needs_wrap);
+
+    terminal.process(b"!");
     assert_eq!(
-        terminal.selection_text(first_row, 0, narrow.cursor_row, narrow.cursor_column - 1),
-        text
+        terminal.contents().lines().last(),
+        Some("123456789中12345678!")
     );
     terminal.resize(40, 4);
+    assert_eq!(terminal.snapshot().cursor_column, 20);
+}
+
+#[test]
+fn reflow_counts_each_wide_wrap_after_scrolling_into_history() {
+    let text = "123456789中1234567文Z";
+    let mut terminal = TerminalModel::new(40, 3, 10);
+    terminal.process(b"first\r\nsecond\r\n");
+    terminal.process(text.as_bytes());
+    terminal.resize(10, 3);
+    assert_eq!(terminal.snapshot().cursor_column, 3);
+    assert!(
+        terminal.scroll(1),
+        "reflow should leave history above the viewport"
+    );
+    terminal.scroll_to_bottom();
+
+    terminal.resize(40, 3);
     let wide = terminal.snapshot();
-    assert_eq!(wide.cursor_column, column);
+    assert_eq!(wide.cursor_column, 21);
     assert_eq!(
-        terminal.selection_text(wide.cursor_row, 0, wide.cursor_row, column - 1),
+        terminal.selection_text(wide.cursor_row, 0, wide.cursor_row, 20),
         text
     );
+    terminal.process(b"!");
+    assert_eq!(terminal.contents(), "first\nsecond\n123456789中1234567文Z!");
 }
 
 #[test]

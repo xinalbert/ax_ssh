@@ -89,7 +89,8 @@ slint-build = "1.18.1"
 i-slint-backend-winit = { path = "vendor/i-slint-backend-winit" }
 i-slint-renderer-skia = { path = "vendor/i-slint-renderer-skia" }
 softbuffer = { path = "vendor/softbuffer" }
-# Terminal compatibility fixes preserve the locked parser version.
+# Terminal compatibility fixes preserve the locked grid and parser versions.
+alacritty_terminal = { path = "vendor/alacritty_terminal" }
 vte = { path = "vendor/vte" }
 
 [dev-dependencies]
