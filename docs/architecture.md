@@ -1770,6 +1770,26 @@ Authenticated connections follow this lifecycle:
   stragglers), explicitly releases all detached and main-window Slint models
   and window handles, and only then shuts down Tokio.
 
+## SSH tools and OpenSSH import
+
+The terminal worker owns one command task and a bounded set of forwarding rules. Each forwarding task owns one listener and up to sixteen active relays. Local and dynamic TCP listeners bind IPv4 loopback. A remote listener is published only after the server acknowledges the global request. The handler accepts a forwarded channel only when the listener key matches that rule. For TCP it also requires a loopback origin reported by the server. Each route is removed and its relays are closed before waiting for remote cancellation. An uncertain remote result triggers transport shutdown. [RFC 4254](https://www.rfc-editor.org/rfc/rfc4254)
+
+SOCKS5 negotiates TCP CONNECT on a bounded handshake and uses `direct-tcpip` for the requested destination. Unix socket endpoints use the OpenSSH StreamLocal extension. Local Unix listeners require an owner-only parent directory and compare the bound socket's identity before cleanup. [RFC 1928](https://www.rfc-editor.org/rfc/rfc1928) · [OpenSSH StreamLocal](https://github.com/openssh/openssh-portable/blob/master/PROTOCOL)
+
+Exec uses a session channel with a confirmed request, no PTY and separate stdout/stderr capture. TCP relays use `direct-tcpip` channels. Explicit stop, shell closure or transport loss releases the associated tasks. The app routes requests to the window's pane and connection generation. Command output stays in the requesting dialog and stays out of diagnostic logs. [RFC 4254](https://www.rfc-editor.org/rfc/rfc4254)
+
+Successful forwarding starts are recorded by the application in the owning `SshConfig` as a bounded, profile-scoped list of at most sixteen mode/listen/target presets. Each preset stores its own enabled state. The list is deduplicated with the newest use first, does not contain credentials or live worker state, and enabled presets are replayed after a new SSH connection is established. The forwarding dialog receives only owned labels and a small selected-row DTO, so choosing a preset fills editable fields and its checkbox changes only that preset. Profile export sanitization clears the list because local Unix socket paths and other endpoint history are machine-specific.
+
+The independent Forwarding Manager workspace page receives a bounded table and server picker built from saved SSH profiles. Create, edit, delete and enable actions use the existing session store transaction. Edits and deletes compare the submitted rule against the saved value under the transaction gate, so reordering or concurrent changes cannot target another row. Saving validates endpoints against the transport rules, rejects duplicates and preserves saved rules at the profile limit. The SSH connected event reads the current saved profile. The manager uses a bounded, read-only worker request to inspect the listener for a saved rule, including the resolved port for an automatic TCP listener. Slint receives status and display values. Worker handles and forwarding lifetimes stay in Rust.
+
+`ServerComboBox` takes a single `ServerOption` model with server IDs, names, and platform IDs. It shares the themed popup's selection, keyboard navigation, and scrolling. `ServerListItem` renders the icon and name in the field, the dropdown options, and the titlebar connection picker. The titlebar also displays the endpoint. Icon resolution follows the sidebar, with a generic server icon when the platform is unknown.
+
+The configurable **Forwarding Manager** shortcut uses the same action as the Pane menu and activates the single main-window forwarding tab. `ShortcutSettings` supplies the platform default and preserves existing bindings when an older configuration already uses that chord. The Slint menu and the macOS AppKit bridge use the same saved binding and the existing shortcut recording and modal gates. The action only changes the active workspace tab.
+
+The per-profile agent forwarding flag defaults to off and is cleared in transferred profile configurations. Only trusted and authenticated terminal connections can request forwarding. The handler queues inbound channels after server acknowledgement. The relay obtains a fresh local agent connection, binds it to the authenticated SSH session and forwards identity queries, signature requests and subsequent session bindings. Incoming channels and frames have independent bounds. [OpenSSH agent protocol extensions](https://github.com/openssh/openssh-portable/blob/master/PROTOCOL.agent)
+
+The configuration layer parses a bounded subset of client configuration on a blocking task. The application holds a preview and commits only the reviewed profiles through the existing serialized persistence path. Profiles receive fresh identities and use the existing host-key flow. [OpenSSH client configuration manual](https://man.openbsd.org/ssh_config)
+
 ## SFTP browsing and write contract
 
 An SFTP Tab owns one SSH transport whose worker opens only a separate `sftp`

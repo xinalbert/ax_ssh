@@ -229,6 +229,36 @@ Edit 下载私有本地副本，并调用 Windows、macOS 或 Linux 中该扩展
 
 没有可上传文件的空目录不会单独创建远端目录。
 
+## SSH 工具
+
+在主窗口选中已连接的 SSH 终端分屏，通过 **Pane > Run Remote Command** 运行单条远程命令。AxSSH 在独立 SSH 通道中运行命令，并分别显示标准输出、标准错误和服务端提供的退出码。每个终端同时可运行一条命令，通道打开后最多等待 60 秒，合计保留 64 KiB 输出。取消命令或关闭对话框会关闭通道。远端进程能否继续运行由服务器决定，重连后命令不会自动重跑。
+
+在 Windows 和 Linux 上选择 **Pane > Port Forwarding**。在 macOS 上从屏幕顶部的系统菜单栏选择 **Pane > Port Forwarding**。当前分屏为已连接的 SSH 终端时，可在此启动和管理当前连接的转发。
+
+每台已保存的 SSH 服务器最多可保存 16 条转发规则。在 **Port Forwarding** 中成功启动规则后，若还有容量，AxSSH 会保存该规则。打开 **最近的转发规则** 下拉框可以回填并编辑模式、监听端点和目标。动态 SOCKS5 规则只回填本地监听端口。在该对话框关闭活动规则时，只停止所选规则。规则会跨应用重启保留，导出服务器配置时会清除。
+
+选择 **Pane > Forwarding Manager**，或在 macOS 按 `Cmd+Shift+F`、在 Windows/Linux 按 `Ctrl+Shift+F`，可打开或切回转发管理页。可在 **Settings > Shortcuts > Forwarding Manager** 修改快捷键。若旧配置已占用默认组合键，AxSSH 会保留原绑定，转发管理的快捷键初始为空。表格按规则显示服务器、模式、监听端点、目标、连接状态和启用状态。修改 **Enabled** 会保存到对应服务器 profile，并在下一次 SSH 连接建立时生效。鼠标悬停在转发管理标签上可查看说明。
+
+右击表格空白处，选择 **新建转发**，再选择已保存的 SSH 服务器，填写模式、监听端点和目标。右击规则或打开该行的 **…** 菜单，可检查、编辑、删除，也可新建并预选该行的服务器。服务器下拉框使用与侧栏相同的图标。服务器离线时也能保存。保存会校验端点并拒绝重复规则，删除前需确认。**检查转发** 会验证配置，并在有已连接的 SSH 终端时查询监听状态。TCP 监听端口填 `0` 时会显示实际分配的端口。要验证目标服务能否通过隧道访问，请用对应客户端连接监听地址。
+
+转发管理页的修改在下次 SSH 连接时生效。可通过已连接终端的 **Pane > Port Forwarding** 操作当前连接的转发。
+
+| 模式 | 监听位置 | 目标 |
+| --- | --- | --- |
+| **Local (-L)** | 本机 | SSH 服务器解析地址并连接 |
+| **Remote (-R)** | SSH 服务器 | AxSSH 在本机解析地址并连接 |
+| **Dynamic SOCKS5 (-D)** | 本机 | 由本机 SOCKS5 客户端为每条 TCP 连接指定 |
+
+TCP 监听填端口，填 0 可自动分配。结果会显示实际分配的端口。固定 TCP 目标填 `主机:端口`，IPv6 地址用方括号，如 `[::1]:5432`。本地 TCP 监听绑定 `127.0.0.1`。远程转发请求绑定服务器的回环地址，AxSSH 只接受监听地址、端口相符且由服务器报告为回环来源的通道。OpenSSH 服务器的 `GatewayPorts` 可以覆盖实际绑定地址。SOCKS5 支持无需认证的 TCP CONNECT，接受 IPv4、IPv6 和主机名，域名由服务器解析。同一台机器上的其他用户可访问本机回环监听。 [OpenSSH 服务端配置](https://man.openbsd.org/sshd_config#GatewayPorts)
+
+本地和远程转发的任一端可填写绝对 Unix socket 路径。AxSSH 本机一端使用 Unix socket 时需要 macOS 或 Linux。本地监听 socket 的父目录必须归当前用户所有，且只允许当前用户访问，例如权限为 `0700` 的目录。AxSSH 保留原有文件，停止监听时移除自己创建的 socket。SSH 服务器一端的 socket 需要 StreamLocal 支持，其文件归服务器管理。 [OpenSSH StreamLocal 协议](https://github.com/openssh/openssh-portable/blob/master/PROTOCOL)
+
+关闭对话框后转发继续。选择 **Stop forwarding**、关闭终端或连接中断会停止规则并关闭相应的转发连接。SSH 重连后，AxSSH 会启动已保存且勾选 **Enabled** 的规则。远程监听的设置或取消结果无法确认时，AxSSH 请求关闭对应 SSH 连接，让服务器释放监听。
+
+如果受信任的服务器需要使用本机 SSH Agent，可在服务器编辑器打开 **Forward SSH agent** 后重新连接。AxSSH 只在服务端确认转发请求并且本地 Agent 接受 OpenSSH 会话绑定后接通转发。桥接允许查询身份、请求签名和绑定会话。SSH 连接存活期间，能访问远端转发 socket 的程序可以向本地 Agent 请求签名，具体限制由 Agent 执行。转发不可用时，连接状态显示提示。
+
+**File > Import OpenSSH Configuration** 可读取 `~/.ssh/config` 或手工指定的文件。点击 **Preview** 查看别名、目标和认证方式，再点击 **Import** 新增会话，同名会话会生成新名称。导入按文件顺序应用匹配的 `Host` 段，识别 `HostName`、`User`、`Port`、第一条 `IdentityFile`、`ForwardX11` 和 `ForwardX11Trusted`。未设置身份文件时使用运行时 SSH Agent。含 `Include` 或 `Match` 的配置需要先整理成独立文件。依赖自定义代理、认证提供者或主机信任文件的 Host 会在预览中标记跳过。端口转发、Agent 转发及命令钩子会列为跳过项。导入阶段没有网络连接，主机密钥仍按正常连接流程验证。
+
 ## 工作区与终端操作
 
 AxSSH 在布局变化稳定后自动保存，并在退出时再次保存到独立的私有 `workspace.json`。

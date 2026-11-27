@@ -1102,6 +1102,24 @@ cookie 只能证明持有此转发连接的授权，不能证明远端 UID/PID�
 - 窗口退出对所有剩余 worker 请求断开，与先前正在关闭的 worker 一起在 25 秒应用总时限内并发等待 join，超时后中止剩余任务，显式
   释放所有 detached/主窗口 Slint model 和窗口强引用，最后再关闭 Tokio。
 
+## SSH 工具与 OpenSSH 导入
+
+终端 worker 持有一个命令任务和一个有界的转发规则集合。每个转发任务持有一个监听和最多 16 条活动连接。本地和动态 TCP 监听绑定 IPv4 回环。收到全局请求的服务端确认后才注册远端监听，handler 仅接受匹配该规则的通道。TCP 通道另校验服务器报告的回环来源。每条规则停止时先撤销自己的路由并关闭自己的活动转发，再等待服务端取消确认。远程监听状态不明时关闭对应 SSH transport。 [RFC 4254](https://www.rfc-editor.org/rfc/rfc4254)
+
+SOCKS5 在有界握手中处理 TCP CONNECT，并用 `direct-tcpip` 连接目标。Unix socket 端点使用 OpenSSH StreamLocal 扩展。本地 Unix 监听依赖当前用户的私有父目录，清理前验证 socket 文件身份。 [RFC 1928](https://www.rfc-editor.org/rfc/rfc1928) · [OpenSSH StreamLocal 协议](https://github.com/openssh/openssh-portable/blob/master/PROTOCOL)
+
+转发成功启动后，由 application 将所属 `SshConfig` 更新为最多 16 条有界、按 profile 保存的模式/监听/目标预设，每条预设拥有独立的 enabled 状态。相同规则去重并把最近使用项置顶，列表不包含凭据或 live worker 状态，启用预设会在新 SSH 连接建立后自动重放。转发对话框只接收自有标签和小型选中行 DTO，选择预设只回填可编辑字段，开关只修改当前预设。profile 导出脱敏会清空该列表，因为本地 Unix socket 路径及其他端点历史属于本机环境。
+
+独立的 Forwarding Manager 工作区页面接收由已保存 SSH profile 生成的有界表格和服务器选项。新建、编辑、删除和启用开关沿用 session store 事务。编辑和删除在事务闸门内比对提交时的规则与已保存值，确保重排和并发修改不会作用到其他行。保存复用传输层端点校验，拒绝重复规则，达到每台服务器上限时保留已有规则。SSH 连接成功事件读取当前已保存的 profile。检查通过有超时的只读 worker 请求获取指定规则的监听状态和自动分配的 TCP 端口。Slint 只接收状态和展示数据，worker 句柄和转发生命周期由 Rust 管理。
+
+`ServerComboBox` 接收一个 `ServerOption` 模型，包含服务器 ID、名称和平台标识。选择、键盘导航及滚动由共用的主题弹层处理。`ServerListItem` 在选中项、下拉选项和顶栏连接选择器中绘制图标及名称，顶栏另外显示端点。图标沿用侧栏的解析规则，未知平台使用通用服务器图标。
+
+**Forwarding Manager** 的可配置快捷键复用 Pane 菜单动作，激活主窗口中唯一的转发管理标签。`ShortcutSettings` 提供平台默认值，旧配置已占用该组合键时优先保留原绑定。Slint 菜单和 macOS AppKit 桥接共用同一份绑定，并沿用快捷键录制和模态状态的拦截。该动作只切换活动工作区标签。
+
+Agent 转发按服务器设置，默认关闭，配置导出和导入会清除此选项。已验证并完成认证的终端连接才发送转发请求。服务端确认后，handler 将入站通道交给有界队列。每条转发连接重新打开本地 Agent、绑定已验证的 SSH 会话，只传递身份查询、签名请求和后续的会话绑定。 [OpenSSH Agent 协议扩展](https://github.com/openssh/openssh-portable/blob/master/PROTOCOL.agent)
+
+配置层在 blocking task 中读取有界的 OpenSSH 配置子集。应用持有导入预览，使用现有串行写入流程保存用户确认的会话。新增会话使用新的 ID，主机密钥沿用现有信任流程。 [OpenSSH 客户端配置手册](https://man.openbsd.org/ssh_config)
+
 ## SFTP 浏览与写操作契约
 
 每个 SFTP Tab 拥有一条 SSH transport，认证完成后 worker 只打开独立的 `sftp` subsystem

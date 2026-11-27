@@ -409,6 +409,36 @@ window downloads it into the Local files directory that was visible when the
 drag started. Folders, links, and filtered entries retain the in-app drag
 behavior; Finder-to-Remote uploads are unchanged.
 
+## SSH tools
+
+In the main window, select a connected SSH terminal pane. Use **Pane > Run Remote Command** to send a single command to the remote shell over a separate SSH exec channel. The result shows stdout, stderr and the server's exit status when available. Each terminal runs one command at a time. AxSSH captures up to 64 KiB and allows up to 60 seconds after opening the channel. **Cancel command** and closing the dialog close the channel. A remote process that survives channel closure can keep running. Commands never run again automatically after reconnecting.
+
+On Windows and Linux, choose **Pane > Port Forwarding**. On macOS, choose **Pane > Port Forwarding** from the system menu bar. The action is available only while the active pane is a connected SSH terminal.
+
+Each saved SSH server can hold up to 16 forwarding rules. A successful start in **Port Forwarding** records the rule when space is available. Open **Recent forwarding rules** in that dialog to fill the editable mode, listen endpoint and destination. Dynamic SOCKS5 entries restore the local listen port. Disabling an active rule from that dialog stops the selected rule. Saved rules survive application restarts and are cleared from server exports.
+
+Choose **Pane > Forwarding Manager** or press `Cmd+Shift+F` on macOS and `Ctrl+Shift+F` on Windows/Linux to open or switch to the forwarding page. You can change the shortcut in **Settings > Shortcuts > Forwarding Manager**. If the default shortcut is already assigned in an older configuration, the existing assignment is preserved and Forwarding Manager starts with no shortcut. The table shows each rule's server, mode, listening endpoint, destination, connection state and enabled state. Changes to **Enabled** are persisted to the server profile and take effect on the next SSH connection. Hover over the **Forwarding Manager** tab for its description.
+
+Right-click the table background and choose **New forwarding**, then select a saved SSH server and enter the mode and endpoints. Right-click a rule or use its **…** menu to check, edit, delete, or create a new rule with that server preselected. The server picker uses the same icons as the sidebar. Rules can be saved while the server is offline. Saving validates the endpoints and rejects duplicates. Deleting asks for confirmation. **Check forwarding** validates the saved configuration and queries the current listener when an SSH terminal is connected. For TCP port `0` it shows the actual assigned port. This check reports listener status. To verify that an application can reach its destination through the tunnel, connect to the listener with that application.
+
+Changes made in Forwarding Manager apply on the next SSH connection. Use **Pane > Port Forwarding** on the connected terminal to control forwarding on the current connection.
+
+| Mode | Listener | Destination |
+| --- | --- | --- |
+| **Local (-L)** | This computer | Resolved and opened by the SSH server |
+| **Remote (-R)** | The SSH server | Resolved and opened by AxSSH on this computer |
+| **Dynamic SOCKS5 (-D)** | This computer | Supplied by the local SOCKS5 client over TCP |
+
+For TCP listeners, enter a port or use 0 for automatic allocation. The result shows the assigned port. Use `host:port` for a fixed TCP destination and brackets for IPv6, as in `[::1]:5432`. The TCP listen address is `127.0.0.1`. AxSSH requests remote loopback and only accepts SSH forwarding channels for that address and port with a loopback origin reported by the server. OpenSSH servers can override the actual bind address with `GatewayPorts`. SOCKS5 supports unauthenticated TCP CONNECT with IPv4, IPv6 or a hostname. A hostname is resolved on the server side. Other users on the same computer can connect to a loopback listener. [OpenSSH server configuration](https://man.openbsd.org/sshd_config#GatewayPorts)
+
+For local or remote forwarding, use an absolute Unix socket path as either endpoint. A socket on the AxSSH machine requires macOS or Linux. For a local listening socket, choose a private directory owned by your user, such as a directory with mode `0700`. AxSSH leaves existing paths alone and removes its own socket file when it stops listening. A socket on the SSH server requires StreamLocal support and follows the server's filesystem and cleanup policy. [OpenSSH StreamLocal](https://github.com/openssh/openssh-portable/blob/master/PROTOCOL)
+
+Closing the dialog leaves the forward active. **Stop forwarding**, closing the terminal or a disconnect ends the rule and closes its active relays. After reconnect, AxSSH starts the saved rules whose **Enabled** checkboxes are selected. If a remote setup or cancellation becomes uncertain, AxSSH requests shutdown of the owning SSH transport so the server can release the listener.
+
+Enable **Forward SSH agent** in a server's editor and reconnect if a trusted server needs to use the local agent. Inbound agent channels require a confirmed forwarding request and successful OpenSSH session binding. The bridge forwards identity lookups, signature requests and session binding. A server that can access the forwarded socket can ask the local agent to sign while the terminal is connected, subject to the agent's restrictions. AxSSH shows a connection status message if forwarding is unavailable.
+
+**File > Import OpenSSH Configuration** reads `~/.ssh/config` or another selected file. **Preview** lists the aliases, destinations and authentication choices. **Import** adds those profiles, choosing unique names where needed. The importer applies matching `Host` blocks in file order and recognizes `HostName`, `User`, `Port`, the first `IdentityFile`, `ForwardX11` and `ForwardX11Trusted`. Without an explicit identity file, the profile uses the running SSH agent. Files containing `Include` or `Match` require a standalone config. Hosts that depend on a custom proxy, identity provider or host trust file are listed as skipped. Port forwarding rules, agent forwarding and command hooks appear as skipped options. Import makes no network connection and creates no host-key trust decision.
+
 ## Workspace and terminal controls
 
 AxSSH automatically saves the open workspace after layout changes settle and

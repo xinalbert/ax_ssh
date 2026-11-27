@@ -1,5 +1,15 @@
 # 项目研究记录
 
+## 2026-11-26 SSH exec、TCP 转发和 OpenSSH 配置
+
+- 时间：2026-11-26 08:44 +0800
+- 检索问题：锁定的 russh 是否提供旧版 SSH 客户端常用的 exec、TCP 转发和 Agent 会话绑定接口？
+- 检索原因：用户确认先检索再实施首批高级 SSH 工具。
+- 来源列表：[RFC 4254](https://www.rfc-editor.org/rfc/rfc4254)、[OpenSSH ssh_config](https://man.openbsd.org/ssh_config)、[OpenSSH Agent 扩展](https://github.com/openssh/openssh-portable/blob/master/PROTOCOL.agent)、[russh 0.65.4](https://docs.rs/russh/0.65.4/russh/client/struct.Handle.html)及本机锁定的源码。
+- 关键结论：russh 已支持直接 TCP channel、exec 和绑定。Exec 要独立消费确认、数据与退出事件。Agent forwarding 请求的通道回复与 PTY 或 shell 回复使用相同的成功与失败事件。
+- 对实施计划的影响：先等待 Agent 请求确认再申请 PTY。导入使用匹配 Host 块的首值规则，遇到 Include 或 Match 停止解析。网络工具继续使用现有 SSH worker 和主机信任。
+- 未解决问题：OpenSSH 代理链、其他转发方向、连接复用及批处理仍属后续范围。
+
 ## 2026-11-23 russh 0.65.4 与 RSA 正式版
 
 - 时间：2026-11-23 14:06 +0800
@@ -973,3 +983,13 @@
 - 关键结论：issue 4821 记录 winit 0.30.x Windows backend 的 `dragging` 标志只在 `WM_EXITSIZEMOVE` 复位，错过该通知后 `drag_window`/`drag_resize_window` 持续早退，进程内窗口拖动直到重启前失效；PR 4825 是上游修复方向，其合入与发布状态未确认。本地 vendor backend 的 `!is_decorated() && is_resizable()` 条件在窗口最大化/全屏时仍缓存缩放方向并在 press 时吞掉按下调用 `drag_resize_window`，属于 vendor 层可守卫的已知触发路径。
 - 对实施计划的影响：W1 在 `vendor/i-slint-backend-winit/` 补丁边界内加入最大化/全屏守卫，并要求 cursor-move 与 press 两侧双重校验方向；macOS/Linux 与正常状态行为不变。守卫定义为已知触发路径预防，不声明覆盖用户现象的全部根因，也不治愈已卡死进程。
 - 未解决问题：用户环境具体在哪一 OS 版本/窗口状态下错过 `WM_EXITSIZEMOVE` 未实机复现；PR 4825 的最终状态与将随哪个 winit 版本发布未确认；Windows 实机验证必须由用户设备与原生 CI 完成。
+
+## 2026-11-26 SOCKS5、远程 TCP 和 StreamLocal 转发
+
+- 时间：2026-11-26 09:45 +0800
+- 检索问题：锁定 russh 的远程转发回调、StreamLocal 扩展和 SOCKS5 CONNECT 是否能在当前 SSH worker 中有界实现？
+- 检索原因：用户要求继续支持 -D、-R 和 Unix socket 转发。
+- 来源列表：[RFC 4254](https://www.rfc-editor.org/rfc/rfc4254)、[RFC 1928](https://www.rfc-editor.org/rfc/rfc1928)、[OpenSSH StreamLocal](https://github.com/openssh/openssh-portable/blob/master/PROTOCOL)、[OpenSSH sshd_config](https://man.openbsd.org/sshd_config)及本机锁定的 russh 源码。
+- 关键结论：tcpip-forward 端口为 0 时服务端返回实际端口，远程连接使用 forwarded-tcpip。StreamLocal 使用 direct-streamlocal@openssh.com、forwarded-streamlocal@openssh.com 和对应全局请求。SOCKS5 仅启用无认证 TCP CONNECT，地址支持 IPv4、IPv6 和域名。
+- 对实施计划的影响：监听、规则、入站通道和取消操作全部归 terminal worker，remote handler 只接受已登记规则。TCP 远端规则要求 loopback address 和 origin，Unix 本地 listener 检查 owner-only parent 和文件 identity。
+- 未解决问题：真实 OpenSSH server 的 GatewayPorts、AllowTcpForwarding、AllowStreamLocalForwarding 策略和 GUI 原生操作仍待实机验收。
