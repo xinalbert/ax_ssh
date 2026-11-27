@@ -4,6 +4,8 @@ use base64::Engine as _;
 
 use super::*;
 
+mod protocol_base;
+
 #[test]
 fn parses_colored_output_and_carriage_return_updates() {
     let mut terminal = TerminalModel::new(80, 24, 10);
@@ -70,6 +72,11 @@ fn osc52_clipboard_accepts_bounded_default_clipboard_writes_only() {
     assert_eq!(terminal.take_clipboard_store().as_deref(), Some("Hello"));
     assert_eq!(terminal.take_clipboard_store(), None);
 
+    let maximum = "x".repeat(MAX_OSC52_CLIPBOARD_BYTES);
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&maximum);
+    terminal.process(format!("\x1b]52;c;{encoded}\x1b\\").as_bytes());
+    assert_eq!(terminal.take_clipboard_store(), Some(maximum));
+
     let oversized =
         base64::engine::general_purpose::STANDARD.encode("x".repeat(MAX_OSC52_CLIPBOARD_BYTES + 1));
     let sequence = format!("\x1b]52;c;{oversized}\x07");
@@ -78,7 +85,7 @@ fn osc52_clipboard_accepts_bounded_default_clipboard_writes_only() {
 }
 
 #[test]
-fn bounds_utf8_title_and_hyperlink_values_at_character_boundaries() {
+fn bounds_utf8_title_at_character_boundaries() {
     assert_eq!(bound_utf8("a😀".to_owned(), 2), "a");
     assert_eq!(bound_utf8("你好".to_owned(), 4), "你");
 }
@@ -156,8 +163,8 @@ fn reports_fractional_grid_pixels_after_measured_layout_and_pixel_only_resize() 
         terminal.process_with_responses(b"\x1b[14t\x1b[16t\x1b[18t"),
         vec![
             b"\x1b[4;450;925t".to_vec(),
-            b"\x1b[8;24;100t".to_vec(),
-            b"\x1b[6;19;9t".to_vec()
+            b"\x1b[6;19;9t".to_vec(),
+            b"\x1b[8;24;100t".to_vec()
         ]
     );
 }

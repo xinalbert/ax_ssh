@@ -119,12 +119,11 @@ impl TerminalInputContext<'_> {
                         .encode_paste(&input.text)
                         .context("terminal paste exceeds the bounded input limit")?
                 } else {
-                    let application_cursor = model.application_cursor();
                     let Some(key) = crate::app::input::terminal_key_from_normalized_input(&input)
                     else {
                         return Ok((false, false));
                     };
-                    let Some(data) = encode_key(&key, modifiers, application_cursor) else {
+                    let Some(data) = model.encode_input_key(&key, modifiers) else {
                         return Ok((false, false));
                     };
                     data

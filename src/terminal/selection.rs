@@ -29,25 +29,20 @@ impl TerminalModel {
         if is_wide_continuation(cell) {
             return None;
         }
-        let uri = cell.hyperlink()?.uri().to_owned();
-        let uri = super::bound_utf8(uri, super::MAX_HYPERLINK_URI_BYTES);
-        if !super::is_safe_hyperlink_uri(&uri) {
+        let hyperlink = cell.hyperlink()?;
+        if !super::is_safe_hyperlink_uri(hyperlink.uri()) {
             return None;
         }
-        let same_uri = |cell: &Cell| {
-            cell.hyperlink().is_some_and(|hyperlink| {
-                super::bound_utf8(hyperlink.uri().to_owned(), super::MAX_HYPERLINK_URI_BYTES) == uri
-            })
-        };
+        let same_link = |cell: &Cell| cell.hyperlink().as_ref() == Some(&hyperlink);
         let mut start = column;
-        while start > 0 && same_uri(&grid[line][Column(start - 1)]) {
+        while start > 0 && same_link(&grid[line][Column(start - 1)]) {
             start -= 1;
         }
         let mut end = column.saturating_add(1);
-        while end < grid.columns() && same_uri(&grid[line][Column(end)]) {
+        while end < grid.columns() && same_link(&grid[line][Column(end)]) {
             end += 1;
         }
-        Some((uri, start, end))
+        Some((hyperlink.uri().to_owned(), start, end))
     }
 
     /// Returns text for an inclusive, viewport-relative cell selection.

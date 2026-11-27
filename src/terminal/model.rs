@@ -1,12 +1,12 @@
 //! Terminal state, protocol handling, and viewport control.
 
+use super::protocol::ProtocolHandler;
 use super::*;
 use std::sync::mpsc::sync_channel;
 use std::time::Instant;
 
 use alacritty_terminal::grid::{Dimensions, Scroll};
 use alacritty_terminal::term::{Config as TermConfig, Osc52, TermMode};
-use alacritty_terminal::vte::ansi::Rgb;
 
 impl TerminalModel {
     pub fn new(columns: usize, rows: usize, scrollback_lines: usize) -> Self {
@@ -22,28 +22,24 @@ impl TerminalModel {
         let dimensions = TerminalDimensions::new(columns, rows);
         let config = terminal_config(scrollback_lines, osc52_clipboard_enabled);
         let (protocol_events_tx, protocol_events) = sync_channel(PROTOCOL_RESPONSE_CAPACITY);
+        let protocol_listener = TerminalEventListener {
+            protocol_events: protocol_events_tx,
+        };
         Self {
-            term: Term::new(
-                config,
-                &dimensions,
-                TerminalEventListener {
-                    protocol_events: protocol_events_tx,
-                },
-            ),
+            term: Term::new(config, &dimensions, protocol_listener.clone()),
             processor: Processor::new(),
             protocol_events,
+            protocol_listener,
             query_palette: TerminalQueryPalette::default(),
             grid_metrics: None,
-            pending_text_area_requests: 0,
-            pending_cell_size_requests: 0,
+            pending_grid_queries: Vec::new(),
             scrollback_lines,
             snapshot_lines: Vec::new(),
             snapshot_columns: 0,
             snapshot_display_offset: 0,
             next_line_revision: 0,
             viewport_detached: false,
-            mouse_encoding: MouseEncodingTracker::default(),
-            window_operation_queries: WindowOperationQueryTracker::default(),
+            extended_mouse_modes: ExtendedMouseModes::default(),
             pending_title_update: None,
             bell_revision: 0,
             pending_bell: false,
@@ -60,10 +56,8 @@ impl TerminalModel {
 
     /// Parse live output and return bounded protocol responses for the same transport.
     pub fn process_with_responses(&mut self, bytes: &[u8]) -> Vec<Vec<u8>> {
-        self.mouse_encoding.observe(bytes);
-        let cell_size_requests = self.window_operation_queries.observe(bytes);
         let was_alternate_screen = self.is_alternate_screen();
-        self.processor.advance(&mut self.term, bytes);
+        self.with_protocol_handler(|processor, handler| processor.advance(handler, bytes));
         let is_alternate_screen = self.is_alternate_screen();
         if was_alternate_screen && !is_alternate_screen {
             self.term.scroll_display(Scroll::Bottom);
@@ -74,9 +68,20 @@ impl TerminalModel {
         {
             self.viewport_detached = false;
         }
-        let mut responses = self.drain_protocol_events();
-        self.handle_cell_size_requests(cell_size_requests, &mut responses);
-        responses
+        self.drain_protocol_events()
+    }
+
+    fn with_protocol_handler(
+        &mut self,
+        handle: impl FnOnce(&mut Processor, &mut ProtocolHandler<'_>),
+    ) {
+        let mut handler = ProtocolHandler {
+            term: &mut self.term,
+            events: &self.protocol_listener,
+            mouse_modes: &mut self.extended_mouse_modes,
+            query_palette: &self.query_palette,
+        };
+        handle(&mut self.processor, &mut handler);
     }
 
     /// Takes the latest OSC 0/2 title update. `Some(None)` means the terminal
@@ -123,13 +128,13 @@ impl TerminalModel {
         if deadline > Instant::now() {
             return false;
         }
-        self.processor.stop_sync(&mut self.term);
+        self.with_protocol_handler(|processor, handler| processor.stop_sync(handler));
         true
     }
 
     #[cfg(test)]
     pub(super) fn flush_synchronized_output_for_test(&mut self) {
-        self.processor.stop_sync(&mut self.term);
+        self.with_protocol_handler(|processor, handler| processor.stop_sync(handler));
     }
 
     /// Records measured physical cell and text-area dimensions and returns responses for
@@ -140,11 +145,9 @@ impl TerminalModel {
             return Vec::new();
         }
         self.grid_metrics = Some(metrics);
-        let text_area_requests = std::mem::take(&mut self.pending_text_area_requests);
-        let cell_size_requests = std::mem::take(&mut self.pending_cell_size_requests);
-        std::iter::repeat_with(|| text_area_size_response(metrics))
-            .take(text_area_requests)
-            .chain(std::iter::repeat_with(|| cell_size_response(metrics)).take(cell_size_requests))
+        self.pending_grid_queries
+            .drain(..)
+            .map(|query| query.response(metrics))
             .collect()
     }
 
@@ -194,6 +197,22 @@ impl TerminalModel {
 
     pub fn application_cursor(&self) -> bool {
         self.term.mode().contains(TermMode::APP_CURSOR)
+    }
+
+    /// Encodes a key using the modes negotiated with this terminal application.
+    pub fn encode_input_key(
+        &self,
+        key: &TerminalKey,
+        modifiers: TerminalModifiers,
+    ) -> Option<Vec<u8>> {
+        let mut bytes = encode_key(key, modifiers, self.application_cursor())?;
+        if *key == TerminalKey::Return
+            && bytes.ends_with(b"\r")
+            && self.term.mode().contains(TermMode::LINE_FEED_NEW_LINE)
+        {
+            bytes.push(b'\n');
+        }
+        Some(bytes)
     }
 
     pub fn encode_paste(&self, text: &str) -> Option<Vec<u8>> {
@@ -250,7 +269,9 @@ impl TerminalModel {
         pixel_y: usize,
     ) -> Option<Vec<u8>> {
         let reporting = self.mouse_reporting();
-        let coordinate_encoding = self.mouse_encoding.coordinate_encoding(reporting.sgr);
+        let coordinate_encoding = self
+            .extended_mouse_modes
+            .coordinate_encoding(*self.term.mode());
         let is_wheel = matches!(
             event.button,
             TerminalMouseButton::WheelUp
@@ -524,18 +545,11 @@ impl TerminalModel {
                         responses.push(response);
                     }
                 }
-                TerminalProtocolEvent::ColorRequest(index, formatter) => {
-                    let color = self.term.colors()[index]
-                        .unwrap_or_else(|| default_query_color(index, self.query_palette));
-                    if let Some(response) = protocol_response(formatter(color).into_bytes()) {
-                        responses.push(response);
-                    }
-                }
-                TerminalProtocolEvent::TextAreaSizeRequest => {
+                TerminalProtocolEvent::GridSizeRequest(query) => {
                     if let Some(metrics) = self.grid_metrics {
-                        responses.push(text_area_size_response(metrics));
-                    } else if self.pending_grid_request_capacity() > 0 {
-                        self.pending_text_area_requests += 1;
+                        responses.push(query.response(metrics));
+                    } else if self.pending_grid_queries.len() < PROTOCOL_RESPONSE_CAPACITY {
+                        self.pending_grid_queries.push(query);
                     }
                 }
                 TerminalProtocolEvent::Title(title) => {
@@ -561,26 +575,6 @@ impl TerminalModel {
             }
         }
         responses
-    }
-
-    fn handle_cell_size_requests(&mut self, count: usize, responses: &mut Vec<Vec<u8>>) {
-        if count == 0 {
-            return;
-        }
-        if let Some(metrics) = self.grid_metrics {
-            let remaining = PROTOCOL_RESPONSE_CAPACITY.saturating_sub(responses.len());
-            responses.extend(
-                std::iter::repeat_with(|| cell_size_response(metrics)).take(count.min(remaining)),
-            );
-        } else {
-            self.pending_cell_size_requests += count.min(self.pending_grid_request_capacity());
-        }
-    }
-
-    fn pending_grid_request_capacity(&self) -> usize {
-        PROTOCOL_RESPONSE_CAPACITY
-            - self.pending_text_area_requests
-            - self.pending_cell_size_requests
     }
 
     fn is_alternate_screen(&self) -> bool {
@@ -637,165 +631,16 @@ fn protocol_response(response: Vec<u8>) -> Option<Vec<u8>> {
     (!response.is_empty() && response.len() <= MAX_PROTOCOL_RESPONSE_BYTES).then_some(response)
 }
 
-fn text_area_size_response(metrics: TerminalGridMetrics) -> Vec<u8> {
-    let size = metrics.size();
-    format!("\x1b[4;{};{}t", size.pixel_height(), size.pixel_width()).into_bytes()
-}
-
-fn cell_size_response(metrics: TerminalGridMetrics) -> Vec<u8> {
-    format!("\x1b[6;{};{}t", metrics.cell_height(), metrics.cell_width()).into_bytes()
-}
-
-fn default_query_color(index: usize, palette: TerminalQueryPalette) -> Rgb {
-    let from_query_color = |color: TerminalQueryColor| Rgb {
-        r: color.red,
-        g: color.green,
-        b: color.blue,
-    };
-    match index {
-        0..=15 => from_query_color(palette.ansi[index]),
-        16..=231 => {
-            let value = index - 16;
-            let component = |part: usize| [0, 95, 135, 175, 215, 255][part];
-            Rgb {
-                r: component(value / 36),
-                g: component((value / 6) % 6),
-                b: component(value % 6),
+impl GridSizeQuery {
+    fn response(&self, metrics: TerminalGridMetrics) -> Vec<u8> {
+        match self {
+            Self::TextArea => {
+                let size = metrics.size();
+                format!("\x1b[4;{};{}t", size.pixel_height(), size.pixel_width()).into_bytes()
+            }
+            Self::Cell => {
+                format!("\x1b[6;{};{}t", metrics.cell_height(), metrics.cell_width()).into_bytes()
             }
         }
-        232..=255 => {
-            let shade = (8 + (index - 232) * 10) as u8;
-            Rgb {
-                r: shade,
-                g: shade,
-                b: shade,
-            }
-        }
-        256 => from_query_color(palette.foreground),
-        257 => from_query_color(palette.background),
-        258 => from_query_color(palette.cursor),
-        _ => from_query_color(palette.foreground),
-    }
-}
-
-impl MouseEncodingTracker {
-    fn coordinate_encoding(&self, sgr: bool) -> MouseCoordinateEncoding {
-        // DECSET 1016 selects pixel coordinates only within SGR mouse mode;
-        // xterm enables it as an extension of DECSET 1006 rather than as a
-        // standalone legacy/X10 encoding.
-        if self.pixel_coordinates && sgr {
-            MouseCoordinateEncoding::SgrPixels
-        } else if sgr {
-            MouseCoordinateEncoding::Sgr
-        } else if self.urxvt_coordinates {
-            MouseCoordinateEncoding::Urxvt
-        } else if self.utf8_coordinates {
-            MouseCoordinateEncoding::Utf8
-        } else {
-            MouseCoordinateEncoding::Default
-        }
-    }
-
-    fn observe(&mut self, bytes: &[u8]) {
-        for &byte in bytes {
-            match self.parser_state {
-                0 if byte == 0x1b => self.parser_state = 1,
-                1 if byte == b'[' => self.parser_state = 2,
-                1 if byte == b'c' => {
-                    self.utf8_coordinates = false;
-                    self.urxvt_coordinates = false;
-                    self.pixel_coordinates = false;
-                    self.parser_state = 0;
-                }
-                2 if byte == b'?' => {
-                    self.parser_state = 3;
-                    self.parameter = 0;
-                    self.has_parameter = false;
-                    self.parameters.clear();
-                }
-                3 if byte.is_ascii_digit() => {
-                    self.parameter = self
-                        .parameter
-                        .saturating_mul(10)
-                        .saturating_add(u16::from(byte - b'0'));
-                    self.has_parameter = true;
-                }
-                3 if byte == b';' => self.finish_parameter(),
-                3 if matches!(byte, b'h' | b'l') => {
-                    self.finish_parameter();
-                    self.apply_parameters(byte == b'h');
-                    self.parser_state = 0;
-                }
-                _ => self.parser_state = u8::from(byte == 0x1b),
-            }
-        }
-    }
-
-    fn finish_parameter(&mut self) {
-        let parameter = self.has_parameter.then_some(self.parameter);
-        self.parameter = 0;
-        self.has_parameter = false;
-        if let Some(parameter) = parameter {
-            self.parameters.push(parameter);
-        }
-    }
-
-    fn apply_parameters(&mut self, enabled: bool) {
-        for parameter in self.parameters.drain(..) {
-            match parameter {
-                1005 => {
-                    self.utf8_coordinates = enabled;
-                    if enabled {
-                        self.urxvt_coordinates = false;
-                        self.pixel_coordinates = false;
-                    }
-                }
-                1015 => {
-                    self.urxvt_coordinates = enabled;
-                    if enabled {
-                        self.utf8_coordinates = false;
-                        self.pixel_coordinates = false;
-                    }
-                }
-                1006 if enabled => {
-                    // xterm mouse encodings are mutually exclusive. SGR pixel
-                    // mode (1016) remains an SGR extension and is checked
-                    // separately by `coordinate_encoding`.
-                    self.utf8_coordinates = false;
-                    self.urxvt_coordinates = false;
-                }
-                1016 => self.pixel_coordinates = enabled,
-                _ => {}
-            }
-        }
-    }
-}
-
-impl WindowOperationQueryTracker {
-    fn observe(&mut self, bytes: &[u8]) -> usize {
-        let mut requests: usize = 0;
-        for &byte in bytes {
-            match self.parser_state {
-                0 if byte == 0x1b => self.parser_state = 1,
-                1 if byte == b'[' => {
-                    self.parser_state = 2;
-                    self.parameter = 0;
-                    self.has_parameter = false;
-                }
-                2 if byte.is_ascii_digit() => {
-                    self.parameter = self
-                        .parameter
-                        .saturating_mul(10)
-                        .saturating_add(u16::from(byte - b'0'));
-                    self.has_parameter = true;
-                }
-                2 if byte == b't' && self.has_parameter && self.parameter == 16 => {
-                    requests = requests.saturating_add(1);
-                    self.parser_state = 0;
-                }
-                _ => self.parser_state = u8::from(byte == 0x1b),
-            }
-        }
-        requests
     }
 }

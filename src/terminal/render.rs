@@ -373,12 +373,7 @@ pub(super) fn styled_line(
             continue;
         }
         let style = terminal_style(term, cell);
-        let hyperlink = cell
-            .hyperlink()
-            .map(|hyperlink| {
-                super::bound_utf8(hyperlink.uri().to_owned(), super::MAX_HYPERLINK_URI_BYTES)
-            })
-            .filter(|uri| !uri.is_empty());
+        let hyperlink = cell.hyperlink();
         let start_column = column;
         let is_wide = cell.flags.contains(Flags::WIDE_CHAR);
         let batch_kind = (!is_wide).then(|| text_batch_kind(cell)).flatten();
@@ -393,16 +388,7 @@ pub(super) fn styled_line(
                 if next.flags.contains(Flags::WIDE_CHAR)
                     || is_wide_continuation(next)
                     || terminal_style(term, next) != style
-                    || next
-                        .hyperlink()
-                        .map(|hyperlink| {
-                            super::bound_utf8(
-                                hyperlink.uri().to_owned(),
-                                super::MAX_HYPERLINK_URI_BYTES,
-                            )
-                        })
-                        .filter(|uri| !uri.is_empty())
-                        != hyperlink
+                    || next.hyperlink() != hyperlink
                     || batch_kind.is_none()
                     || text_batch_kind(next) != batch_kind
                 {
@@ -426,7 +412,7 @@ pub(super) fn styled_line(
                 column: start_column,
                 cells,
                 style,
-                hyperlink,
+                hyperlink: hyperlink.map(|link| link.uri().to_owned()),
             });
         }
     }

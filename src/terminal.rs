@@ -4,6 +4,7 @@ pub use self::input::{TerminalKey, TerminalModifiers, encode_key};
 
 mod input;
 mod model;
+mod protocol;
 mod render;
 mod selection;
 #[cfg(test)]
@@ -15,9 +16,10 @@ use std::time::Instant;
 
 use alacritty_terminal::event::{Event, EventListener};
 use alacritty_terminal::term::{ClipboardType, Term};
-use alacritty_terminal::vte::ansi::{Processor, Rgb};
+use alacritty_terminal::vte::ansi::Processor;
 
 use crate::terminal_dimensions::{TerminalGridMetrics, TerminalSize};
+use protocol::ExtendedMouseModes;
 
 const PROTOCOL_RESPONSE_CAPACITY: usize = 16;
 const MAX_PROTOCOL_RESPONSE_BYTES: usize = 4 * 1024;
@@ -25,7 +27,6 @@ const MAX_TERMINAL_TITLE_BYTES: usize = 512;
 const MAX_HYPERLINK_URI_BYTES: usize = 2 * 1024;
 pub const MAX_OSC52_CLIPBOARD_BYTES: usize = 64 * 1024;
 
-type ColorResponseFormatter = Arc<dyn Fn(Rgb) -> String + Send + Sync + 'static>;
 pub type ClipboardLoadFormatter = Arc<dyn Fn(&str) -> String + Send + Sync + 'static>;
 
 /// One bounded output batch crossing a transport/application boundary.
@@ -54,13 +55,17 @@ impl TerminalOutputChunk {
 
 enum TerminalProtocolEvent {
     PtyWrite(Vec<u8>),
-    ColorRequest(usize, ColorResponseFormatter),
-    TextAreaSizeRequest,
+    GridSizeRequest(GridSizeQuery),
     Title(String),
     ResetTitle,
     Bell,
     ClipboardStore(String),
     ClipboardLoad(ClipboardLoadFormatter),
+}
+
+enum GridSizeQuery {
+    TextArea,
+    Cell,
 }
 
 #[derive(Clone)]
@@ -72,10 +77,9 @@ impl EventListener for TerminalEventListener {
     fn send_event(&self, event: Event) {
         let event = match event {
             Event::PtyWrite(response) => TerminalProtocolEvent::PtyWrite(response.into_bytes()),
-            Event::ColorRequest(index, formatter) => {
-                TerminalProtocolEvent::ColorRequest(index, formatter)
+            Event::TextAreaSizeRequest(_) => {
+                TerminalProtocolEvent::GridSizeRequest(GridSizeQuery::TextArea)
             }
-            Event::TextAreaSizeRequest(_) => TerminalProtocolEvent::TextAreaSizeRequest,
             Event::Title(title) => {
                 TerminalProtocolEvent::Title(bound_utf8(title, MAX_TERMINAL_TITLE_BYTES))
             }
@@ -91,6 +95,12 @@ impl EventListener for TerminalEventListener {
             }
             _ => return,
         };
+        self.send_protocol_event(event);
+    }
+}
+
+impl TerminalEventListener {
+    fn send_protocol_event(&self, event: TerminalProtocolEvent) {
         // Parser callbacks run synchronously while a bounded output batch is
         // being consumed. A full queue means the model cannot preserve the
         // response ordering contract, so surface that condition as a bounded
@@ -409,18 +419,17 @@ pub struct TerminalModel {
     term: Term<TerminalEventListener>,
     processor: Processor,
     protocol_events: Receiver<TerminalProtocolEvent>,
+    protocol_listener: TerminalEventListener,
     query_palette: TerminalQueryPalette,
     grid_metrics: Option<TerminalGridMetrics>,
-    pending_text_area_requests: usize,
-    pending_cell_size_requests: usize,
+    pending_grid_queries: Vec<GridSizeQuery>,
     scrollback_lines: usize,
     snapshot_lines: Vec<Arc<TerminalStyledLine>>,
     snapshot_columns: usize,
     snapshot_display_offset: usize,
     next_line_revision: u64,
     viewport_detached: bool,
-    mouse_encoding: MouseEncodingTracker,
-    window_operation_queries: WindowOperationQueryTracker,
+    extended_mouse_modes: ExtendedMouseModes,
     pending_title_update: Option<Option<String>>,
     bell_revision: u64,
     pending_bell: bool,
@@ -453,18 +462,6 @@ fn is_safe_hyperlink_uri(uri: &str) -> bool {
             .any(|character| character.is_control() || character.is_whitespace())
 }
 
-/// The accepted mouse-coordinate encodings selected through DEC private modes.
-#[derive(Default)]
-struct MouseEncodingTracker {
-    utf8_coordinates: bool,
-    urxvt_coordinates: bool,
-    pixel_coordinates: bool,
-    parser_state: u8,
-    parameter: u16,
-    has_parameter: bool,
-    parameters: Vec<u16>,
-}
-
 #[derive(Clone, Copy)]
 enum MouseCoordinateEncoding {
     Default,
@@ -472,15 +469,4 @@ enum MouseCoordinateEncoding {
     Urxvt,
     Sgr,
     SgrPixels,
-}
-
-/// Tracks the xterm `CSI 16 t` cell-pixel-size query, which the terminal core
-/// does not expose as an event. It deliberately accepts only that exact query:
-/// `13t`, `15t`, and `19t` require window/screen geometry that this model does
-/// not own, so they must not be answered with a text-area approximation.
-#[derive(Default)]
-struct WindowOperationQueryTracker {
-    parser_state: u8,
-    parameter: u16,
-    has_parameter: bool,
 }

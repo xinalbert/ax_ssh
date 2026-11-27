@@ -358,6 +358,49 @@ async fn local_pty_accepts_input_and_streams_output() {
     );
 }
 
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn local_pty_receives_ordered_terminal_color_replies() {
+    use crate::terminal::TerminalModel;
+
+    let (worker, mut events) = LocalShellHandle::spawn("/bin/sh".into(), 80, 24);
+    let mut terminal = TerminalModel::new(80, 24, 10);
+    let result = timeout(Duration::from_secs(5), async {
+        while let Some(event) = events.recv().await {
+            match event {
+                LocalShellEvent::Started { .. } => {
+                    let command = concat!(
+                        r"stty -echo -icanon min 1 time 0; ",
+                        r"expected=$(printf '\033]10;rgb:e5e5/e5e5/e5e5\007\033]10;rgb:1212/3434/5656\033\\'); ",
+                        r"printf '\033]10;?\007\033]10;#123456\033\\\033]10;?\033\\'; ",
+                        r#"reply=$(dd bs=1 count="${#expected}" 2>/dev/null); "#,
+                        r#"[ "$reply" = "$expected" ] && printf '%s_%s\n' AXSSH_PTY COLOR_OK; exit"#,
+                        "\n",
+                    );
+                    worker.request_send(command.as_bytes().to_vec())?;
+                }
+                LocalShellEvent::Output(output) => {
+                    for reply in terminal.process_with_responses(&output.data) {
+                        worker.request_send(reply)?;
+                    }
+                    if terminal.contents().contains("AXSSH_PTY_COLOR_OK") {
+                        return Ok(());
+                    }
+                }
+                LocalShellEvent::Failed(message) => anyhow::bail!(message),
+                LocalShellEvent::Exited { .. } => break,
+                LocalShellEvent::Resized { .. } => {}
+            }
+        }
+        anyhow::bail!("PTY did not confirm exact color replies")
+    })
+    .await;
+    worker.shutdown().await.expect("test PTY should join");
+    result
+        .expect("PTY replies should arrive before the deadline")
+        .expect("PTY should receive both color replies in order");
+}
+
 #[cfg(not(windows))]
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn shutdown_terminates_a_running_shell_with_a_full_event_queue() {
